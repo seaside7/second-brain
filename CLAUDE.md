@@ -69,6 +69,16 @@ I work across multiple companies with completely different roles. The active wor
 - Workspace-specific details live in each workspace.md, not here. Do not duplicate them.
 - All connectors accept `--workspace <name>` to target a specific workspace without switching the active one
 
+### Knowledge Store
+
+Each workspace has a long-term memory at `.agent/workspaces/<active>/knowledge/`.
+Before starting any task, check if relevant knowledge exists:
+```bash
+python .agent/skills/knowledge-store/scripts/knowledge_store.py search --query "<relevant term>"
+```
+Use stored knowledge automatically when it's relevant. Don't ask me "should I check the knowledge store?" — just check it.
+When I correct you or teach you something durable, store it with `/remember`.
+
 ### Checking workspace
 
 At the start of any session, you know:
