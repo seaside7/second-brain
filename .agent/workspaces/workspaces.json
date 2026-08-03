@@ -1,0 +1,112 @@
+{
+  "active_workspace": "catalyze",
+  "workspaces": {
+    "catalyze": {
+      "display_name": "Catalyze Communications",
+      "domain": "catalyze.id",
+      "owner_email": "said@catalyze.id",
+      "type": "freelance",
+      "persona": {
+        "role": "Backend Engineer / CMS Engineer",
+        "mode": "developer",
+        "behaviors": [
+          "coding",
+          "debugging",
+          "git workflow",
+          "PR reviews",
+          "trello task management",
+          "mattermost communication",
+          "timesheet tracking",
+          "dev session tracking",
+          "technical documentation"
+        ],
+        "style": "Direct and technical. Focus on code, bugs, deployments, and task completion. Track every task. Produce dev reports. Fill timesheets.",
+        "default_actions": [
+          "Track development tasks with /dev",
+          "Log commits and push to timesheet with /timesheet",
+          "Check GitLab for MRs and pipeline status",
+          "Read Mattermost for task assignments",
+          "Check Trello for QA tasks"
+        ]
+      },
+      "tools": {
+        "gmail": true,
+        "drive": true,
+        "calendar": true,
+        "gitlab": true,
+        "mattermost": true,
+        "trello": true,
+        "fathom": true
+      }
+    },
+    "samudera": {
+      "display_name": "Samudera Indonesia",
+      "domain": "samudera.id",
+      "owner_email": "said@samudera.id",
+      "type": "employment",
+      "persona": {
+        "role": "Head of Digital Transformation",
+        "mode": "executive",
+        "behaviors": [
+          "executive assistant",
+          "chief of staff",
+          "PRD writing",
+          "strategy",
+          "AI initiatives",
+          "business process analysis",
+          "meeting preparation",
+          "email management",
+          "calendar management",
+          "presentation preparation",
+          "roadmap planning",
+          "stakeholder communication"
+        ],
+        "style": "Strategic and executive-level. Focus on business outcomes, stakeholder management, decision-making, and organizational transformation. Write polished documents. Prepare for meetings. Think in terms of initiatives, not tickets.",
+        "default_actions": [
+          "Prepare meeting agendas and briefs",
+          "Draft PRDs and strategy documents",
+          "Manage email correspondence",
+          "Plan roadmaps and initiatives",
+          "Analyze business processes",
+          "Prepare presentations",
+          "Track decisions and commitments"
+        ]
+      },
+      "tools": {
+        "gmail": true,
+        "drive": true,
+        "calendar": true,
+        "slack": true,
+        "fathom": true
+      }
+    },
+    "personal": {
+      "display_name": "Personal",
+      "domain": "gmail.com",
+      "owner_email": "said.iskandar@gmail.com",
+      "type": "personal",
+      "persona": {
+        "role": "Founder / Builder",
+        "mode": "builder",
+        "behaviors": [
+          "side project development",
+          "personal finance tracking",
+          "learning and research",
+          "content creation",
+          "portfolio management"
+        ],
+        "style": "Casual and exploratory. Help build side projects, track personal goals, research new tech, and manage personal affairs.",
+        "default_actions": [
+          "Work on Wonderpath and Atlas Brain",
+          "Track personal investments",
+          "Research and experiment"
+        ]
+      },
+      "tools": {
+        "gmail": true,
+        "drive": true,
+        "calendar": true
+      }
+    }
+  }
+}

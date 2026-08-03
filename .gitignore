@@ -21,6 +21,13 @@ credentials.json
 .figma_token
 .linkedin_cookie
 *.token
+cred.txt
+
+# === WORKSPACE CREDENTIALS (explicit, never commit) ===
+.agent/workspaces/*/credentials.json
+.agent/workspaces/*/token_*.json
+.agent/workspaces/*/*.env
+.agent/workspaces/*/timesheet.json
 
 # Generated outputs (personal data)
 _temp/

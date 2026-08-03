@@ -2,6 +2,8 @@
 """
 Gmail Manager
 Provides listing, searching, reading, and basic management of Gmail messages.
+
+Auth: credentials resolved via workspace_resolver (workspace-specific tokens).
 """
 import os
 import sys
@@ -14,24 +16,71 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-# Global timeout: 180 seconds
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, '..', '..', '..'))
+
+# Workspace resolver
+sys.path.insert(0, os.path.join(REPO_ROOT, '.agent', 'workspaces'))
+import workspace_resolver as ws
+
+# Global timeout: 300 seconds
 def timeout_handler(signum, frame):
-    print("[ERROR] Gmail Manager timed out after 180 seconds", file=sys.stderr)
+    print("[ERROR] Gmail Manager timed out after 300 seconds", file=sys.stderr)
     sys.exit(1)
 
-if os.name != 'nt': # signal.alarm is Unix-only
+if os.name != 'nt':
     signal.signal(signal.SIGALRM, timeout_handler)
     signal.alarm(300)
 
-# Determine the base directory
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-# credentials.json is usually in the project root
-BASE_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, '..', '..', '..'))
-CREDENTIALS_FILE = os.path.join(BASE_DIR, '.agent', 'skills', 'work-drive-connector', 'credentials.json')
-TOKEN_FILE = os.path.join(SCRIPT_DIR, 'token_gmail_work.json')
-
-# Scopes - gmail.modify allows reading and managing messages (labels/archive)
+# Scopes
 SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
+
+# ---------- workspace-aware credentials ----------
+
+_current_workspace = None
+
+
+def get_current_workspace():
+    return _current_workspace
+
+
+def get_workspace_config():
+    return ws.get(_current_workspace)
+
+
+def _resolve_paths(workspace_name=None):
+    """Resolve credentials.json and token path for the given workspace."""
+    global _current_workspace
+    ctx = ws.get(workspace_name)
+    _current_workspace = ctx.name
+
+    token_file = ctx.token('gmail')
+    credentials_file = ctx.credentials
+
+    # Fallback: old locations if workspace token doesn't exist
+    if not os.path.exists(token_file):
+        old_token = os.path.join(SCRIPT_DIR, 'token_gmail_work.json')
+        if os.path.exists(old_token):
+            token_file = old_token
+
+    if not os.path.exists(credentials_file):
+        old_creds = os.path.join(REPO_ROOT, '.agent', 'skills', 'work-drive-connector', 'credentials.json')
+        if os.path.exists(old_creds):
+            credentials_file = old_creds
+
+    return credentials_file, token_file
+
+
+# Module-level paths (set by CLI or default)
+CREDENTIALS_FILE = None
+TOKEN_FILE = None
+
+
+def _init_paths(workspace_name=None):
+    """Initialize module-level paths. Called once at CLI start."""
+    global CREDENTIALS_FILE, TOKEN_FILE
+    CREDENTIALS_FILE, TOKEN_FILE = _resolve_paths(workspace_name)
+
 
 def authenticate():
     """Authenticate and return credentials."""
@@ -41,81 +90,84 @@ def authenticate():
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
+            # Save refreshed token
+            with open(TOKEN_FILE, 'w') as token:
+                token.write(creds.to_json())
         else:
             if not os.path.exists(CREDENTIALS_FILE):
-                print(f"Error: {CREDENTIALS_FILE} not found in {BASE_DIR}")
+                print(f"Error: {CREDENTIALS_FILE} not found.", file=sys.stderr)
+                print(f"Place credentials.json in: .agent/workspaces/{_current_workspace}/", file=sys.stderr)
                 return None
             flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
-            # Force redirect URI to match Work console settings
             flow.redirect_uri = 'http://localhost:8080/'
-            
-            # Manual code flow
-            auth_url, _ = flow.authorization_url(prompt='consent', access_type='offline')
-            print(f"\n[Gmail] Authentication Required!")
-            print(f"1. Visit this URL in your browser:\n   {auth_url}")
+
+            auth_url_str, _ = flow.authorization_url(prompt='consent', access_type='offline')
+            print(f"\n[Gmail] [{_current_workspace}] Authentication Required!")
+            print(f"1. Visit this URL in your browser:\n   {auth_url_str}")
             print(f"2. Authorize the application and copy the 'code' parameter from the resulting URL.")
             print(f"   (The page may fail to load, just copy the 'code=' value from the address bar)")
-            
-            code = input("\n[Gmail] Enter the authorization code: ").strip()
+
+            code = input(f"\n[Gmail] [{_current_workspace}] Enter the authorization code: ").strip()
             flow.fetch_token(code=code)
             creds = flow.credentials
-            
-        # Save the credentials for the next run
+
         with open(TOKEN_FILE, 'w') as token:
             token.write(creds.to_json())
     return creds
 
+# ---------- actions ----------
+
 def list_emails(query=None, max_results=10):
-    """List messages in the user's mailbox matching the query."""
     creds = authenticate()
-    if not creds: return
-    
+    if not creds:
+        return
+
     service = build('gmail', 'v1', credentials=creds)
     try:
         results = service.users().messages().list(userId='me', q=query, maxResults=max_results).execute()
         messages = results.get('messages', [])
-        
+
         if not messages:
-            print("No messages found.")
+            print(f"[{_current_workspace}] No messages found.")
             return
 
-        print(f"Found {len(messages)} messages:")
+        print(f"[{_current_workspace}] Found {len(messages)} messages:")
         for msg in messages:
             msg_id = msg['id']
             full_msg = service.users().messages().get(userId='me', id=msg_id, format='metadata', metadataHeaders=['Subject', 'From', 'Date']).execute()
             headers = full_msg.get('payload', {}).get('headers', [])
-            
+
             subject = next((h['value'] for h in headers if h['name'] == 'Subject'), '(No Subject)')
             sender = next((h['value'] for h in headers if h['name'] == 'From'), '(Unknown Sender)')
             date = next((h['value'] for h in headers if h['name'] == 'Date'), '(No Date)')
-            
+
             print(f"- [{msg_id}] From: {sender} | Subject: {subject} | Date: {date}")
-            
+
     except Exception as e:
         print(f"An error occurred: {e}")
 
+
 def get_email(msg_id):
-    """Get the full content of an email."""
     creds = authenticate()
-    if not creds: return
-    
+    if not creds:
+        return
+
     service = build('gmail', 'v1', credentials=creds)
     try:
         message = service.users().messages().get(userId='me', id=msg_id, format='full').execute()
         payload = message.get('payload', {})
         headers = payload.get('headers', [])
-        
+
         subject = next((h['value'] for h in headers if h['name'] == 'Subject'), '(No Subject)')
         sender = next((h['value'] for h in headers if h['name'] == 'From'), '(Unknown Sender)')
         date = next((h['value'] for h in headers if h['name'] == 'Date'), '(No Date)')
-        
+
         print(f"ID: {msg_id}")
         print(f"From: {sender}")
         print(f"Date: {date}")
         print(f"Subject: {subject}")
         print("-" * 40)
-        
-        # Simple body extraction
+
         body = ""
         if 'parts' in payload:
             for part in payload['parts']:
@@ -127,17 +179,18 @@ def get_email(msg_id):
             data = payload['body'].get('data')
             if data:
                 body = base64.urlsafe_b64decode(data).decode()
-        
+
         print(body if body else "(Empty body or HTML-only email)")
-            
+
     except Exception as e:
         print(f"An error occurred: {e}")
 
+
 def archive_email(msg_id):
-    """Archive an email by removing the 'INBOX' label."""
     creds = authenticate()
-    if not creds: return
-    
+    if not creds:
+        return
+
     service = build('gmail', 'v1', credentials=creds)
     try:
         service.users().messages().modify(
@@ -145,28 +198,30 @@ def archive_email(msg_id):
             id=msg_id,
             body={'removeLabelIds': ['INBOX']}
         ).execute()
-        print(f"Message {msg_id} archived.")
+        print(f"[{_current_workspace}] Message {msg_id} archived.")
     except Exception as e:
         print(f"An error occurred: {e}")
 
+
 def get_profile():
-    """Get the user's Gmail profile."""
     creds = authenticate()
-    if not creds: return
+    if not creds:
+        return
 
     service = build('gmail', 'v1', credentials=creds)
     try:
         profile = service.users().getProfile(userId='me').execute()
-        print(f"User: {profile.get('emailAddress')}")
+        print(f"[{_current_workspace}] User: {profile.get('emailAddress')}")
         print(f"Total Messages: {profile.get('messagesTotal')}")
         print(f"Total Threads: {profile.get('threadsTotal')}")
     except Exception as e:
         print(f"An error occurred: {e}")
 
+
 def send_email(to, subject, body, cc=None):
-    """Send a plain-text email. gmail.modify scope is sufficient to send."""
     creds = authenticate()
-    if not creds: return
+    if not creds:
+        return
 
     service = build('gmail', 'v1', credentials=creds)
 
@@ -179,7 +234,7 @@ def send_email(to, subject, body, cc=None):
 
     try:
         sent = service.users().messages().send(userId='me', body={'raw': raw}).execute()
-        print(f"[OK] Email sent. Message ID: {sent.get('id')}")
+        print(f"[{_current_workspace}] [OK] Email sent. Message ID: {sent.get('id')}")
         print(f"     To: {to}")
         if cc:
             print(f"     Cc: {cc}")
@@ -187,56 +242,56 @@ def send_email(to, subject, body, cc=None):
     except Exception as e:
         print(f"An error occurred: {e}")
 
-# --- Headless two-step auth (for non-interactive shells) ---
-# Mirrors authenticate()'s manual-code flow but split across two CLI calls so it
-# works where stdin is unavailable. Produces the same token_gmail_work.json.
+# --- Headless two-step auth ---
 
 def _new_flow():
-    # autogenerate_code_verifier=False disables PKCE so the two CLI steps stay
-    # stateless (each runs in its own process; a per-run verifier would mismatch).
     flow = InstalledAppFlow.from_client_secrets_file(
         CREDENTIALS_FILE, SCOPES, autogenerate_code_verifier=False)
     flow.redirect_uri = 'http://localhost:8080/'
     return flow
 
+
 def auth_url():
-    """Print the OAuth authorization URL (step 1 of headless auth)."""
     if not os.path.exists(CREDENTIALS_FILE):
-        print(f"Error: {CREDENTIALS_FILE} not found.")
+        print(f"Error: {CREDENTIALS_FILE} not found.", file=sys.stderr)
         return
     flow = _new_flow()
     url, _ = flow.authorization_url(prompt='consent', access_type='offline')
-    account_hint = os.environ.get('OWNER_WORK_EMAIL', 'you@yourcompany.com')
-    print(f"[Gmail] Step 1 - authorize in a browser signed in as {account_hint}:")
+    ctx = ws.get(_current_workspace)
+    print(f"[Gmail] [{_current_workspace}] Step 1 - authorize as {ctx.owner_email}:")
     print(url)
     print("\nThe page will try to load http://localhost:8080/ and fail - that is expected.")
     print("Copy the 'code=' value from the address bar, then run:")
     print('  auth-save --code "PASTE_CODE_HERE"')
 
+
 def auth_save(code):
-    """Exchange an authorization code for a token (step 2 of headless auth)."""
     flow = _new_flow()
     flow.fetch_token(code=code)
     with open(TOKEN_FILE, 'w') as token:
         token.write(flow.credentials.to_json())
-    print(f"[OK] Token saved to {TOKEN_FILE}")
+    print(f"[{_current_workspace}] [OK] Token saved to {TOKEN_FILE}")
+
+# ---------- CLI ----------
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Gmail Manager')
+    parser.add_argument('--workspace', default=None,
+                        help='Workspace name (default: active workspace)')
     subparsers = parser.add_subparsers(dest='command')
-    
+
     # Profile
     subparsers.add_parser('profile', help='Get user profile')
-    
+
     # List/Search
     list_parser = subparsers.add_parser('list', help='List/Search emails')
     list_parser.add_argument('--query', help='Search query (e.g., "from:work")')
     list_parser.add_argument('--limit', type=int, default=10, help='Max results')
-    
+
     # Get
     get_parser = subparsers.add_parser('get', help='Get full email content')
     get_parser.add_argument('id', help='Message ID')
-    
+
     # Archive
     archive_parser = subparsers.add_parser('archive', help='Archive an email')
     archive_parser.add_argument('id', help='Message ID')
@@ -256,6 +311,9 @@ if __name__ == '__main__':
     auth_save_parser.add_argument('--code', required=True, help='Authorization code from redirect URL')
 
     args = parser.parse_args()
+
+    # Initialize paths from workspace
+    _init_paths(args.workspace)
 
     if args.command == 'profile':
         get_profile()
