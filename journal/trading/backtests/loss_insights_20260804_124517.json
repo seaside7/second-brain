@@ -1,0 +1,21 @@
+{
+  "total_losers": 251,
+  "total_winners": 124,
+  "insights": [
+    "77% of losing trades occurred when EMA200 was against the trade direction.",
+    "68% of losing trades happened during low volatility (avg ATR 0.482%).",
+    "72% of losing trades never reached the BB middle band (strong trend against).",
+    "84% of losing trades were at least +0.5% profitable before reversing (avg MFE: 1.25%).",
+    "Average maximum adverse excursion on losing trades: 1.42%.",
+    "24% of losing trades coincided with possible news spikes (volume > 3x average).",
+    "Median BB width on losing entries: 0.00000. 0% of losses had BB width below median (consider raising threshold)."
+  ],
+  "stats": {
+    "against_trend_pct": 76.9,
+    "sideways_pct": 29.5,
+    "low_volatility_pct": 67.7,
+    "never_reached_bb_middle_pct": 72.1,
+    "avg_mfe_pct": 1.251,
+    "avg_mae_pct": 1.421
+  }
+}
