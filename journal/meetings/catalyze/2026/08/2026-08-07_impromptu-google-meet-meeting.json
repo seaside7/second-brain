@@ -1,0 +1,588 @@
+{
+  "id": "fathom:catalyze:171119971",
+  "workspace": "catalyze",
+  "source": "fathom",
+  "source_id": "171119971",
+  "source_url": "https://fathom.video/calls/776385141",
+  "title": "Impromptu Google Meet Meeting",
+  "date": "2026-08-07",
+  "start_time": "2026-08-07T05:49:36Z",
+  "end_time": "2026-08-07T05:58:27Z",
+  "duration_minutes": 8,
+  "attendees": [
+    {
+      "name": "Said Iskandar",
+      "email": "said@catalyze.id",
+      "is_owner": false
+    }
+  ],
+  "transcript": [
+    {
+      "speaker": "Said Iskandar",
+      "text": "Enroll and Earn Certificates.",
+      "timestamp": "00:00:00"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Enroll and Earn Certificates, oke.",
+      "timestamp": "00:00:01"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Jadi cuman butuh title sama description-nya aja sama kayak yang tadi.",
+      "timestamp": "00:00:06"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Coba yang mana?",
+      "timestamp": "00:00:12"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Ini kan title and description-nya, cuman itu satu doang.",
+      "timestamp": "00:00:13"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Kalau dia udah enroll, dia pakai dua ini.",
+      "timestamp": "00:00:16"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Oh, oke.",
+      "timestamp": "00:00:20"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Jadi di bawah Enroll Training ada tadi, apalah sertifikat itu tadi ya?",
+      "timestamp": "00:00:22"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Atau ini dalam bentuk komponen ya dia.",
+      "timestamp": "00:00:28"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Ini komponen apa sih dia pakainya?",
+      "timestamp": "00:00:32"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Dia pakai komponen apa ya itu, Mas?",
+      "timestamp": "00:00:36"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Bukan aku yang ngisi, lupa.",
+      "timestamp": "00:00:39"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "ya?",
+      "timestamp": "00:00:41"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Itu tuh Enroll Training-nya.",
+      "timestamp": "00:00:42"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Jadi tambahin satu komponen namanya?",
+      "timestamp": "00:00:45"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Enroll and Earn Certificates.",
+      "timestamp": "00:00:49"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Enroll and Earn Certificates.",
+      "timestamp": "00:00:53"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Enroll, oke.",
+      "timestamp": "00:00:55"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Oke, apalagi ya, udah deh.",
+      "timestamp": "00:01:01"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Tadi tuh aku mau minta tambahin button, tapi kayaknya ntar deh aku pikir-pikir dulu.",
+      "timestamp": "00:01:16"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Itu desain yang WES ini tadi, kita tunggu desain dari ini dulu deh, dari si desainer UI.",
+      "timestamp": "00:01:25"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Itu dulu deh.",
+      "timestamp": "00:01:37"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Ada lagi mas lain?",
+      "timestamp": "00:01:41"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Cukup sih.",
+      "timestamp": "00:01:43"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Yang lain coba-coba aja nanti kalau misalnya ada yang gak sesuai, infoin aja.",
+      "timestamp": "00:01:45"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Tapi so far sih udah semua.",
+      "timestamp": "00:01:50"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Kamu mau lihat sekarang juga boleh?",
+      "timestamp": "00:01:52"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Yang O, yang itu, ngetes kalian.",
+      "timestamp": "00:01:55"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Iya.",
+      "timestamp": "00:01:57"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Boleh kalau mau lihat.",
+      "timestamp": "00:01:58"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "So were talking about Fathom, Iskandar, Anggun Cahyaningtyas, Cahyaningtyas, Cahyaningtyas,",
+      "timestamp": "00:02:00"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "So we are going to do the same thing, and then the first to the same So, this is this, ok.",
+      "timestamp": "00:02:59"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "So, if I'm going to this, then I'm going to first end.",
+      "timestamp": "00:03:22"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "I'm to thing and then going to the graphic.",
+      "timestamp": "00:03:35"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Bisa milih URL atau file upload.",
+      "timestamp": "00:04:05"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Coba di situ drop down.",
+      "timestamp": "00:04:08"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Cuman udah nggak ada title-nya ya?",
+      "timestamp": "00:04:10"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Ilang ya title-nya yang kemarin ya?",
+      "timestamp": "00:04:12"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Katanya satu aja di atas.",
+      "timestamp": "00:04:15"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Untuk yang lead-nya sih, yang ini maksud aku, kan dia berbentuk rumah.",
+      "timestamp": "00:04:18"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Gimana, gimana, gimana.",
+      "timestamp": "00:04:25"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Jadi title-nya tetap ada di atas, setiap nambah course tetap ada title gitu atau gimana?",
+      "timestamp": "00:04:28"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Iya, jadi dia...",
+      "timestamp": "00:04:34"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Oh, title doang ya, nggak perlu lead?",
+      "timestamp": "00:04:36"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Ha-ha.",
+      "timestamp": "00:04:37"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Oke.",
+      "timestamp": "00:04:38"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Kalau yang tadi kan yang di atas buat yang ini.",
+      "timestamp": "00:04:39"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Untuk yang file sama URL-nya cuman butuh ini aja sih title, buat filenya aja.",
+      "timestamp": "00:04:44"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Oke, buat filenya doang lah.",
+      "timestamp": "00:04:51"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Nah, itu yang buat up file doang kan, bukan yang buat URL.",
+      "timestamp": "00:04:54"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "URL juga perlu.",
+      "timestamp": "00:04:57"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "URL juga.",
+      "timestamp": "00:04:58"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Terus ini, kita tambahin ini.",
+      "timestamp": "00:05:09"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Oh ini masih menunggu Mas Lito ya?",
+      "timestamp": "00:05:29"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Oke kalau gitu.",
+      "timestamp": "00:05:41"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Tinggal menunggu Mas Lito saja.",
+      "timestamp": "00:05:45"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Nah Gun, sorry ke bawah, ke bawah.",
+      "timestamp": "00:05:48"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Nanti di front endnya perlu di, front end perlu tahu nggak course, itu course resource atau itu further resource?",
+      "timestamp": "00:05:51"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Atau sama saja?",
+      "timestamp": "00:05:58"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Iya, harus tahu sih.",
+      "timestamp": "00:06:00"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Oh, berarti enggak perlu back-end, kalau begitu berarti aku nyipen.",
+      "timestamp": "00:06:02"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Berarti coba balik ke map-nya deh, map-nya.",
+      "timestamp": "00:06:06"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Berarti di sini dia harus nge-state dulu dong di atas tadi.",
+      "timestamp": "00:06:10"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Maaf pun di atas.",
+      "timestamp": "00:06:14"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Nah, dia berarti harus nge-state dulu nih resource-nya apa, course atau further, ya kan?",
+      "timestamp": "00:06:16"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Karena kalau kayak gini enggak tahu nih, betul kan?",
+      "timestamp": "00:06:22"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Kalau yang further, bukan yang other, ya?",
+      "timestamp": "00:06:24"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Kalau yang further, yang resource ini, course-nya itu jadi satu sih.",
+      "timestamp": "00:06:27"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Oh, jadi satu.",
+      "timestamp": "00:06:33"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Jadi di front-end dia enggak tahu tuh further atau course resource, jadi...",
+      "timestamp": "00:06:34"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Iya.",
+      "timestamp": "00:06:37"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Oh, iya.",
+      "timestamp": "00:06:37"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Berarti kalau itu butuh 2PE.",
+      "timestamp": "00:06:38"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Karena sekarang dipecah sama Lito.",
+      "timestamp": "00:06:40"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Course-course.",
+      "timestamp": "00:06:42"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Nah, iya.",
+      "timestamp": "00:06:44"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Tadinya kan dipecah, terus minta dikebumin aja tuh PM-nya.",
+      "timestamp": "00:06:44"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Gitu.",
+      "timestamp": "00:06:50"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Paling yang beda sih ini sih.",
+      "timestamp": "00:06:51"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Ini kan baru ini perlu dikasih tahu ke FE juga.",
+      "timestamp": "00:06:53"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Iya, iya.",
+      "timestamp": "00:06:57"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Oke, oke, oke.",
+      "timestamp": "00:06:58"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Mas Diramnya itu, yang di FE itu kayaknya udah aku kasih sih.",
+      "timestamp": "00:07:00"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Ini juga mas ini, sih.",
+      "timestamp": "00:07:09"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Jadi apa sih?",
+      "timestamp": "00:07:36"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Fathom ya.",
+      "timestamp": "00:07:37"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Other course.",
+      "timestamp": "00:08:03"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Itu yang mana, Anggun?",
+      "timestamp": "00:08:06"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Other course.",
+      "timestamp": "00:08:07"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Baru ya?",
+      "timestamp": "00:08:07"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Yang ini ya?",
+      "timestamp": "00:08:08"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Itu kan udah ada.",
+      "timestamp": "00:08:09"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Yang sebelumnya kan dia ini, ambilnya otomatis.",
+      "timestamp": "00:08:12"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Ini baru, baru gue tambahin tuh tadi.",
+      "timestamp": "00:08:18"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Iya, makanya ada seksi baru kan di CMS.",
+      "timestamp": "00:08:21"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Perlu diintegrasi kan?",
+      "timestamp": "00:08:24"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Iya, dari BE-nya ya, dari Lito ya.",
+      "timestamp": "00:08:27"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Yang integrasi dari Mas Lito-nya aja.",
+      "timestamp": "00:08:31"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Itu perlu API, perlu API.",
+      "timestamp": "00:08:35"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Iya, perlu API.",
+      "timestamp": "00:08:36"
+    },
+    {
+      "speaker": "Anggun Cahyaningtyas",
+      "text": "Oh iya, benar.",
+      "timestamp": "00:08:40"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Betul, betul, betul.",
+      "timestamp": "00:08:44"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Oke.",
+      "timestamp": "00:08:46"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Oke, begitu.",
+      "timestamp": "00:08:47"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Sip-sip, kalau gitu.",
+      "timestamp": "00:08:49"
+    },
+    {
+      "speaker": "Said Iskandar",
+      "text": "Thank you.",
+      "timestamp": "00:08:51"
+    }
+  ],
+  "summary": "## Tujuan Pertemuan\n\n[Menyelesaikan spesifikasi UI/UX dan API untuk fitur-fitur baru.](https://fathom.video/calls/776385141?tab=summary&timestamp=0.0)\n\n## Poin Utama\n\n  - [**Komponen Baru:** Menambahkan komponen \"Enroll and Earn Certificates\" untuk kursus yang menawarkan sertifikasi.](https://fathom.video/calls/776385141?tab=summary&timestamp=22.0)\n  - [**UI Resource:** Memulihkan kolom `title` yang hilang untuk resource kursus dan menambahkan dropdown untuk memilih jenis resource (`course` vs. `further`).](https://fathom.video/calls/776385141?tab=summary&timestamp=248.0)\n  - [**Integrasi API:** Meminta API baru dari Lito untuk section CMS \"Other Courses\" yang baru agar dapat diintegrasikan oleh FE.](https://fathom.video/calls/776385141?tab=summary&timestamp=486.0)\n\n## Topik\n\n### UI Resource Kursus\n\n  - [**Kolom `title`:** Memulihkan kolom `title` yang hilang untuk resource kursus.](https://fathom.video/calls/776385141?tab=summary&timestamp=248.0)\n      - [**Alasan:** Memungkinkan user memberi nama pada file dan URL yang diunggah.](https://fathom.video/calls/776385141?tab=summary&timestamp=284.0)\n  - [**Dropdown Jenis Resource:** Menambahkan dropdown untuk memilih jenis resource.](https://fathom.video/calls/776385141?tab=summary&timestamp=348.0)\n      - [**Pilihan:** `course resource` vs. `further resource`.](https://fathom.video/calls/776385141?tab=summary&timestamp=351.0)\n      - [**Alasan:** FE membutuhkan jenis resource untuk rendering UI yang benar.](https://fathom.video/calls/776385141?tab=summary&timestamp=351.0)\n      - [**Catatan:** Hal ini membatalkan keputusan sebelumnya untuk menyatukan kedua jenis resource.](https://fathom.video/calls/776385141?tab=summary&timestamp=387.0)\n\n### Komponen \"Enroll and Earn Certificates\"\n\n  - [**Komponen Baru:** Menambahkan komponen \"Enroll and Earn Certificates\".](https://fathom.video/calls/776385141?tab=summary&timestamp=22.0)\n  - [**Lokasi:** Di bawah tombol \"Enroll Training\".](https://fathom.video/calls/776385141?tab=summary&timestamp=22.0)\n  - [**Konten:** Membutuhkan `title` dan `description`.](https://fathom.video/calls/776385141?tab=summary&timestamp=6.0)\n  - [**Alasan:** Untuk kursus yang menawarkan sertifikasi.](https://fathom.video/calls/776385141?tab=summary&timestamp=0.0)\n\n### Section CMS \"Other Courses\"\n\n  - [**Section Baru:** Section CMS \"Other Courses\" yang baru membutuhkan API dari Lito.](https://fathom.video/calls/776385141?tab=summary&timestamp=486.0)\n  - [**Alasan:** Memungkinkan FE mengintegrasikan dan menampilkan data dari section ini.](https://fathom.video/calls/776385141?tab=summary&timestamp=486.0)\n\n## Langkah Selanjutnya\n\n  - [**Said:** Meminta API \"Other Courses\" dari Lito.](https://fathom.video/calls/776385141?tab=summary&timestamp=486.0)\n  - [**Said:** Menerapkan dropdown jenis resource di UI resource kursus.](https://fathom.video/calls/776385141?tab=summary&timestamp=348.0)\n  - [**Anggun:** Memperbarui FE (Mas Diram) mengenai dropdown jenis resource.](https://fathom.video/calls/776385141?tab=summary&timestamp=411.0)\n  - [**Anggun:** Menunggu desain UI dari desainer untuk section \"WES\".](https://fathom.video/calls/776385141?tab=summary&timestamp=76.0)\n",
+  "action_items": [
+    {
+      "description": "Add Enroll and Earn Certificates component below Enroll Training",
+      "assignee_name": "Anggun Cahyaningtyas",
+      "assignee_email": null,
+      "completed": false,
+      "timestamp": "00:00:11",
+      "playback_url": "https://fathom.video/calls/776385141?timestamp=11.9999"
+    },
+    {
+      "description": "Add Title field to resource upload (URL/file)",
+      "assignee_name": "Anggun Cahyaningtyas",
+      "assignee_email": null,
+      "completed": false,
+      "timestamp": "00:03:57",
+      "playback_url": "https://fathom.video/calls/776385141?timestamp=237.9999"
+    },
+    {
+      "description": "Add Resource Type selector (Course vs Further) in CMS; then FE consume",
+      "assignee_name": "Anggun Cahyaningtyas",
+      "assignee_email": null,
+      "completed": false,
+      "timestamp": "00:05:40",
+      "playback_url": "https://fathom.video/calls/776385141?timestamp=340.9999"
+    },
+    {
+      "description": "Expose Other Course CMS section via API; then integrate in FE",
+      "assignee_name": null,
+      "assignee_email": null,
+      "completed": false,
+      "timestamp": "00:07:52",
+      "playback_url": "https://fathom.video/calls/776385141?timestamp=472.9999"
+    }
+  ],
+  "fetched_at": "2026-08-07T13:12:15+07:00",
+  "stored_path": "journal/meetings/catalyze/2026/08/2026-08-07_impromptu-google-meet-meeting.json"
+}

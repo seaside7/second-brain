@@ -1,0 +1,105 @@
+{
+  "next_seq": 5,
+  "tasks": {
+    "TASK-0001": {
+      "id": "TASK-0001",
+      "dedupe_key": "meeting:171119971:35ac33559df2",
+      "workspace": "catalyze",
+      "source": "meeting",
+      "source_ref": "https://fathom.video/calls/776385141?timestamp=11.9999",
+      "source_id": "171119971",
+      "project": "",
+      "title": "Add Enroll and Earn Certificates component below Enroll Training",
+      "description": "Add Enroll and Earn Certificates component below Enroll Training",
+      "priority": "unknown",
+      "requester": "",
+      "assignee": "Anggun Cahyaningtyas",
+      "due_date": null,
+      "meeting_id": "fathom:catalyze:171119971",
+      "status": "new",
+      "confidence": 0.95,
+      "created_at": "2026-08-07T13:12:15+07:00",
+      "updated_at": "2026-08-07T13:12:15+07:00",
+      "metadata": {
+        "meeting_title": "Impromptu Google Meet Meeting",
+        "meeting_date": "2026-08-07",
+        "timestamp": "00:00:11"
+      }
+    },
+    "TASK-0002": {
+      "id": "TASK-0002",
+      "dedupe_key": "meeting:171119971:96a160ce0e2f",
+      "workspace": "catalyze",
+      "source": "meeting",
+      "source_ref": "https://fathom.video/calls/776385141?timestamp=237.9999",
+      "source_id": "171119971",
+      "project": "",
+      "title": "Add Title field to resource upload (URL/file)",
+      "description": "Add Title field to resource upload (URL/file)",
+      "priority": "unknown",
+      "requester": "",
+      "assignee": "Anggun Cahyaningtyas",
+      "due_date": null,
+      "meeting_id": "fathom:catalyze:171119971",
+      "status": "new",
+      "confidence": 0.95,
+      "created_at": "2026-08-07T13:12:15+07:00",
+      "updated_at": "2026-08-07T13:12:15+07:00",
+      "metadata": {
+        "meeting_title": "Impromptu Google Meet Meeting",
+        "meeting_date": "2026-08-07",
+        "timestamp": "00:03:57"
+      }
+    },
+    "TASK-0003": {
+      "id": "TASK-0003",
+      "dedupe_key": "meeting:171119971:cbb4715452dc",
+      "workspace": "catalyze",
+      "source": "meeting",
+      "source_ref": "https://fathom.video/calls/776385141?timestamp=340.9999",
+      "source_id": "171119971",
+      "project": "",
+      "title": "Add Resource Type selector (Course vs Further) in CMS; then FE consume",
+      "description": "Add Resource Type selector (Course vs Further) in CMS; then FE consume",
+      "priority": "unknown",
+      "requester": "",
+      "assignee": "Anggun Cahyaningtyas",
+      "due_date": null,
+      "meeting_id": "fathom:catalyze:171119971",
+      "status": "new",
+      "confidence": 0.95,
+      "created_at": "2026-08-07T13:12:15+07:00",
+      "updated_at": "2026-08-07T13:12:15+07:00",
+      "metadata": {
+        "meeting_title": "Impromptu Google Meet Meeting",
+        "meeting_date": "2026-08-07",
+        "timestamp": "00:05:40"
+      }
+    },
+    "TASK-0004": {
+      "id": "TASK-0004",
+      "dedupe_key": "meeting:171119971:e34be3fdb44b",
+      "workspace": "catalyze",
+      "source": "meeting",
+      "source_ref": "https://fathom.video/calls/776385141?timestamp=472.9999",
+      "source_id": "171119971",
+      "project": "",
+      "title": "Expose Other Course CMS section via API; then integrate in FE",
+      "description": "Expose Other Course CMS section via API; then integrate in FE",
+      "priority": "unknown",
+      "requester": "",
+      "assignee": "",
+      "due_date": null,
+      "meeting_id": "fathom:catalyze:171119971",
+      "status": "new",
+      "confidence": 0.95,
+      "created_at": "2026-08-07T13:12:15+07:00",
+      "updated_at": "2026-08-07T13:12:15+07:00",
+      "metadata": {
+        "meeting_title": "Impromptu Google Meet Meeting",
+        "meeting_date": "2026-08-07",
+        "timestamp": "00:07:52"
+      }
+    }
+  }
+}
