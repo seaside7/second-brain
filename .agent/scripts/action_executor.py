@@ -88,10 +88,16 @@ ACTION_POLICIES = {
     ("gitlab-connector", "pipelines"): POLICY_READ,
     ("gitlab-connector", "my_commits_today"): POLICY_READ,
     ("gitlab-connector", "create_issue"): POLICY_WRITE,
-    # Meeting Intelligence
+    # Meeting Intelligence (includes Fathom transcripts)
     ("meeting-intelligence", "sync"): POLICY_READ,
     ("meeting-intelligence", "list"): POLICY_READ,
     ("meeting-intelligence", "tasks"): POLICY_READ,
+    ("meeting-intelligence", "extract"): POLICY_READ,
+    ("meeting-intelligence", "ingest"): POLICY_READ,
+    # Fathom (direct, read-only)
+    ("fathom-connector", "list"): POLICY_READ,
+    ("fathom-connector", "get"): POLICY_READ,
+    ("fathom-connector", "transcript"): POLICY_READ,
     # Knowledge Store
     ("knowledge-store", "search"): POLICY_READ,
     ("knowledge-store", "add"): POLICY_READ,
@@ -142,12 +148,14 @@ INTENT_PATTERNS = [
      "gitlab-connector", "list_projects", {}),
     (["search code", "search gitlab", "find in code"],
      "gitlab-connector", "search", {"query": None}),
-    # Meetings
-    (["sync meetings", "fetch meetings", "get meetings"],
+    # Meetings (Meeting Intelligence Engine — includes Fathom)
+    (["sync meetings", "fetch meetings", "get meetings", "sync fathom"],
      "meeting-intelligence", "sync", {}),
-    (["list meetings", "recent meetings", "show meetings", "latest meetings", "my meetings"],
+    (["list meetings", "recent meetings", "show meetings", "latest meetings", "my meetings", "fathom meetings"],
      "meeting-intelligence", "list", {}),
-    (["meeting tasks", "meeting action items"],
+    (["meeting tasks", "meeting action items", "fathom action items", "fathom tasks"],
+     "meeting-intelligence", "tasks", {}),
+    (["meeting decisions", "what was decided", "fathom decisions"],
      "meeting-intelligence", "tasks", {}),
     # Knowledge
     (["remember", "store knowledge", "save this"],
@@ -271,8 +279,18 @@ def extract_params_from_text(text, required_params):
                     params["to"] = name  # Keep as name, will ask if needed
 
     if "subject" in params and params["subject"] is None:
-        # Generate from context
-        params["subject"] = text[:60] if len(text) < 60 else text[:57] + "..."
+        # Use LLM to generate a proper subject from the body/context
+        body = params.get("body", "") or text
+        ok, subject = llm_process("generate_subject", body)
+        if ok and subject:
+            # Clean up: remove quotes, "Subject:", etc.
+            subject = subject.strip().strip('"').strip("'")
+            if subject.lower().startswith("subject:"):
+                subject = subject[8:].strip()
+            params["subject"] = subject[:60]
+        else:
+            # Fallback: generate from text
+            params["subject"] = text[:60] if len(text) < 60 else text[:57] + "..."
 
     if "body" in params and params["body"] is None:
         # Look for "saying X" or "that X" patterns
@@ -308,6 +326,28 @@ def extract_params_from_text(text, required_params):
             missing.append(k)
 
     return params, missing
+
+
+# ── LLM Processing (intermediate steps in chains) ──
+
+def llm_process(task_type, content, context=""):
+    """Use DeepSeek for intermediate processing (summarize, draft, generate subject).
+    Returns (ok, result_text)."""
+    from deepseek_call import call as deepseek_call
+
+    prompts = {
+        "summarize": f"Summarize this concisely in 3-5 sentences:\n\n{content[:3000]}",
+        "draft_reply": f"Draft a professional reply to this email. Keep it concise.\n\nOriginal:\n{content[:2000]}\n\nContext: {context}\n\nDraft:",
+        "generate_subject": f"Generate a short, appropriate email subject line (max 60 chars) for this message:\n\n{content[:500]}\n\nSubject:",
+        "extract_params": f"Extract structured parameters from this request. Reply with JSON only.\n\nRequest: {content}\nContext: {context}",
+    }
+
+    prompt = prompts.get(task_type)
+    if not prompt:
+        prompt = f"{task_type}:\n{content[:2000]}"
+
+    ok, text, meta = deepseek_call(prompt, max_tokens=500, temperature=0.3)
+    return ok, text.strip() if text else ""
 
 
 # ── Approval ──
@@ -380,7 +420,44 @@ def log_action(request, skill, action, params, policy, approved, ok, output, met
 
 # ── Multi-Step Action Chaining ──
 
-CHAIN_KEYWORDS = [" then ", " and then ", ", then ", " after that ", " and create ", " and draft "]
+CHAIN_KEYWORDS = [" then ", " and then ", ", then ", " after that ", " and create ", " and draft ", " and summarize "]
+
+# LLM-only steps (no skill needed, processed by DeepSeek)
+LLM_STEP_PATTERNS = ["summarize", "draft a reply", "draft reply", "generate summary"]
+
+
+def is_multi_step(text):
+    """Detect if a request contains multiple chained actions."""
+    text_lower = text.lower()
+    return any(kw in text_lower for kw in CHAIN_KEYWORDS)
+
+
+def is_llm_step(step_text):
+    """Check if a step is an LLM processing step (no skill needed)."""
+    step_lower = step_text.lower()
+    for pattern in LLM_STEP_PATTERNS:
+        if pattern in step_lower:
+            return True
+    return False
+
+
+def process_llm_step(step_text, context):
+    """Process an LLM-only step using DeepSeek."""
+    step_lower = step_text.lower()
+
+    if "summarize" in step_lower:
+        ok, result = llm_process("summarize", context)
+    elif "draft" in step_lower and "reply" in step_lower:
+        ok, result = llm_process("draft_reply", context, step_text)
+    else:
+        ok, result = llm_process(step_text, context)
+
+    if ok and result:
+        print(f"  [LLM] Result:\n    {result[:200]}")
+        return True, result
+    else:
+        print(f"  [LLM] Failed to process.")
+        return False, ""
 
 
 def is_multi_step(text):
@@ -425,17 +502,29 @@ def process_chain(text, auto_approve=False):
     for i, step in enumerate(steps, 1):
         print(f"  --- Step {i}/{len(steps)}: {step} ---")
 
+        # Check if this is an LLM-only step (summarize, draft reply, etc.)
+        if is_llm_step(step):
+            if not context:
+                print(f"  [?] LLM step needs context from a previous step, but none available.")
+                continue
+            ok, result = process_llm_step(step, context)
+            if ok:
+                context = result
+                log_action(step, "deepseek", "llm_process", {}, POLICY_READ, True, True, result[:200], "llm")
+            else:
+                log_action(step, "deepseek", "llm_process", {}, POLICY_READ, True, False, "", "llm")
+            print()
+            continue
+
         # Enrich step with context from previous steps
         enriched_step = step
         if context:
             enriched_step = f"{step} (context from previous step: {context[:300]})"
 
         # Process this step
-        skill, action, params, method = detect_intent(enriched_step if not detect_intent(step)[0] else step)
-
+        skill, action, params, method = detect_intent(step)
         if not skill:
-            # Try with original step text
-            skill, action, params, method = detect_intent(step)
+            skill, action, params, method = detect_intent(enriched_step)
 
         if not skill:
             print(f"  [?] Could not determine action for step {i}: '{step}'")

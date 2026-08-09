@@ -54,8 +54,7 @@ SOURCES = {
     },
     "gitlab": {
         "skill": "gitlab-connector",
-        "action": "--action",
-        "extra_args": {"action": "my_commits_today"},
+        "action": "my_commits_today",
         "source_name": "gitlab",
         "priority": "low",
     },

@@ -31,51 +31,61 @@ SKILL_REGISTRY = {
         "script": "skills/dev-tracker/scripts/dev_tracker.py",
         "category": "code_review",
         "description": "Start/log/complete dev task sessions",
+        "cli_style": "positional",
     },
     "timesheet-writer": {
         "script": "skills/timesheet-writer/scripts/timesheet_writer.py",
         "category": "draft_boilerplate",
         "description": "Append timesheet entries to Google Sheets",
+        "cli_style": "positional",
     },
     "knowledge-store": {
         "script": "skills/knowledge-store/scripts/knowledge_store.py",
         "category": "simple_lookup",
         "description": "Store and search long-term knowledge",
+        "cli_style": "positional",
     },
     "meeting-intelligence": {
         "script": "skills/meeting-intelligence/scripts/meeting_engine.py",
         "category": "complex_synthesis",
         "description": "Extract tasks/decisions from meeting transcripts",
+        "cli_style": "positional",
     },
     "gitlab-connector": {
         "script": "skills/gitlab-connector/scripts/gitlab_client.py",
         "category": "simple_lookup",
-        "description": "Query GitLab: commits, MRs, pipelines",
+        "description": "Query GitLab: commits, MRs, pipelines, issues",
+        "cli_style": "flag",
     },
     "gmail-connector": {
         "script": "skills/gmail-connector/gmail_manager.py",
         "category": "simple_lookup",
-        "description": "Read/search Gmail",
+        "description": "Read/search/send Gmail",
+        "cli_style": "positional",
     },
     "fathom-connector": {
         "script": "skills/fathom-connector/scripts/fathom_client.py",
         "category": "simple_lookup",
         "description": "Sync Fathom meeting recordings",
+        "cli_style": "flag",
     },
     "google-calendar-connector": {
         "script": "skills/google-calendar-connector/gcal_manager.py",
         "category": "simple_lookup",
         "description": "Read/manage Google Calendar",
+        "cli_style": "positional",
     },
     "mattermost-connector": {
         "script": "skills/mattermost-connector/scripts/mattermost_client.py",
         "category": "simple_lookup",
-        "description": "Read Mattermost messages",
+        "description": "Read/send Mattermost messages",
+        "cli_style": "flag",
     },
     "trello-connector": {
         "script": "skills/trello-connector/scripts/trello_client.py",
         "category": "simple_lookup",
-        "description": "Read Trello cards",
+        "description": "Read Trello cards and boards",
+        "cli_style": "flag",
     },
 }
 
@@ -110,6 +120,10 @@ def run_skill(skill_name, action=None, **kwargs):
     """
     Run a registered skill directly (no LLM needed).
     Returns (success, output_text, meta).
+
+    Handles two CLI styles:
+      positional: script.py <action> --key value
+      flag:       script.py --action <action> --key value
     """
     skill_key, info = find_skill(skill_name)
     if not skill_key:
@@ -121,28 +135,41 @@ def run_skill(skill_name, action=None, **kwargs):
     if not script_path.is_file():
         return False, f"Skill script not found: {script_rel}", {"reason": "script_missing"}
 
+    cli_style = info.get("cli_style", "positional")
+
     # Build command
     cmd = [sys.executable, str(script_path)]
     if action:
-        cmd.append(action)
+        if cli_style == "flag":
+            cmd.extend(["--action", action])
+        else:
+            cmd.append(action)
 
     # Add keyword args as --key value pairs
     for k, v in kwargs.items():
         if v is not None:
-            cmd.append(f"--{k.replace('_', '-')}")
-            cmd.append(str(v))
+            flag = f"--{k.replace('_', '-')}"
+            if v == "":
+                # Boolean flag (e.g. --approved with no value)
+                cmd.append(flag)
+            else:
+                cmd.append(flag)
+                cmd.append(str(v))
 
     try:
         result = subprocess.run(cmd, cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=120)
         success = result.returncode == 0
-        output = (result.stdout or "") + (result.stderr or "")
+        output = (result.stdout or "").strip()
+        # Include stderr for debugging but prioritize stdout
+        if not output and result.stderr:
+            output = result.stderr.strip()
         meta = {
             "skill": skill_key,
             "category": info["category"],
             "returncode": result.returncode,
             "script": str(script_path),
         }
-        return success, output.strip(), meta
+        return success, output, meta
     except subprocess.TimeoutExpired:
         return False, "Skill timed out after 120s", {"reason": "timeout"}
     except Exception as e:
