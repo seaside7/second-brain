@@ -1,0 +1,223 @@
+{
+  "monthly_spend": 0.15500000000000005,
+  "month_reset": "2026-08",
+  "calls": [
+    {
+      "timestamp": "2026-08-08T14:31:35.999390",
+      "category": "trading_analysis",
+      "context": "check backtest results",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:22:38.926310",
+      "category": "complex_synthesis",
+      "context": "[catalyze] Found 10 messages:",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:22:39.240488",
+      "category": "complex_synthesis",
+      "context": "- [19fdd09e1d866332] From: Slack <no-reply@email.slackhq.com> | Subject: Never miss an important mes",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:22:39.450617",
+      "category": "complex_synthesis",
+      "context": "- [19fdb3ab6f6da9e9] From: Catalyze Forge <forge@catalyze.id> | Subject: Access to the Catalyze Dev ",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:22:39.664613",
+      "category": "complex_synthesis",
+      "context": "- [19fdb14cd0708479] From: Alyssa Edelman <alyssa@fathom.video> | Subject: How was your first meetin",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:22:39.873614",
+      "category": "complex_synthesis",
+      "context": "- [19fdadc7a804c0d6] From: Trello <do-not-reply@trello.com> | Subject: 2 new notifications on SEAMAP",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:22:40.084613",
+      "category": "complex_synthesis",
+      "context": "- [19fdacd87f3bc88a] From: Fathom <no-reply@fathom.video> | Subject: Recap for \"Impromptu Google Mee",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:22:40.323614",
+      "category": "complex_synthesis",
+      "context": "- [19fdaa2dea749d9d] From: Catalyze Chat <mattermost@catalyze.id> | Subject: [Catalyze] New Notifica",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:22:40.534613",
+      "category": "complex_synthesis",
+      "context": "- [19fd99df620a9faf] From: Catalyze Chat <mattermost@catalyze.id> | Subject: [Catalyze] New Notifica",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:22:40.749613",
+      "category": "complex_synthesis",
+      "context": "- [19fd7f1d0c7554e1] From: Slack <no-reply@email.slackhq.com> | Subject: Find out why work flows fas",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:22:40.988845",
+      "category": "complex_synthesis",
+      "context": "- [19fd6259802e84fe] From: Catalyze Chat <mattermost@catalyze.id> | Subject: [Catalyze] New Notifica",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:22:41.199443",
+      "category": "complex_synthesis",
+      "context": "- [19fd51ecc7576edc] From: Anggun Cahyaningtyas <anggun@catalyze.id> | Subject: Updated invitation: ",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:22:41.686254",
+      "category": "complex_synthesis",
+      "context": "[catalyze] Stored meetings (2):",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:27:01.892010",
+      "category": "complex_synthesis",
+      "context": "[catalyze] Found 10 messages:",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:27:02.122307",
+      "category": "complex_synthesis",
+      "context": "- [19fdd09e1d866332] From: Slack <no-reply@email.slackhq.com> | Subject: Never miss an important mes",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:27:02.337303",
+      "category": "complex_synthesis",
+      "context": "- [19fdb3ab6f6da9e9] From: Catalyze Forge <forge@catalyze.id> | Subject: Access to the Catalyze Dev ",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:27:02.550308",
+      "category": "complex_synthesis",
+      "context": "- [19fdb14cd0708479] From: Alyssa Edelman <alyssa@fathom.video> | Subject: How was your first meetin",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:27:02.765304",
+      "category": "complex_synthesis",
+      "context": "- [19fdadc7a804c0d6] From: Trello <do-not-reply@trello.com> | Subject: 2 new notifications on SEAMAP",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:27:02.985845",
+      "category": "complex_synthesis",
+      "context": "- [19fdacd87f3bc88a] From: Fathom <no-reply@fathom.video> | Subject: Recap for \"Impromptu Google Mee",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:27:03.198870",
+      "category": "complex_synthesis",
+      "context": "- [19fdaa2dea749d9d] From: Catalyze Chat <mattermost@catalyze.id> | Subject: [Catalyze] New Notifica",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:27:03.411867",
+      "category": "complex_synthesis",
+      "context": "- [19fd99df620a9faf] From: Catalyze Chat <mattermost@catalyze.id> | Subject: [Catalyze] New Notifica",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:27:03.637777",
+      "category": "complex_synthesis",
+      "context": "- [19fd7f1d0c7554e1] From: Slack <no-reply@email.slackhq.com> | Subject: Find out why work flows fas",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:27:03.851780",
+      "category": "complex_synthesis",
+      "context": "- [19fd6259802e84fe] From: Catalyze Chat <mattermost@catalyze.id> | Subject: [Catalyze] New Notifica",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:27:04.072778",
+      "category": "complex_synthesis",
+      "context": "- [19fd51ecc7576edc] From: Anggun Cahyaningtyas <anggun@catalyze.id> | Subject: Updated invitation: ",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:27:04.563778",
+      "category": "complex_synthesis",
+      "context": "[catalyze] Stored meetings (2):",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:27:04.804926",
+      "category": "complex_synthesis",
+      "context": "  [2026-08-07] Impromptu Google Meet Meeting (fathom) 8min",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:27:05.040925",
+      "category": "complex_synthesis",
+      "context": "    ID: fathom:catalyze:171119971  attendees: 1  actions: 4",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:27:05.280557",
+      "category": "complex_synthesis",
+      "context": "  [2021-09-17] Fathom Demo (fathom) 2565013min",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:27:05.511664",
+      "category": "complex_synthesis",
+      "context": "    ID: fathom:catalyze:169409496  attendees: 2  actions: 0",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:53:12.005518",
+      "category": "complex_synthesis",
+      "context": "Show my latest meetings",
+      "model": "deepseek",
+      "cost": 0.005
+    },
+    {
+      "timestamp": "2026-08-09T10:56:22.381356",
+      "category": "complex_synthesis",
+      "context": "Send Marc an email saying the document is ready",
+      "model": "deepseek",
+      "cost": 0.005
+    }
+  ]
+}
