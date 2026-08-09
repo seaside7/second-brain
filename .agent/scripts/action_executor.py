@@ -176,42 +176,53 @@ def detect_intent_local(text):
 
 
 def detect_intent_llm(text):
-    """Use LLM for intent detection when rules fail."""
-    routing = route("complex_synthesis", text[:200])
-    if routing["model"] == "local":
-        return None, None, None
+    """Use DeepSeek for intent detection when rules fail."""
+    sys.path.insert(0, str(SCRIPTS_DIR))
 
     skills_desc = "\n".join(
-        f"- {name}: {info['description']} (actions: varies)"
+        f"- {name}: {info['description']}"
         for name, info in SKILL_REGISTRY.items()
     )
 
-    prompt = f"""You are an action router for a productivity system. Given a user request, determine which skill and action to use.
+    prompt = f"""You are an action router. Given a user request, determine which skill and action to use.
 
 Available skills:
 {skills_desc}
 
+Common actions per skill:
+- gmail-connector: list, get, send, archive, profile
+- mattermost-connector: list_channels, list_dms, history, search, post
+- trello-connector: list_boards, list_cards, my_cards, get_card, move_card, comment
+- gitlab-connector: list_projects, list_issues, get_issue, create_issue, list_mrs, search, pipelines, my_commits_today
+- meeting-intelligence: sync, list, tasks
+- knowledge-store: search, add, list, status
+- dev-tracker: start, status, list, complete
+- google-calendar-connector: sweep, list, create
+
 User request: "{text}"
 
-Reply with ONLY a JSON object (no markdown, no explanation):
+Reply with ONLY a JSON object (no markdown fences, no explanation):
 {{"skill": "skill-name", "action": "action-name", "params": {{"key": "value"}}}}
 
 If you cannot determine the action, reply: {{"skill": null, "action": null, "params": {{}}}}"""
 
-    import subprocess
-    try:
-        r = subprocess.run(
-            [sys.executable, str(SCRIPTS_DIR / "ai_call.py"),
-             "--prompt", prompt, "--model", routing["model"], "--timeout", "30"],
-            cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=45)
-        output = (r.stdout or "").strip()
-        # Extract JSON from output
-        if "{" in output:
-            json_str = output[output.index("{"):output.rindex("}") + 1]
-            data = json.loads(json_str)
-            return data.get("skill"), data.get("action"), data.get("params", {})
-    except Exception:
-        pass
+    from deepseek_call import call as deepseek_call
+    ok, output, meta = deepseek_call(prompt, max_tokens=200, temperature=0.1)
+
+    if ok and output:
+        try:
+            # Extract JSON
+            if "{" in output:
+                json_str = output[output.index("{"):output.rindex("}") + 1]
+                data = json.loads(json_str)
+                skill = data.get("skill")
+                action = data.get("action")
+                params = data.get("params", {})
+                if skill and action:
+                    return skill, action, params
+        except (json.JSONDecodeError, ValueError):
+            pass
+
     return None, None, None
 
 
@@ -233,6 +244,8 @@ def detect_intent(text):
 def extract_params_from_text(text, required_params):
     """Extract missing parameters from the natural language text.
     Returns (params_dict, missing_list)."""
+    from contacts import resolve_contact
+
     params = dict(required_params)
     missing = []
 
@@ -240,18 +253,22 @@ def extract_params_from_text(text, required_params):
 
     # Email-specific extraction
     if "to" in params and params["to"] is None:
-        # Look for email addresses
+        # Look for email addresses first
         import re
         emails = re.findall(r'[\w\.\-]+@[\w\.\-]+\.\w+', text)
         if emails:
             params["to"] = emails[0]
-        # Look for "to NAME" pattern
+        # Look for "to NAME" pattern and resolve via contacts
         elif " to " in text_lower:
             after_to = text[text_lower.index(" to ") + 4:].strip()
-            # Take first word(s) before a verb/preposition
             name = after_to.split(" saying ")[0].split(" that ")[0].split(" and ")[0].strip()
             if name and len(name) < 50:
-                params["to"] = name
+                contact = resolve_contact(name)
+                if contact and contact.get("email"):
+                    params["to"] = contact["email"]
+                    print(f"  [i] Resolved '{name}' → {contact['email']}")
+                else:
+                    params["to"] = name  # Keep as name, will ask if needed
 
     if "subject" in params and params["subject"] is None:
         # Generate from context
@@ -361,10 +378,122 @@ def log_action(request, skill, action, params, policy, approved, ok, output, met
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
+# ── Multi-Step Action Chaining ──
+
+CHAIN_KEYWORDS = [" then ", " and then ", ", then ", " after that ", " and create ", " and draft "]
+
+
+def is_multi_step(text):
+    """Detect if a request contains multiple chained actions."""
+    text_lower = text.lower()
+    return any(kw in text_lower for kw in CHAIN_KEYWORDS)
+
+
+def split_steps(text):
+    """Split a multi-step request into individual steps."""
+    import re
+    # Split on chain keywords
+    pattern = r'\b(?:then|and then|after that)\b|,\s*(?:then|and)\s+'
+    parts = re.split(pattern, text, flags=re.IGNORECASE)
+    # Also split on " and create/draft/send "
+    final_parts = []
+    for part in parts:
+        sub = re.split(r'\band\s+(create|draft|send|find|search)\b', part, flags=re.IGNORECASE)
+        if len(sub) > 1:
+            final_parts.append(sub[0].strip())
+            for i in range(1, len(sub), 2):
+                if i + 1 < len(sub):
+                    final_parts.append((sub[i] + " " + sub[i + 1]).strip())
+                else:
+                    final_parts.append(sub[i].strip())
+        else:
+            final_parts.append(part.strip())
+
+    return [p for p in final_parts if p and len(p) > 3]
+
+
+def process_chain(text, auto_approve=False):
+    """Process a multi-step request. Each step can use the output of the previous."""
+    steps = split_steps(text)
+    print(f"\n  Multi-step request detected ({len(steps)} steps):")
+    for i, step in enumerate(steps, 1):
+        print(f"    {i}. {step}")
+    print()
+
+    context = ""  # Accumulated output from previous steps
+
+    for i, step in enumerate(steps, 1):
+        print(f"  --- Step {i}/{len(steps)}: {step} ---")
+
+        # Enrich step with context from previous steps
+        enriched_step = step
+        if context:
+            enriched_step = f"{step} (context from previous step: {context[:300]})"
+
+        # Process this step
+        skill, action, params, method = detect_intent(enriched_step if not detect_intent(step)[0] else step)
+
+        if not skill:
+            # Try with original step text
+            skill, action, params, method = detect_intent(step)
+
+        if not skill:
+            print(f"  [?] Could not determine action for step {i}: '{step}'")
+            print(f"  Continuing with remaining steps...")
+            continue
+
+        print(f"  [>] {skill} → {action} (via {method})")
+
+        # Extract params
+        if params:
+            params, missing_params = extract_params_from_text(step, params)
+            if missing_params:
+                for m in missing_params:
+                    try:
+                        val = input(f"    {m}: ").strip()
+                        if val:
+                            params[m] = val
+                    except (EOFError, KeyboardInterrupt):
+                        print("  [X] Cancelled.")
+                        return False
+
+        # Check policy
+        policy = get_policy(skill, action)
+        approved = True
+
+        if policy in (POLICY_WRITE, POLICY_DESTRUCTIVE) and not auto_approve:
+            approved = request_approval(skill, action, params or {})
+            if not approved:
+                print(f"  [X] Step {i} rejected. Stopping chain.")
+                return False
+
+        # Execute
+        ok, output, meta = execute_action(skill, action, params or {}, approved=approved)
+
+        if ok:
+            print(f"  [OK] Step {i} complete.")
+            context = output[:500]  # Pass output as context to next step
+            log_action(step, skill, action, params, policy, approved, ok, output[:200], method)
+        else:
+            print(f"  [FAIL] Step {i} failed: {meta.get('reason', 'unknown')}")
+            log_action(step, skill, action, params, policy, approved, ok, output[:200] if output else "", method)
+            print(f"  Stopping chain.")
+            return False
+
+        print()
+
+    print(f"  === Chain complete ({len(steps)} steps) ===")
+    return True
+
+
 # ── Main Pipeline ──
 
 def process_request(text, auto_approve=False):
     """Full pipeline: intent → params → approval → execute → log."""
+    # Check for multi-step first
+    if is_multi_step(text):
+        return process_chain(text, auto_approve)
+
     print(f"\n  Request: \"{text}\"")
     print(f"  Workspace: {ws.get_active_name()}")
     print()

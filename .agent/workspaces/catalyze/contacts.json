@@ -1,0 +1,37 @@
+{
+  "contacts": [
+    {
+      "name": "Andry Muharyo",
+      "email": "andry@catalyze.id",
+      "role": "Web Dev Lead",
+      "nicknames": [
+        "Mas",
+        "Mas Andry"
+      ]
+    },
+    {
+      "name": "Anggun Cahyaningtyas",
+      "email": "anggun@catalyze.id",
+      "role": "QA",
+      "nicknames": [
+        "Nggun"
+      ]
+    },
+    {
+      "name": "Carlito",
+      "email": "carlito@catalyze.id",
+      "role": "Backend Lead",
+      "nicknames": [
+        "To"
+      ]
+    },
+    {
+      "name": "Fahmi",
+      "email": "fahmi@catalyze.id",
+      "role": "Frontend Lead",
+      "nicknames": [
+        "Mi"
+      ]
+    }
+  ]
+}
