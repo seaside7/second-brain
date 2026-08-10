@@ -87,6 +87,18 @@ SKILL_REGISTRY = {
         "description": "Read Trello cards and boards",
         "cli_style": "flag",
     },
+    "document-intelligence": {
+        "script": "skills/document-intelligence/scripts/doc_engine.py",
+        "category": "complex_synthesis",
+        "description": "Search/read/ask questions about Google Drive documents",
+        "cli_style": "positional",
+    },
+    "personal-finance": {
+        "script": "skills/personal-finance/scripts/finance_engine.py",
+        "category": "complex_synthesis",
+        "description": "Financial analysis, forecasting, cash flow, obligations",
+        "cli_style": "positional",
+    },
 }
 
 
