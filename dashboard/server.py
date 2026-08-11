@@ -85,6 +85,31 @@ SLACK_CLI = '.agent/skills/slack-connector/scripts/slack_client.py'
 WORKSPACES_JSON = BASE_DIR / '.agent' / 'workspaces' / 'workspaces.json'
 PERSONAL_FINANCE_PATH = BASE_DIR / '.agent' / 'workspaces' / 'personal' / 'finance.json'
 
+# ── Samudera office-safe dashboard data sources ─────────────────────────────
+# The /samudera page serves a Samudera-ONLY view: every data source resolves to
+# a Samudera-specific file under .agent/workspaces/samudera/ (mirroring the
+# shared journal/state/ names). Missing files return empty data — they NEVER
+# fall back to the shared/combined sources. The calendar token follows the same
+# shape as the root token_calendar.json (token, refresh_token, client_id,
+# client_secret, expiry) so the shared OAuth refresh path works on it.
+SAMUDERA_DIR = BASE_DIR / '.agent' / 'workspaces' / 'samudera'
+SAMUDERA_STATE_DIR = SAMUDERA_DIR / 'state'
+SAMUDERA_TOKEN = SAMUDERA_DIR / 'token_calendar.json'
+SAMUDERA_TICKETS_PATH = SAMUDERA_STATE_DIR / 'tickets.json'
+SAMUDERA_DECISIONS_PATH = SAMUDERA_STATE_DIR / 'decisions.json'
+SAMUDERA_COMMITMENTS_PATH = SAMUDERA_STATE_DIR / 'commitments.json'
+SAMUDERA_WAITING_ON_PATH = SAMUDERA_STATE_DIR / 'waiting_on.json'
+SAMUDERA_INBOX_PATH = SAMUDERA_STATE_DIR / 'inbox.json'
+
+# Endpoints the /samudera dashboard is allowed to call. Anything else under
+# /api/* while in samudera mode is denied by default (404 + scope:'samudera')
+# so combined/personal/Catalyze data can never cross into the office-safe view.
+SAMUDERA_ALLOWED_GET = {
+    '/api/calendar', '/api/news', '/api/tracker', '/api/overview',
+    '/api/decisions', '/api/commitments', '/api/waiting-on', '/api/followups',
+    '/api/inbox', '/api/ledger-find', '/api/chat-suggestions',
+}
+
 # ── Chatbox: permanent (static) suggestion categories ──────────────────────
 # The same five categories for every workspace; the workspace-scoped context
 # lives in the DYNAMIC list (built from live dashboard data). These never
@@ -1209,12 +1234,16 @@ def _probe_vexa():
 # GOOGLE CALENDAR (raw HTTP, no deps)
 # ═══════════════════════════════════════════
 
-def _refresh_token():
-    """Refresh the Google OAuth token using the refresh_token."""
-    if not TOKEN_FILE.exists():
+def _refresh_token(path=None):
+    """Refresh a Google OAuth token. Defaults to the root personal token file.
+    Workspace token files (e.g. .agent/workspaces/samudera/token_calendar.json)
+    carry the same {token, refresh_token, client_id, client_secret, token_uri,
+    expiry} shape, so the identical refresh path applies to them."""
+    path = Path(path or TOKEN_FILE)
+    if not path.exists():
         return None
 
-    token_data = json.loads(TOKEN_FILE.read_text())
+    token_data = json.loads(path.read_text())
     refresh_token = token_data.get('refresh_token')
     client_id = token_data.get('client_id')
     client_secret = token_data.get('client_secret')
@@ -1251,7 +1280,7 @@ def _refresh_token():
             token_data['token'] = new_token
             expires_in = result.get('expires_in', 3600)
             token_data['expiry'] = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
-            TOKEN_FILE.write_text(json.dumps(token_data))
+            path.write_text(json.dumps(token_data))
             return new_token
     except Exception as e:
         print(f"  [WARN] Token refresh failed: {e}")
@@ -1291,13 +1320,11 @@ def _fetch_work_calendar(days_back=1, days_forward=7):
                     'isAllDay': is_all_day, 'isToday': date_str == today_str, 'account': 'work'})
     return out
 
-def _fetch_calendar_events(days_back=1, days_forward=7):
-    """Personal (raw token) + Work (gcal_manager subprocess) events, merged + tagged by account."""
-    today_str = datetime.now().strftime('%Y-%m-%d')
-    parsed = []
-    errors = []
-    token = _refresh_token()
-    if token:
+def _fetch_calendar_account(token, account, days_back, days_forward):
+    """Events for one Google Calendar account via a raw OAuth token.
+    Returns (parsed_events, error_or_None)."""
+    try:
+        today_str = datetime.now().strftime('%Y-%m-%d')
         now = datetime.now(timezone.utc)
         params = urlencode({
             'timeMin': (now - timedelta(days=days_back)).isoformat(),
@@ -1307,41 +1334,67 @@ def _fetch_calendar_events(days_back=1, days_forward=7):
         url = f'https://www.googleapis.com/calendar/v3/calendars/primary/events?{params}'
         req = Request(url)
         req.add_header('Authorization', f'Bearer {token}')
-        try:
-            resp = urlopen(req, timeout=15)
-            for e in json.loads(resp.read()).get('items', []):
-                start_str = e.get('start', {}).get('dateTime', e.get('start', {}).get('date', ''))
-                end_str = e.get('end', {}).get('dateTime', e.get('end', {}).get('date', ''))
-                is_all_day = 'T' not in start_str
-                if is_all_day:
-                    date_str = start_str; time_range = 'All day'
-                    start_dt_parsed = datetime.strptime(start_str, '%Y-%m-%d')
-                else:
-                    start_dt_parsed = datetime.fromisoformat(start_str)
-                    end_dt_parsed = datetime.fromisoformat(end_str)
-                    date_str = start_dt_parsed.strftime('%Y-%m-%d')
-                    time_range = f"{start_dt_parsed.strftime('%H:%M')} - {end_dt_parsed.strftime('%H:%M')}"
-                parsed.append({
-                    'date': date_str, 'dayName': start_dt_parsed.strftime('%a'), 'timeRange': time_range,
-                    'summary': e.get('summary', '(No title)'), 'location': e.get('location', ''),
-                    'htmlLink': e.get('htmlLink', ''),
-                    'attendees': [a.get('email', '') for a in e.get('attendees', []) if not a.get('self', False)][:5],
-                    'description': (e.get('description', '') or '')[:200],
-                    'isAllDay': is_all_day, 'isToday': date_str == today_str, 'account': 'personal',
-                })
-        except Exception as e:
-            errors.append(f'personal: {e}')
-    else:
-        errors.append('personal: no token')
-
-    # Work calendar via the work profile (separate account)
-    try:
-        parsed.extend(_fetch_work_calendar(days_back, days_forward))
+        resp = urlopen(req, timeout=15)
+        parsed = []
+        for e in json.loads(resp.read()).get('items', []):
+            start_str = e.get('start', {}).get('dateTime', e.get('start', {}).get('date', ''))
+            end_str = e.get('end', {}).get('dateTime', e.get('end', {}).get('date', ''))
+            is_all_day = 'T' not in start_str
+            if is_all_day:
+                date_str = start_str; time_range = 'All day'
+                start_dt_parsed = datetime.strptime(start_str, '%Y-%m-%d')
+            else:
+                start_dt_parsed = datetime.fromisoformat(start_str)
+                end_dt_parsed = datetime.fromisoformat(end_str)
+                date_str = start_dt_parsed.strftime('%Y-%m-%d')
+                time_range = f"{start_dt_parsed.strftime('%H:%M')} - {end_dt_parsed.strftime('%H:%M')}"
+            parsed.append({
+                'date': date_str, 'dayName': start_dt_parsed.strftime('%a'), 'timeRange': time_range,
+                'summary': e.get('summary', '(No title)'), 'location': e.get('location', ''),
+                'htmlLink': e.get('htmlLink', ''),
+                'attendees': [a.get('email', '') for a in e.get('attendees', []) if not a.get('self', False)][:5],
+                'description': (e.get('description', '') or '')[:200],
+                'isAllDay': is_all_day, 'isToday': date_str == today_str, 'account': account,
+            })
+        return parsed, None
     except Exception as e:
-        errors.append(f'work: {e}')
+        return [], f'{account}: {e}'
+
+
+def _fetch_calendar_events(days_back=1, days_forward=7, ws=None):
+    """Calendar events. ws='samudera' fetches ONLY the Samudera calendar token
+    (never the root personal token or the work profile); everything else merges
+    personal + work exactly as before. Isolation: a missing samudera token yields
+    an empty calendar, never a fallback to another account."""
+    parsed = []
+    errors = []
+    if ws == 'samudera':
+        token = _refresh_token(SAMUDERA_TOKEN)
+        if token:
+            evs, err = _fetch_calendar_account(token, 'samudera', days_back, days_forward)
+            parsed.extend(evs)
+            if err:
+                errors.append(err)
+        else:
+            errors.append('samudera: no token')
+    else:
+        token = _refresh_token()
+        if token:
+            evs, err = _fetch_calendar_account(token, 'personal', days_back, days_forward)
+            parsed.extend(evs)
+            if err:
+                errors.append(err)
+        else:
+            errors.append('personal: no token')
+
+        # Work calendar via the work profile (separate account)
+        try:
+            parsed.extend(_fetch_work_calendar(days_back, days_forward))
+        except Exception as e:
+            errors.append(f'work: {e}')
 
     parsed.sort(key=lambda x: (x['date'], x['timeRange']))
-    out = {'events': parsed, 'today': today_str}
+    out = {'events': parsed, 'today': datetime.now().strftime('%Y-%m-%d')}
     if errors and not parsed:
         out['error'] = '; '.join(errors)
     elif errors:
@@ -1511,6 +1564,23 @@ def _read_news_json_file(path):
         return None
 
 
+def _workspace_ledger_path(ws, shared_path):
+    """Resolve a ledger/tracker file for a workspace. Only 'samudera' has
+    dedicated files (under .agent/workspaces/samudera/state/, same name as the
+    shared journal/state/ file). Every other workspace keeps the shared source.
+    A missing samudera file stays missing — callers already render the empty
+    state and NEVER fall back to the combined source."""
+    if ws == 'samudera':
+        return SAMUDERA_STATE_DIR / shared_path.name
+    return shared_path
+
+
+def _chat_calendar_ws(ws_name):
+    """Calendar workspace for chat context: 'samudera' stays samudera, all other
+    workspaces read the shared merged calendar (never crosses samudera out)."""
+    return 'samudera' if ws_name == 'samudera' else None
+
+
 def _chat_dynamic_suggestions(ws_name):
     """5-10 context-aware suggested questions built from LIVE dashboard data
     for the given workspace. Deterministic + instant (no LLM call): the
@@ -1526,9 +1596,9 @@ def _chat_dynamic_suggestions(ws_name):
         if text and text not in suggestions:
             suggestions.append(text)
 
-    # ── shared work brain: tracker counts (all workspaces may surface) ──
+    # ── shared work brain: tracker counts (workspace-scoped source) ──
     try:
-        tickets = TICKETS_PATH.read_text(encoding='utf-8')
+        tickets = _workspace_ledger_path(ws_name, TICKETS_PATH).read_text(encoding='utf-8')
         doc = json.loads(tickets)
         tickets = doc.get('tickets', [])
     except Exception:
@@ -1547,9 +1617,9 @@ def _chat_dynamic_suggestions(ws_name):
     if len(overdue) > 1:
         add(f'There are {len(overdue)} overdue tickets. Which one hurts most right now?')
 
-    # ── waiting-on / escalations (shared brain) ──
+    # ── waiting-on / escalations (workspace-scoped source) ──
     try:
-        wstate = json.loads(WAITING_ON_PATH.read_text(encoding='utf-8'))
+        wstate = json.loads(_workspace_ledger_path(ws_name, WAITING_ON_PATH).read_text(encoding='utf-8'))
         items = list((wstate.get('items') or {}).values())
         breached = [it for it in items if it.get('status') == 'breached']
         if breached:
@@ -1559,27 +1629,27 @@ def _chat_dynamic_suggestions(ws_name):
     except Exception:
         pass
 
-    # ── decisions (shared brain) ──
+    # ── decisions (workspace-scoped source) ──
     try:
-        dstate = json.loads(DECISIONS_PATH.read_text(encoding='utf-8'))
+        dstate = json.loads(_workspace_ledger_path(ws_name, DECISIONS_PATH).read_text(encoding='utf-8'))
         ditems = [it for it in (dstate.get('items') or {}).values() if it.get('status') == 'open']
         if ditems:
             add(f'{len(ditems)} decision(s) are still open. Which one blocks the most?')
     except Exception:
         pass
 
-    # ── commitments (shared brain) ──
+    # ── commitments (workspace-scoped source) ──
     try:
-        cstate = json.loads(COMMITMENTS_PATH.read_text(encoding='utf-8'))
+        cstate = json.loads(_workspace_ledger_path(ws_name, COMMITMENTS_PATH).read_text(encoding='utf-8'))
         citems = [it for it in (cstate.get('items') or {}).values() if it.get('status') == 'open']
         if citems:
             add(f'What commitment do I owe next ({len(citems)} open)?')
     except Exception:
         pass
 
-    # ── today's meetings (shared calendar) ──
+    # ── today's meetings (workspace-scoped calendar) ──
     try:
-        cal = _fetch_calendar_events(0, 0)
+        cal = _fetch_calendar_events(0, 0, ws=_chat_calendar_ws(ws_name))
         today_events = [e for e in cal.get('events', []) if e.get('isToday')]
         if today_events:
             add(f'What should I prepare for "{today_events[0].get("summary")}" today?')
@@ -1634,6 +1704,113 @@ def _chat_dynamic_suggestions(ws_name):
     return suggestions[:10]
 
 
+def _chat_live_context(ws_name):
+    """Compact, workspace-scoped digest of TODAY's live dashboard data, injected
+    into the chat answer's system prompt so the model answers from real data
+    (meetings, tickets, waiting-on, decisions, commitments, news) instead of
+    claiming it has no access. Deterministic + instant, never an LLM call.
+
+    Scoping mirrors _chat_dynamic_suggestions: calendar/tickets/waiting-on/
+    decisions/commitments are workspace-scoped (samudera mode reads only the
+    Samudera-only sources); news is workspace-category-filtered; finance stays
+    out entirely here. Never crosses workspaces. Bounded length so it grounds
+    the answer without dominating the prompt."""
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(WIB)
+    today = now.strftime('%Y-%m-%d')
+    today_display = now.strftime('%A, %d %b %Y')
+    lines = [f'Today is {today_display} (WIB); right now {now.strftime("%H:%M")} WIB.']
+
+    def _label(item):
+        for key in ('title', 'what', 'summary', 'text'):
+            v = item.get(key)
+            if v:
+                return str(v)[:120]
+        return '?'
+
+    # ── today's meetings (workspace-scoped calendar, past AND upcoming) ──
+    try:
+        cal = _fetch_calendar_events(0, 0, ws=_chat_calendar_ws(ws_name))
+        evs = sorted([e for e in cal.get('events', []) if e.get('isToday')],
+                     key=lambda e: e.get('timeRange', ''))
+        if evs:
+            rows = []
+            for e in evs[:8]:
+                if e.get('isAllDay'):
+                    rows.append(f'- {e.get("summary")} (all day)')
+                else:
+                    start_txt = (e.get('timeRange') or '').split(' - ')[0]
+                    rows.append(f'- {e.get("summary")} at {start_txt}')
+            lines.append(f'Meetings today ({len(evs)}):')
+            lines.extend(rows)
+        else:
+            lines.append('No meetings today.')
+    except Exception:
+        lines.append('Calendar unavailable (no token).')
+
+    # ── open work (workspace-scoped tracker) ──
+    try:
+        doc = json.loads(_workspace_ledger_path(ws_name, TICKETS_PATH).read_text(encoding='utf-8'))
+        tickets = doc.get('tickets', [])
+    except Exception:
+        tickets = []
+    open_states = ('todo', 'in_progress', 'blocked', 'waiting')
+    open_tickets = [t for t in tickets if t.get('status') in open_states]
+    overdue = [t for t in open_tickets if t.get('due') and t['due'] < today]
+    due_today = [t for t in open_tickets if t.get('due') == today]
+    p0 = [t for t in open_tickets if t.get('priority') == 'P0']
+    if open_tickets:
+        lines.append(f'Open tickets: {len(open_tickets)} '
+                     f'(P0: {len(p0)}, due today: {len(due_today)}, overdue: {len(overdue)}).')
+        if due_today:
+            lines.append('Due today: ' + '; '.join(str(t.get('title', '?')) for t in due_today[:3]))
+        if overdue:
+            lines.append('Overdue: ' + '; '.join(f'{t.get("title", "?")} (due {t.get("due")})' for t in overdue[:3]))
+
+    # ── waiting on / decisions / commitments (workspace-scoped sources) ──
+    try:
+        wstate = json.loads(_workspace_ledger_path(ws_name, WAITING_ON_PATH).read_text(encoding='utf-8'))
+        items = list((wstate.get('items') or {}).values())
+        breached = [it for it in items if it.get('status') == 'breached']
+        if breached:
+            lines.append('Waiting on others (breached): '
+                         + ' | '.join(_label(it) for it in breached[:3]))
+        elif items:
+            lines.append(f'{len(items)} item(s) waiting on others.')
+    except Exception:
+        pass
+    try:
+        dstate = json.loads(_workspace_ledger_path(ws_name, DECISIONS_PATH).read_text(encoding='utf-8'))
+        ditems = [it for it in (dstate.get('items') or {}).values() if it.get('status') == 'open']
+        if ditems:
+            lines.append(f'{len(ditems)} open decision(s): '
+                         + ' | '.join(_label(it) for it in ditems[:3]))
+    except Exception:
+        pass
+    try:
+        cstate = json.loads(_workspace_ledger_path(ws_name, COMMITMENTS_PATH).read_text(encoding='utf-8'))
+        citems = [it for it in (cstate.get('items') or {}).values() if it.get('status') == 'open']
+        if citems:
+            lines.append(f'{len(citems)} open commitment(s): '
+                         + ' | '.join(_label(it) for it in citems[:3]))
+    except Exception:
+        pass
+
+    # ── workspace-scoped news (top 3, latest briefings) ──
+    stories = _read_latest_news_stories(6)
+    if ws_name == 'samudera':
+        sel = [s for s in stories if s.get('category') == 'samudera_indonesia']
+    elif ws_name == 'personal':
+        sel = [s for s in stories if s.get('category') == 'ai']
+    else:  # catalyze and any unknown workspace
+        sel = [s for s in stories if s.get('category') == 'ai']
+    sel = sel[:3]
+    if sel:
+        lines.append('News headlines: ' + ' | '.join(str(s.get('headline', '?')) for s in sel))
+
+    return '\n'.join(lines)
+
+
 # ═══════════════════════════════════════════
 # HTTP HANDLER
 # ═══════════════════════════════════════════
@@ -1659,6 +1836,53 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         sys.stderr.write(f"[dashboard] rejected request from disallowed IP: {ip}\n")
         self._send_json(403, json.dumps({'error': 'forbidden ip'}))
         return False
+
+    def _request_ws(self):
+        """Workspace requested by the page. The /samudera page sends the
+        X-PSB-Workspace: samudera header on every fetch (app.js fetchJSON
+        patch); a ?ws=samudera query param is honored for curl/tests. Only
+        'samudera' is recognized — every other request (including the combined
+        / dashboard, which sends no header) resolves to None = un-scoped."""
+        name = (self.headers.get('X-PSB-Workspace') or '').strip()
+        if not name:
+            qs = parse_qs(urlsplit(self.path).query)
+            name = (qs.get('ws', [''])[0] or '').strip()
+        return 'samudera' if name == 'samudera' else None
+
+    def _samudera_denied(self, path):
+        """Deny-by-default for the office-safe /samudera dashboard: an endpoint
+        that is not explicitly Samudera-aware answers 404 with an empty payload
+        labeled scope:'samudera'. The frontend treats the failed fetch as 'not
+        available here' (its standard empty-state path), so no combined/personal/
+        Catalyze data ever crosses into the Samudera view."""
+        self._send_json(404, json.dumps({
+            'scope': 'samudera',
+            'error': f'{path} is not available in the Samudera dashboard',
+        }))
+
+    def _serve_mode_html(self, mode):
+        """Serve index.html as a mode-specific page (e.g. /samudera) WITHOUT a
+        duplicate HTML file: inject <base href='/'> so relative assets resolve
+        from root, plus a window.PSB_MODE flag the frontend reads at boot. The
+        URL stays /samudera; the combined / page is untouched."""
+        try:
+            html = (PUBLIC_DIR / 'index.html').read_text(encoding='utf-8')
+        except Exception as e:
+            self.send_error(500, f'failed to read index.html: {e}')
+            return
+        injected = (f"<base href=\"/\">\n"
+                    f"<script>window.PSB_MODE = '{mode}';</script>")
+        if '<head>' in html:
+            html = html.replace('<head>', '<head>\n  ' + injected, 1)
+        else:
+            html = injected + '\n' + html
+        data = html.encode('utf-8')
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/html; charset=utf-8')
+        self.send_header('Content-Length', str(len(data)))
+        self.send_header('Cache-Control', 'no-cache')
+        self.end_headers()
+        self.wfile.write(data)
 
     def _ui_request_ok(self, what):
         """True only when the request carries the fetch metadata a browser attaches
@@ -1725,6 +1949,15 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if not self._check_client_ip():
             return
+        if self.path.rstrip('/') == '/samudera':
+            self._serve_mode_html('samudera')
+            return
+        self.ws = self._request_ws()
+        if self.ws == 'samudera':
+            route = self.path.split('?')[0]
+            if route.startswith('/api/') and route not in SAMUDERA_ALLOWED_GET:
+                self._samudera_denied(self.path)
+                return
         if self.path == '/api/dashboard':
             self._handle_get_dashboard()
         elif self.path.startswith('/api/calendar'):
@@ -1865,6 +2098,13 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         if not self._check_client_ip():
+            return
+        self.ws = self._request_ws()
+        if self.ws == 'samudera' and self.path.split('?')[0] != '/api/chat':
+            # Samudera mode is read-only except the (workspace-scoped) chat.
+            # The ledger/inbox/system writers target shared files and would
+            # leak Samudera input into the combined dashboard — deny them.
+            self._samudera_denied(self.path)
             return
         if self.path == '/api/toggle':
             self._handle_toggle()
@@ -2065,7 +2305,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                         elif k == 'days_forward':
                             days_forward = int(v)
 
-            result = _fetch_calendar_events(days_back, days_forward)
+            result = _fetch_calendar_events(days_back, days_forward, ws=self.ws)
+            if self.ws == 'samudera':
+                result['scope'] = 'samudera'
             self._send_json(200, json.dumps(result))
         except Exception as e:
             self._send_json(500, json.dumps({
@@ -2442,10 +2684,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             self._send_json(500, json.dumps({'error': 'Failed to build initiative detail', 'details': str(e)}))
 
-    def _load_tickets(self):
-        if not TICKETS_PATH.exists():
+    def _load_tickets(self, ws=None):
+        path = _workspace_ledger_path(ws, TICKETS_PATH)
+        if not path.exists():
             return None
-        return json.loads(TICKETS_PATH.read_text(encoding='utf-8')).get('tickets', [])
+        return json.loads(path.read_text(encoding='utf-8')).get('tickets', [])
 
     def _handle_get_slack_channels(self):
         """Channel-name -> ID map (merged from the two connector registries) + team id,
@@ -2489,9 +2732,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             self._send_json(500, json.dumps({'error': 'Failed to build activity spark', 'details': str(e)}))
 
-    def _tracker_payload(self):
-        """Shared payload for /api/tracker and /api/overview (behavior identical)."""
-        tickets = self._load_tickets()
+    def _tracker_payload(self, ws=None):
+        """Shared payload for /api/tracker and /api/overview (behavior identical).
+        ws='samudera' reads the Samudera-only source; missing -> empty."""
+        tickets = self._load_tickets(ws)
         if tickets is None:
             return {'tickets': [], 'counts': {},
                     'note': 'No tickets.json yet. Run the tracker migration / /daily-update.'}
@@ -2516,21 +2760,27 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         return {'tickets': tickets_sorted, 'counts': counts, 'today': today}
 
     def _handle_get_tracker(self):
-        """Linear-style ticket list + actionable top-bar counts, from tickets.json."""
+        """Linear-style ticket list + actionable top-bar counts, from tickets.json
+        (the Samudera-only source when in samudera mode)."""
         try:
-            self._send_json(200, json.dumps(self._tracker_payload()))
+            payload = self._tracker_payload(self.ws)
+            if self.ws == 'samudera':
+                payload['scope'] = 'samudera'
+            self._send_json(200, json.dumps(payload))
         except Exception as e:
             self._send_json(500, json.dumps({'error': 'Failed to read tracker', 'details': str(e)}))
 
     def _handle_get_followups(self):
-        """Three actionable follow-up groups from tickets.json."""
+        """Three actionable follow-up groups from tickets.json (workspace-scoped)."""
         try:
-            tickets = self._load_tickets() or []
+            tickets = self._load_tickets(self.ws) or []
             groups = {
                 'i_owe': [t for t in tickets if t.get('kind') == 'self' and t.get('status') in ('todo', 'in_progress', 'blocked')],
                 'they_owe_me': [t for t in tickets if t.get('kind') == 'delegated' and t.get('status') != 'done'],
                 'waiting_reply': [t for t in tickets if t.get('kind') == 'outbound' and t.get('status') != 'done'],
             }
+            if self.ws == 'samudera':
+                groups['scope'] = 'samudera'
             self._send_json(200, json.dumps(groups))
         except Exception as e:
             self._send_json(500, json.dumps({'error': 'Failed to read followups', 'details': str(e)}))
@@ -2986,7 +3236,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             today = now.strftime('%Y-%m-%d')
 
             # tracker: top <=8 — overdue oldest-first, then due-today, then open P0s
-            trk = self._tracker_payload()
+            trk = self._tracker_payload(self.ws)
             tickets = trk.get('tickets') or []
             open_states = ('todo', 'in_progress', 'blocked', 'waiting')
             is_open = lambda t: t.get('status') in open_states
@@ -3005,19 +3255,19 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     break
 
             # waiting: escalations <=6 — breached, or open with <24h left on the SLA
-            wai = self._waiting_payload()
+            wai = self._waiting_payload(self.ws)
             escalations = [it for it in (wai.get('items') or [])
                            if it.get('status') == 'breached' or
                            (it.get('status') == 'open' and it.get('remaining_hours') is not None
                             and it['remaining_hours'] < 24)][:6]
 
             # decisions / commitments: open items due-first (payload lists are pre-sorted)
-            dec = self._decisions_payload()
+            dec = self._decisions_payload(self.ws)
             dec_due = [it for it in (dec.get('items') or []) if it.get('status') == 'open'][:5]
             dec_counts = dict(dec.get('counts') or {})
             dec_counts['due'] = sum(1 for it in (dec.get('items') or [])
                                     if it.get('status') == 'open' and it.get('deadline'))
-            com = self._commitments_payload()
+            com = self._commitments_payload(self.ws)
             com_due = [it for it in (com.get('items') or []) if it.get('status') == 'open'][:5]
             com_counts = dict(com.get('counts') or {})
             com_counts['due'] = sum(1 for it in (com.get('items') or [])
@@ -3083,7 +3333,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     ok = str(r.get('status', 'ok')).lower() in ('ok', 'success', 'done')
                     hb['ok' if ok else ('acked' if self._fail_acked(job, r, acks) else 'fail')] += 1
 
-            self._send_json(200, json.dumps({
+            payload = {
                 'generated_wib': now.isoformat(timespec='seconds'),
                 'today': today,
                 'tracker': {'counts': trk.get('counts') or {}, 'top': top},
@@ -3097,7 +3347,13 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 'activity': activity,
                 'freshness': self._freshness_payload(now),
                 'heartbeat': hb,
-            }))
+            }
+            if self.ws == 'samudera':
+                # office-safe view: drop the personal-AI-harness sections entirely
+                for key in ('premeeting', 'activity', 'freshness', 'heartbeat'):
+                    payload.pop(key, None)
+                payload['scope'] = 'samudera'
+            self._send_json(200, json.dumps(payload))
         except Exception as e:
             self._send_json(500, json.dumps({'error': 'Failed to build overview', 'details': str(e)}))
 
@@ -3574,15 +3830,18 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     # ── New-ledger endpoints (decision-log / commitment-ledger / waiting-watchdog /
     #    outcomes-loop / stakeholders / premeeting-cards), Stage B 2026-07-10 ──
 
-    def _load_ledger_state(self, path):
-        """Shared reader for journal/state/*.json ledger files. None = file missing."""
+    def _load_ledger_state(self, path, ws=None):
+        """Shared reader for journal/state/*.json (or a workspace-scoped source).
+        None = file missing."""
+        path = _workspace_ledger_path(ws, path)
         if not path.exists():
             return None
         return json.loads(path.read_text(encoding='utf-8'))
 
-    def _decisions_payload(self):
-        """Shared payload for /api/decisions and /api/overview (behavior identical)."""
-        state = self._load_ledger_state(DECISIONS_PATH)
+    def _decisions_payload(self, ws=None):
+        """Shared payload for /api/decisions and /api/overview (behavior identical).
+        ws='samudera' reads the Samudera-only source; missing -> empty."""
+        state = self._load_ledger_state(DECISIONS_PATH, ws)
         if state is None:
             return {'items': [], 'counts': {},
                     'note': 'No decisions.json yet. Capture one via decision_log.py add.'}
@@ -3601,15 +3860,20 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         return {'items': items, 'counts': counts, 'today': today}
 
     def _handle_get_decisions(self):
-        """Decisions tab: decision-log ledger (journal/state/decisions.json)."""
+        """Decisions tab: decision-log ledger (journal/state/decisions.json, or the
+        Samudera-only source in samudera mode)."""
         try:
-            self._send_json(200, json.dumps(self._decisions_payload()))
+            payload = self._decisions_payload(self.ws)
+            if self.ws == 'samudera':
+                payload['scope'] = 'samudera'
+            self._send_json(200, json.dumps(payload))
         except Exception as e:
             self._send_json(500, json.dumps({'error': 'Failed to read decisions', 'details': str(e)}))
 
-    def _commitments_payload(self):
-        """Shared payload for /api/commitments and /api/overview (behavior identical)."""
-        state = self._load_ledger_state(COMMITMENTS_PATH)
+    def _commitments_payload(self, ws=None):
+        """Shared payload for /api/commitments and /api/overview (behavior identical).
+        ws='samudera' reads the Samudera-only source; missing -> empty."""
+        state = self._load_ledger_state(COMMITMENTS_PATH, ws)
         if state is None:
             return {'items': [], 'counts': {},
                     'note': 'No commitments.json yet. Run: commitment_ledger.py sweep'}
@@ -3631,15 +3895,20 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 'last_sweep': state.get('last_sweep')}
 
     def _handle_get_commitments(self):
-        """Ledgers tab: commitment-ledger (journal/state/commitments.json) — things the owner owes others."""
+        """Ledgers tab: commitment-ledger (journal/state/commitments.json, or the
+        Samudera-only source in samudera mode) — things the owner owes others."""
         try:
-            self._send_json(200, json.dumps(self._commitments_payload()))
+            payload = self._commitments_payload(self.ws)
+            if self.ws == 'samudera':
+                payload['scope'] = 'samudera'
+            self._send_json(200, json.dumps(payload))
         except Exception as e:
             self._send_json(500, json.dumps({'error': 'Failed to read commitments', 'details': str(e)}))
 
-    def _waiting_payload(self):
-        """Shared payload for /api/waiting-on and /api/overview (behavior identical)."""
-        state = self._load_ledger_state(WAITING_ON_PATH)
+    def _waiting_payload(self, ws=None):
+        """Shared payload for /api/waiting-on and /api/overview (behavior identical).
+        ws='samudera' reads the Samudera-only source; missing -> empty."""
+        state = self._load_ledger_state(WAITING_ON_PATH, ws)
         if state is None:
             return {'items': [], 'counts': {},
                     'note': 'No waiting_on.json yet. Run: waiting_watchdog.py add'}
@@ -3664,9 +3933,13 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         return {'items': items, 'counts': counts, 'last_sweep': state.get('last_sweep')}
 
     def _handle_get_waiting_on(self):
-        """Ledgers tab: waiting-watchdog (journal/state/waiting_on.json) — things others owe the owner."""
+        """Ledgers tab: waiting-watchdog (journal/state/waiting_on.json, or the
+        Samudera-only source in samudera mode) — things others owe the owner."""
         try:
-            self._send_json(200, json.dumps(self._waiting_payload()))
+            payload = self._waiting_payload(self.ws)
+            if self.ws == 'samudera':
+                payload['scope'] = 'samudera'
+            self._send_json(200, json.dumps(payload))
         except Exception as e:
             self._send_json(500, json.dumps({'error': 'Failed to read waiting-on', 'details': str(e)}))
 
@@ -4169,6 +4442,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 return out
 
             # per-ledger timeline field map: (context_field, start_field, followup_field)
+            # paths resolve via _workspace_ledger_path so samudera mode searches ONLY
+            # the Samudera-only state files, never the shared/combined ledgers.
             ledgers = [
                 ('commitments', 'COM', BASE_DIR / 'journal' / 'state' / 'commitments.json',
                  ('text',), ('to', 'project', 'notes'),
@@ -4182,7 +4457,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             ]
             for kind, prefix, path, title_fields, extra_fields, tl in ledgers:
                 try:
-                    data = json.loads(path.read_text(encoding='utf-8'))
+                    data = json.loads(_workspace_ledger_path(self.ws, path).read_text(encoding='utf-8'))
                 except Exception:
                     continue
                 items = data.get('items') or {}
@@ -4265,6 +4540,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         list is heuristic, so opening the palette never blocks on an LLM."""
         try:
             ws_name = (parse_qs(urlsplit(self.path).query).get('workspace', [''])[0] or '').strip()
+            if not ws_name:
+                # /samudera page sends the header on every fetch; fall back to it
+                # so a bare /api/chat-suggestions resolves to samudera there.
+                ws_name = (self.headers.get('X-PSB-Workspace') or '').strip()
             ctx = _resolve_workspace(ws_name)
             dynamic = _chat_dynamic_suggestions(ctx.name)
             self._send_json(200, json.dumps({
@@ -4306,12 +4585,17 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 ctx.style if ctx.style else '',
             ]))
             ctx_head = _workspace_md_head(ctx.name)
+            live_ctx = _chat_live_context(ctx.name)
             system = (
                 f'You are the Second Brain assistant for the "{ctx.display_name}" '
                 f'workspace ({ctx.name}). {persona}\n\n'
                 f'Context from the workspace operating manual:\n{ctx_head or "(none)"}\n\n'
-                'Answer concisely and directly. Ground your answer in the context above '
-                'and in general knowledge when the context does not cover the question. '
+                f'Live dashboard context (includes today\'s meetings and open work):\n'
+                f'{live_ctx}\n\n'
+                'Answer concisely and directly. Ground your answer in the live context '
+                'and workspace manual above; use general knowledge only when the context '
+                'does not cover the question. If asked about meetings, use the '
+                '"Meetings today" section and note past vs upcoming times. '
                 'Never reference or reveal data from other workspaces. Keep the reply '
                 'under ~200 words unless the question asks for more.'
             )
@@ -4457,17 +4741,21 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._send_json(500, json.dumps({'error': 'waiting-close failed', 'details': str(e)}))
 
     def _handle_get_inbox(self):
-        """GET /api/inbox — journal/state/inbox.json as a render-ready payload:
+        """GET /api/inbox — inbox.json (workspace-scoped; samudera mode reads ONLY
+        the Samudera-only inbox) as a render-ready payload:
         items[] sorted open-first/newest-first, counts, per-source health, and
         (for reload persistence) each item's latest ai-run id/status + draft path."""
         try:
-            if not INBOX_PATH.exists():
-                self._send_json(200, json.dumps({
-                    'items': [], 'counts': {'open': 0}, 'sources': {},
-                    'last_sweep': None,
-                    'note': 'no inbox.json yet — run inbox_sweep.py sweep (or the ↻ Sweep button)'}))
+            path = _workspace_ledger_path(self.ws, INBOX_PATH)
+            if not path.exists():
+                payload = {'items': [], 'counts': {'open': 0}, 'sources': {},
+                           'last_sweep': None,
+                           'note': 'no inbox.json yet — run inbox_sweep.py sweep (or the ↻ Sweep button)'}
+                if self.ws == 'samudera':
+                    payload['scope'] = 'samudera'
+                self._send_json(200, json.dumps(payload))
                 return
-            state = json.loads(INBOX_PATH.read_text(encoding='utf-8'))
+            state = json.loads(path.read_text(encoding='utf-8'))
             items = list((state.get('items') or {}).values())
 
             # latest ai-run per inbox ref (newest meta wins; cheap: metas are small)
@@ -4495,12 +4783,15 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 if it.get('status') == 'open':
                     src = it.get('source', '?')
                     counts['by_source'][src] = counts['by_source'].get(src, 0) + 1
-            self._send_json(200, json.dumps({
+            payload = {
                 'items': items, 'counts': counts,
                 'sources': state.get('sources') or {},
-                'names': _slack_names_map(),
+                'names': {} if self.ws == 'samudera' else _slack_names_map(),
                 'last_sweep': state.get('last_sweep'),
-                'last_sweep_wib': state.get('last_sweep_wib')}))
+                'last_sweep_wib': state.get('last_sweep_wib')}
+            if self.ws == 'samudera':
+                payload['scope'] = 'samudera'
+            self._send_json(200, json.dumps(payload))
         except Exception as e:
             self._send_json(500, json.dumps({'error': 'inbox read failed', 'details': str(e)}))
 
@@ -4677,7 +4968,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     if '=' in kv:
                         k, v = kv.split('=', 1)
                         params[k] = unquote(v)
-            category = params.get('category', 'all')
+            # office-safe view: force the samudera category and never serve
+            # personal stock data, regardless of what the client asks for.
+            if self.ws == 'samudera':
+                category = 'samudera_indonesia'
+            else:
+                category = params.get('category', 'all')
 
             now = datetime.now(WIB)
 
@@ -4718,18 +5014,23 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 }
 
             smdr_stock = None
-            if morning_data and morning_data.get("smdr_stock"):
+            if self.ws == 'samudera':
+                smdr_stock = None  # personal stock tracking never crosses into the office view
+            elif morning_data and morning_data.get("smdr_stock"):
                 smdr_stock = morning_data["smdr_stock"]
             elif midday_data and midday_data.get("smdr_stock"):
                 smdr_stock = midday_data["smdr_stock"]
 
-            self._send_json(200, json.dumps({
+            payload = {
                 'generated_wib': now.isoformat(timespec='seconds'),
                 'stories': stories,
                 'morning': morning,
                 'midday': midday,
                 'smdr_stock': smdr_stock,
-            }))
+            }
+            if self.ws == 'samudera':
+                payload['scope'] = 'samudera'
+            self._send_json(200, json.dumps(payload))
         except Exception as e:
             self._send_json(500, json.dumps({'error': 'Failed to load news', 'details': str(e)}))
 

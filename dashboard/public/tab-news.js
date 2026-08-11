@@ -59,15 +59,18 @@ window.Tabs = window.Tabs || {};
 
     const parts = [];
 
-    // ── Category filter chips ──
+    // ── Category filter chips (office-safe /samudera view shows Samudera
+    //    stories only — the server forces that category, so chips are inert) ──
     parts.push('<div class="chip-row" style="margin-bottom:var(--sp-4)">');
-    const cats = [
-      { key: null, label: 'All' },
-      { key: 'ai', label: 'AI' },
-      { key: 'samudera_indonesia', label: 'Samudera Indonesia' },
-    ];
+    const cats = window.PSB_SAMUDERA
+      ? [{ key: 'samudera_indonesia', label: 'Samudera Indonesia' }]
+      : [
+          { key: null, label: 'All' },
+          { key: 'ai', label: 'AI' },
+          { key: 'samudera_indonesia', label: 'Samudera Indonesia' },
+        ];
     for (const c of cats) {
-      const active = (state.filter || null) === c.key;
+      const active = (state.filter || null) === c.key || (cats.length === 1);
       const href = c.key ? '#news/' + c.key : '#news';
       parts.push('<a href="' + href + '" class="' + (active ? 'chip chip--active' : 'chip') + '">' + U.esc(c.label) + '</a>');
     }

@@ -11,6 +11,26 @@ window.Tabs = window.Tabs || {};
 
 const $id = id => document.getElementById(id);
 
+/* ── Office-safe /samudera mode ──────────────────────────────────────
+   The server serves this page (and every /samudera page) with
+   window.PSB_MODE='samudera'. Two rules keep it office-safe:
+     1. Every fetch carries the X-PSB-Workspace: samudera header, so GET
+        endpoints resolve to the Samudera-ONLY data sources and anything
+        not Samudera-aware is denied server-side (404 + scope:'samudera').
+     2. Personal-harness tabs (Meetings/Hours/System) are hidden.
+   The flag is exposed on window so tab modules + chatbox can branch. */
+const PSB_SAMUDERA = window.PSB_MODE === 'samudera';
+window.PSB_SAMUDERA = PSB_SAMUDERA;
+
+if (PSB_SAMUDERA) {
+  const _fetchJSON = U.fetchJSON.bind(U);
+  U.fetchJSON = async (url, opts = {}) =>
+    _fetchJSON(url, {
+      ...opts,
+      headers: { ...(opts.headers || {}), 'X-PSB-Workspace': 'samudera' },
+    });
+}
+
 /* ── UI state: expansion memory (openKeys/closedKeys + sessionStorage) ── */
 const UI = {
   openKeys: new Set(),    // keys the user explicitly opened
@@ -883,7 +903,26 @@ function renderMeetingsSlot() {
 }
 
 /* ── boot ── */
+const SAMUDERA_HIDDEN_TABS = ['meetings', 'hours', 'system'];
+
+function applySamuderaMode() {
+  /* hide personal-harness tabs and force a safe tab if the hash targets one */
+  const hidden = new Set(SAMUDERA_HIDDEN_TABS);
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    if (hidden.has(b.dataset.tab)) b.style.display = 'none';
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => {
+    if (hidden.has(p.id.replace('tab-', ''))) p.style.display = 'none';
+  });
+  const { tab } = parseHash();
+  if (hidden.has(tab)) {
+    location.hash = '#today';   // parseHash/applyRoute re-run via hashchange
+    applyRoute();
+  }
+}
+
 function boot() {
+  if (PSB_SAMUDERA) applySamuderaMode();
   UI.load();
   Drawer.init();
   updateChrome();

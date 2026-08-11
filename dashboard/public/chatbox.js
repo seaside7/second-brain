@@ -43,12 +43,16 @@
     const fresh = Chat.suggestions &&
       (Date.now() - Chat.lastFetch) < PALETTE_TTL_MS;
     if (!force && fresh) return;
+    const wsQuery = window.PSB_SAMUDERA ? '?workspace=samudera' : '';
     try {
-      const d = await U.fetchJSON('/api/chat-suggestions');
+      const d = await U.fetchJSON('/api/chat-suggestions' + wsQuery);
       Chat.suggestions = d;
       Chat.lastFetch = Date.now();
     } catch (err) {
-      Chat.suggestions = { workspace: 'catalyze', display_name: 'Catalyze', mode: 'developer',
+      Chat.suggestions = {
+        workspace: window.PSB_SAMUDERA ? 'samudera' : 'catalyze',
+        display_name: window.PSB_SAMUDERA ? 'Samudera Indonesia' : 'Catalyze',
+        mode: window.PSB_SAMUDERA ? 'executive' : 'developer',
         permanent: [], dynamic: [], __error: err.message };
     }
   }
