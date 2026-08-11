@@ -168,10 +168,18 @@ def filter_articles(articles, config, max_count=30):
 
 
 def _force_pick_one(articles, category, config):
-    """Force-scoring with relaxed threshold to guarantee at least one story."""
+    """Force-pick one article that actually matches category keywords."""
     if not articles:
         return None
-    candidates = filter_articles(articles, config, max_count=5)
+    keywords = config.get("categories", {}).get(category, {}).get("keywords", [])
+    relevant = []
+    for a in articles:
+        text = (a.get("title", "") + " " + a.get("summary", "")).lower()
+        if any(kw.lower() in text for kw in keywords):
+            relevant.append(a)
+    if not relevant:
+        return None
+    candidates = filter_articles(relevant, config, max_count=5)
     if not candidates:
         return None
     result = score_candidates(candidates, category)
