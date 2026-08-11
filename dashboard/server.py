@@ -29,6 +29,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR / '.agent' / 'scripts'))
 import ai_call  # noqa: E402  (needs BASE_DIR on sys.path first)
 
+# OpenAI is the configured chat backend (OPENAI_API_KEY in .env via openai_call).
+# Optional import on purpose: machines without python-dotenv must not take down
+# the whole dashboard just because the chat backend is missing.
+try:
+    import openai_call  # noqa: E402
+except Exception:
+    openai_call = None
+
 # Single source of truth for multi-workspace context (workspaces.json). Used by
 # /api/chat-suggestions and /api/chat so suggestions + answers stay scoped to the
 # active (or requested) workspace and never mix data across workspaces.
@@ -4273,9 +4281,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def _handle_post_chat(self):
         """POST /api/chat {message, workspace} — answer a question in the workspace's
-        persona (role/mode + workspace.md head as grounding) via ai_call.run().
-        The prompt NEVER includes data from other workspaces; the workspace.md
-        context and the model call are both scoped to the requested workspace.
+        persona (role/mode + workspace.md head as grounding). OpenAI first
+        (OPENAI_API_KEY in .env, via openai_call), falling back to ai_call.run()
+        (agy-bridge) when OpenAI is not configured. The prompt NEVER includes data
+        from other workspaces; the workspace.md context and the model call are both
+        scoped to the requested workspace.
         Returns {reply, model, backend, workspace}."""
         try:
             length = int(self.headers.get('Content-Length', 0))
@@ -4305,11 +4315,20 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 'Never reference or reveal data from other workspaces. Keep the reply '
                 'under ~200 words unless the question asks for more.'
             )
-            ok, text, meta = ai_call.run(system + '\n\nQuestion: ' + message,
-                                         task='draft', model='sonnet', timeout=120)
+
+            ok, text, meta = False, '', {}
+            backend = None
+            if openai_call is not None:
+                ok, text, meta = openai_call.call(message, system=system, tier='medium',
+                                                  max_tokens=1024, timeout=120)
+                backend = 'openai'
+            if not ok:
+                ok, text, meta = ai_call.run(system + '\n\nQuestion: ' + message,
+                                             task='draft', model='sonnet', timeout=120)
+                backend = meta.get('backend') or 'none'
             if not ok:
                 reason = (meta.get('reason') or 'ai call failed').strip()
-                if reason == 'fallback_to_claude' or meta.get('backend') == 'none':
+                if reason == 'fallback_to_claude' or backend == 'none':
                     clean = ('I could not answer because no AI backend is available '
                              'on this machine (no model CLI or API tokens configured). '
                              'This is an environment issue, not a problem with your question.')
@@ -4319,13 +4338,13 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     'reply': clean,
                     'error': 'AI backend unavailable',
                     'workspace': ctx.name,
-                    'backend': meta.get('backend'),
+                    'backend': backend,
                 }, ensure_ascii=False))
                 return
             self._send_json(200, json.dumps({
                 'reply': text,
                 'model': meta.get('model'),
-                'backend': meta.get('backend'),
+                'backend': backend,
                 'workspace': ctx.name,
             }, ensure_ascii=False))
         except Exception as e:
