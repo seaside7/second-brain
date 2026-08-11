@@ -4316,7 +4316,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def _handle_get_news(self):
         """GET /api/news?category=ai|samudera_indonesia|all — latest stories from
-        news briefings. Returns morning + midday stories with full metadata."""
+        news briefings. Reads from JSON sidecar files stored by news_briefing.py."""
         try:
             params = {}
             if '?' in self.path:
@@ -4330,8 +4330,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             now = datetime.now(WIB)
             today_str = now.strftime('%Y-%m-%d')
 
-            morning_data = self._parse_news_file(today_str + '_morning.md')
-            midday_data = self._parse_news_file(today_str + '_midday.md')
+            morning_data = self._read_news_json(today_str + '_morning.json')
+            midday_data = self._read_news_json(today_str + '_midday.json')
 
             stories = []
             for data in (morning_data, midday_data):
@@ -4341,7 +4341,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                         stories.append(s)
 
             if category and category != 'all':
-                stories = [s for s in stories if s.get('category', 'ai') == category]
+                stories = [s for s in stories if s.get('category', '') == category]
 
             morning = None
             if morning_data:
@@ -4367,86 +4367,16 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             self._send_json(500, json.dumps({'error': 'Failed to load news', 'details': str(e)}))
 
-    def _parse_news_file(self, filename):
-        """Parse a news briefing markdown file into structured data."""
+    def _read_news_json(self, filename):
+        """Read a news briefing JSON sidecar file."""
         path = NEWS_BRIEFINGS_DIR / filename
         if not path.exists():
             return None
-
         try:
-            text = path.read_text(encoding='utf-8')
+            with open(path, 'r', encoding='utf-8') as f:
+                return json.load(f)
         except Exception:
             return None
-
-        lines = text.splitlines()
-
-        mode = 'morning' if 'morning' in filename else 'midday'
-        date_str = today_str_from_filename(filename)
-        time_str = ''
-        for ln in lines:
-            if ln.startswith('Generated:'):
-                time_str = ln.replace('Generated:', '').strip()
-                break
-
-        stories = []
-        current = None
-        current_field = None
-
-        for ln in lines:
-            if ln.startswith('## ') and ln[3:].strip() and not ln.startswith('## '):
-                continue
-            if ln.startswith('## ') and ln[3:].strip():
-                if ln[3].isdigit() and '. ' in ln[3:8]:
-                    if current:
-                        stories.append(current)
-                    headline = ln.split('. ', 1)[1].strip() if '. ' in ln else ln[3:].strip()
-                    current = {'headline': headline}
-                    continue
-
-            if current is None:
-                continue
-
-            match = re.match(r'^\*\*(Summary|Why it matters|Relevance|Source|Importance):\*\*\s*(.*)', ln)
-            if match:
-                field = match.group(1).lower().replace(' ', '_')
-                value = match.group(2).strip()
-                if field == 'source':
-                    link_match = re.match(r'\[(.*?)\]\((.*?)\)', value)
-                    if link_match:
-                        current['source'] = link_match.group(1)
-                        current['url'] = link_match.group(2)
-                    else:
-                        current['source'] = value
-                elif field == 'importance':
-                    parts = [p.strip() for p in value.split('|')]
-                    try:
-                        current['importance'] = int(parts[0].split('/')[0].strip())
-                    except Exception:
-                        pass
-                    if len(parts) > 1:
-                        try:
-                            current['confidence'] = int(parts[1].replace('Confidence:', '').split('/')[0].strip())
-                        except Exception:
-                            pass
-                else:
-                    current[field] = value
-
-        if current:
-            stories.append(current)
-
-        cat = 'ai'
-        if 'samudera' in filename:
-            cat = 'samudera_indonesia'
-        for s in stories:
-            s.setdefault('category', cat)
-
-        return {
-            'mode': mode,
-            'date': date_str,
-            'time': time_str,
-            'stories': stories,
-            'stories_count': len(stories),
-        }
 
     def _handle_get_briefing(self):
         """GET /api/briefing — newest Pagi + Malam sections from Dashboard.md (file is

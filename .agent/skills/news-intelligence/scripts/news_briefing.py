@@ -125,6 +125,17 @@ def save_briefing(mode, stories, config):
     with open(filepath, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
+    json_path = BRIEFINGS_DIR / f"{date_str}_{mode}.json"
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump({
+            "mode": mode,
+            "date": date_str,
+            "time": now.strftime("%H:%M WIB"),
+            "generated_wib": now.isoformat(timespec="seconds"),
+            "stories": stories,
+            "stories_count": len(stories),
+        }, f, indent=2, ensure_ascii=False)
+
     print(f"[INFO] Briefing saved to {filepath}", file=sys.stderr)
     return str(filepath)
 
@@ -177,21 +188,42 @@ def run_briefing(mode, dry_run=False, send=False):
 
     print(f"[INFO] Generating {mode} briefing (since={since}, dry_run={dry_run})", file=sys.stderr)
 
-    all_articles = []
+    category_articles = {}
     for category in ["ai", "samudera_indonesia"]:
         articles = fetch_articles(config, category, since=since, state=state)
-        all_articles.extend(articles)
+        category_articles[category] = articles
 
+    all_articles = category_articles["ai"] + category_articles["samudera_indonesia"]
     print(f"[INFO] Total unique articles fetched: {len(all_articles)}", file=sys.stderr)
 
     if not all_articles:
         print("[INFO] No new articles. Preparing empty briefing.", file=sys.stderr)
-        result = {"stories": [], "scores": {"all": []}, "selected_count": 0, "total_candidates": 0}
+        stories = []
     else:
-        candidates = filter_articles(all_articles, config, max_count=30)
-        result = score_candidates(candidates, "combined")
+        stories = []
+        ai_articles = category_articles.get("ai", [])
+        sam_articles = category_articles.get("samudera_indonesia", [])
 
-    stories = result.get("stories", [])
+        ai_scored = score_candidates(
+            filter_articles(ai_articles, config, max_count=20), "ai"
+        ) if ai_articles else {"stories": []}
+        sam_scored = score_candidates(
+            filter_articles(sam_articles, config, max_count=20), "samudera_indonesia"
+        ) if sam_articles else {"stories": []}
+
+        ai_stories = ai_scored.get("stories", [])
+        sam_stories = sam_scored.get("stories", [])
+
+        if ai_stories and sam_stories:
+            stories = [ai_stories[0], sam_stories[0]]
+            remaining = [s for s in (ai_stories[1:] + sam_stories[1:]) if s.get("importance", 0) >= 5]
+            remaining.sort(key=lambda s: s.get("importance", 0), reverse=True)
+            stories.extend(remaining[:1])
+        else:
+            combined = ai_stories + sam_stories
+            combined.sort(key=lambda s: s.get("importance", 0), reverse=True)
+            stories = combined[:3]
+
     print(f"[INFO] Selected {len(stories)} stories for {mode} briefing", file=sys.stderr)
 
     telegram_text = format_briefing_telegram(stories, mode, config)

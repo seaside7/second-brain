@@ -130,6 +130,7 @@ def score_candidates(articles, category):
     for story in result.get("stories", []):
         story.setdefault("importance", 0)
         story.setdefault("confidence", 0)
+        story["category"] = category
 
     result["stories"] = result["stories"][:3]
     result["selected_count"] = len(result["stories"])
