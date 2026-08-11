@@ -4316,7 +4316,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def _handle_get_news(self):
         """GET /api/news?category=ai|samudera_indonesia|all — latest stories from
-        news briefings. Reads from JSON sidecar files stored by news_briefing.py."""
+        news briefings. Reads from JSON sidecar files stored by news_briefing.py.
+        Falls back to older briefings if today's don't exist yet."""
         try:
             params = {}
             if '?' in self.path:
@@ -4328,10 +4329,17 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             category = params.get('category', 'all')
 
             now = datetime.now(WIB)
-            today_str = now.strftime('%Y-%m-%d')
 
-            morning_data = self._read_news_json(today_str + '_morning.json')
-            midday_data = self._read_news_json(today_str + '_midday.json')
+            morning_data = None
+            midday_data = None
+            for offset in range(7):
+                d = (now - timedelta(days=offset)).strftime('%Y-%m-%d')
+                if morning_data is None:
+                    morning_data = self._read_news_json(d + '_morning.json')
+                if midday_data is None:
+                    midday_data = self._read_news_json(d + '_midday.json')
+                if morning_data is not None and midday_data is not None:
+                    break
 
             stories = []
             for data in (morning_data, midday_data):
