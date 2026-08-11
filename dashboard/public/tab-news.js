@@ -90,10 +90,22 @@ window.Tabs = window.Tabs || {};
       status: morningStories > 0 ? 'good' : null,
     }));
     parts.push(Comp.statTile({
-      key: 'news-midday', icon: '☀', label: 'Midday',
+      key: 'news-midday', icon: '\u2600', label: 'Midday',
       value: middayStories, sub: data.midday ? data.midday.time : 'not yet',
       status: middayStories > 0 ? 'good' : null,
     }));
+    if (data.smdr_stock) {
+      const st = data.smdr_stock;
+      const up = st.change >= 0;
+      const arrow = up ? '\u25B2' : '\u25BC';
+      const stStatus = up ? 'good' : 'serious';
+      parts.push(Comp.statTile({
+        key: 'smdr-stock', icon: '\uD83D\uDCC8', label: 'SMDR Stock',
+        value: '\u20A8' + st.price.toLocaleString(),
+        sub: arrow + ' ' + Math.abs(st.change).toFixed(0) + ' (' + Math.abs(st.change_pct).toFixed(1) + '%)',
+        status: stStatus,
+      }));
+    }
     parts.push('</div>');
 
     // ── Stories ──

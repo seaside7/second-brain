@@ -20,6 +20,8 @@ import argparse
 import json
 import os
 import sys
+import urllib.request
+import urllib.error
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -91,7 +93,7 @@ def format_briefing_telegram(stories, mode, config):
     return "\n".join(lines)
 
 
-def save_briefing(mode, stories, config):
+def save_briefing(mode, stories, config, stock=None):
     now = datetime.now(WIB)
     date_str = now.strftime("%Y-%m-%d")
     filename = f"{date_str}_{mode}.md"
@@ -126,15 +128,18 @@ def save_briefing(mode, stories, config):
         f.write("\n".join(lines))
 
     json_path = BRIEFINGS_DIR / f"{date_str}_{mode}.json"
+    payload = {
+        "mode": mode,
+        "date": date_str,
+        "time": now.strftime("%H:%M WIB"),
+        "generated_wib": now.isoformat(timespec="seconds"),
+        "stories": stories,
+        "stories_count": len(stories),
+    }
+    if stock:
+        payload["smdr_stock"] = stock
     with open(json_path, "w", encoding="utf-8") as f:
-        json.dump({
-            "mode": mode,
-            "date": date_str,
-            "time": now.strftime("%H:%M WIB"),
-            "generated_wib": now.isoformat(timespec="seconds"),
-            "stories": stories,
-            "stories_count": len(stories),
-        }, f, indent=2, ensure_ascii=False)
+        json.dump(payload, f, indent=2, ensure_ascii=False)
 
     print(f"[INFO] Briefing saved to {filepath}", file=sys.stderr)
     return str(filepath)
@@ -160,6 +165,63 @@ def filter_articles(articles, config, max_count=30):
     filtered = [a for _, _, a in scored[:max_count]]
     print(f"[INFO] Pre-filtered to {len(filtered)} most relevant articles (from {len(articles)})", file=sys.stderr)
     return filtered
+
+
+def _force_pick_one(articles, category, config):
+    """Force-scoring with relaxed threshold to guarantee at least one story."""
+    if not articles:
+        return None
+    candidates = filter_articles(articles, config, max_count=5)
+    if not candidates:
+        return None
+    result = score_candidates(candidates, category)
+    stories = result.get("stories", [])
+    if stories:
+        return stories[0]
+    return {
+        "headline": candidates[0].get("title", ""),
+        "summary": candidates[0].get("summary", ""),
+        "why_it_matters": "No detailed analysis available for this story.",
+        "relevance_to_me": "Related to Indonesian shipping and logistics sector.",
+        "source": candidates[0].get("source", ""),
+        "url": candidates[0].get("url", ""),
+        "importance": 5,
+        "confidence": 5,
+        "category": category,
+    }
+
+
+def fetch_smdr_stock():
+    """Fetch SMDR.JK stock price from Yahoo Finance (free, no API key needed)."""
+    url = "https://query1.finance.yahoo.com/v8/finance/chart/SMDR.JK?interval=1d&range=5d"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "ai-second-brain/1.0"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        result = data.get("chart", {}).get("result", [])
+        if not result:
+            return None
+        meta = result[0].get("meta", {})
+        quotes = result[0].get("indicators", {}).get("quote", [{}])[0]
+        closes = quotes.get("close", [])
+        current = meta.get("regularMarketPrice")
+        previous_close = meta.get("previousClose")
+        if current and previous_close:
+            change = current - previous_close
+            change_pct = (change / previous_close) * 100
+            return {
+                "symbol": "SMDR.JK",
+                "price": current,
+                "previous_close": previous_close,
+                "change": round(change, 2),
+                "change_pct": round(change_pct, 2),
+                "currency": meta.get("currency", "IDR"),
+                "name": meta.get("longName", "Samudera Indonesia Tbk"),
+            }
+        return None
+    except Exception as e:
+        print(f"[WARN] Failed to fetch SMDR stock: {e}", file=sys.stderr)
+        return None
 
 
 def run_briefing(mode, dry_run=False, send=False):
@@ -219,6 +281,22 @@ def run_briefing(mode, dry_run=False, send=False):
             remaining = [s for s in (ai_stories[1:] + sam_stories[1:]) if s.get("importance", 0) >= 5]
             remaining.sort(key=lambda s: s.get("importance", 0), reverse=True)
             stories.extend(remaining[:1])
+        elif ai_stories and sam_articles and not sam_stories:
+            stories = [ai_stories[0]]
+            fallback = _force_pick_one(sam_articles, "samudera_indonesia", config)
+            if fallback:
+                stories.insert(0, fallback)
+            if len(ai_stories) > 1:
+                stories.append(ai_stories[1])
+            stories = stories[:3]
+        elif sam_stories and ai_articles and not ai_stories:
+            stories = [sam_stories[0]]
+            fallback = _force_pick_one(ai_articles, "ai", config)
+            if fallback:
+                stories.insert(0, fallback)
+            if len(sam_stories) > 1:
+                stories.append(sam_stories[1])
+            stories = stories[:3]
         else:
             combined = ai_stories + sam_stories
             combined.sort(key=lambda s: s.get("importance", 0), reverse=True)
@@ -234,7 +312,8 @@ def run_briefing(mode, dry_run=False, send=False):
     print("=" * 60)
     print("")
 
-    briefing_path = save_briefing(mode, stories, config)
+    stock = fetch_smdr_stock()
+    briefing_path = save_briefing(mode, stories, config, stock=stock)
 
     state["briefings"].append({
         "date": now.strftime("%Y-%m-%d"),

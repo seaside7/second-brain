@@ -4366,11 +4366,18 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     'date': midday_data.get('date', ''),
                 }
 
+            smdr_stock = None
+            if morning_data and morning_data.get("smdr_stock"):
+                smdr_stock = morning_data["smdr_stock"]
+            elif midday_data and midday_data.get("smdr_stock"):
+                smdr_stock = midday_data["smdr_stock"]
+
             self._send_json(200, json.dumps({
                 'generated_wib': now.isoformat(timespec='seconds'),
                 'stories': stories,
                 'morning': morning,
                 'midday': midday,
+                'smdr_stock': smdr_stock,
             }))
         except Exception as e:
             self._send_json(500, json.dumps({'error': 'Failed to load news', 'details': str(e)}))
