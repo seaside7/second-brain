@@ -1,1 +1,237 @@
-{"default":"deepseek","cost_limit_monthly_usd":50,"rules":{"simple_lookup":"local","draft_boilerplate":"local","code_review":"deepseek","strategy_analysis":"deepseek","trading_analysis":"deepseek","complex_synthesis":"deepseek"},"models":{"local":{"type":"script","description":"No LLM, run local scripts/grep only"},"deepseek":{"type":"api","description":"DeepSeek via VSCode Continue"},"claude":{"type":"api","description":"Claude (future subscription)"}},"task_categories":{"simple_lookup":{"description":"File search, grep, find config values","examples":["find email config","check token status","search knowledge store"]},"draft_boilerplate":{"description":"Templates, standard replies, simple formatting","examples":["create meeting template","format timesheet entry","draft standard email"]},"code_review":{"description":"PR reviews, bug analysis, code quality","examples":["review merge request","analyze bug","suggest refactor"]},"strategy_analysis":{"description":"Business/personal strategy, planning","examples":["PRD writing","roadmap planning","process analysis"]},"trading_analysis":{"description":"Trading performance, backtest results","examples":["analyze trading report","evaluate strategy","review loss patterns"]},"complex_synthesis":{"description":"Multi-source synthesis, deep reasoning","examples":["weekly report from multiple sources","cross-domain analysis"]}}}
+{
+  "default": "deepseek",
+  "cost_limit_monthly_usd": 50,
+  "rules": {
+    "simple_lookup": "local",
+    "draft_boilerplate": "local",
+    "code_review": "deepseek",
+    "strategy_analysis": "deepseek",
+    "trading_analysis": "deepseek",
+    "complex_synthesis": "deepseek"
+  },
+  "models": {
+    "local": {
+      "type": "script",
+      "description": "No LLM, run local scripts/grep only"
+    },
+    "deepseek": {
+      "type": "api",
+      "description": "DeepSeek via VSCode Continue"
+    },
+    "claude": {
+      "type": "api",
+      "description": "Claude (future subscription)"
+    },
+    "openai": {
+      "type": "api",
+      "description": "OpenAI via REST"
+    }
+  },
+  "providers": {
+    "deepseek": {
+      "type": "api",
+      "api_key_env": "DEEPSEEK_API_KEY",
+      "base_url": "https://api.deepseek.com/v1/chat/completions",
+      "default_model": "deepseek-chat",
+      "price_usd_per_1k_input": 0.00027,
+      "price_usd_per_1k_output": 0.0011
+    },
+    "openai": {
+      "type": "api",
+      "api_key_env": "OPENAI_API_KEY",
+      "base_url": "https://api.openai.com/v1/chat/completions",
+      "default_model": "gpt-5.6-luna",
+      "tiers": {
+        "luna": {
+          "model": "gpt-5.6-luna",
+          "reasoning_level": "low",
+          "description": "cheap default — moderate reasoning, cost-sensitive",
+          "price_usd_per_1k_input": 0.0004,
+          "price_usd_per_1k_output": 0.0016
+        },
+        "terra": {
+          "model": "gpt-5.6-terra",
+          "reasoning_level": "medium",
+          "description": "stronger reasoning — multi-step analysis, synthesis",
+          "price_usd_per_1k_input": 0.0012,
+          "price_usd_per_1k_output": 0.0048
+        },
+        "sol": {
+          "model": "gpt-5.6-sol",
+          "reasoning_level": "high",
+          "description": "hardest reasoning — strategy, high-stakes planning",
+          "price_usd_per_1k_input": 0.003,
+          "price_usd_per_1k_output": 0.012
+        }
+      }
+    }
+  },
+  "routing": {
+    "default_task_type": "simple_question",
+    "task_types": {
+      "simple_question": {
+        "provider": "deepseek",
+        "reasoning_level": "low"
+      },
+      "summarization": {
+        "provider": "deepseek",
+        "reasoning_level": "low"
+      },
+      "reading_documents": {
+        "provider": "deepseek",
+        "reasoning_level": "low"
+      },
+      "information_extraction": {
+        "provider": "deepseek",
+        "reasoning_level": "low"
+      },
+      "classification": {
+        "provider": "deepseek",
+        "reasoning_level": "low"
+      },
+      "rewriting": {
+        "provider": "deepseek",
+        "reasoning_level": "low"
+      },
+      "news_briefing": {
+        "provider": "deepseek",
+        "reasoning_level": "low"
+      },
+      "financial_simple": {
+        "provider": "deepseek",
+        "reasoning_level": "low"
+      },
+      "task_query": {
+        "provider": "deepseek",
+        "reasoning_level": "low"
+      },
+      "retrieval_answer": {
+        "provider": "deepseek",
+        "reasoning_level": "low"
+      },
+      "routine_agent": {
+        "provider": "deepseek",
+        "reasoning_level": "low"
+      },
+      "moderate_reasoning": {
+        "provider": "openai",
+        "model": "gpt-5.6-luna",
+        "reasoning_level": "medium"
+      },
+      "complex_reasoning": {
+        "provider": "openai",
+        "model": "gpt-5.6-terra",
+        "reasoning_level": "medium"
+      },
+      "financial_complex": {
+        "provider": "openai",
+        "model": "gpt-5.6-terra",
+        "reasoning_level": "medium"
+      },
+      "cross_source_synthesis": {
+        "provider": "openai",
+        "model": "gpt-5.6-terra",
+        "reasoning_level": "medium"
+      },
+      "strategy": {
+        "provider": "openai",
+        "model": "gpt-5.6-sol",
+        "reasoning_level": "high"
+      },
+      "high_stakes_planning": {
+        "provider": "openai",
+        "model": "gpt-5.6-sol",
+        "reasoning_level": "high"
+      }
+    },
+    "openai_tiers": {
+      "low": "gpt-5.6-luna",
+      "medium": "gpt-5.6-terra",
+      "high": "gpt-5.6-sol"
+    },
+    "fallback_chains": {
+      "deepseek-chat": [
+        "gpt-5.6-luna",
+        "gpt-5.6-terra",
+        "gpt-5.6-sol"
+      ],
+      "gpt-5.6-luna": [
+        "gpt-5.6-terra",
+        "gpt-5.6-sol"
+      ],
+      "gpt-5.6-terra": [
+        "gpt-5.6-sol"
+      ],
+      "gpt-5.6-sol": []
+    },
+    "escalation": {
+      "deepseek_technical_failure": "openai-low",
+      "invalid_structured_response": {
+        "retries": 1,
+        "escalate_to": "openai-low"
+      },
+      "never_escalate_for_length": true,
+      "high_complexity_override": "openai-medium",
+      "high_importance_override": "openai-high",
+      "deep_reasoning_override": "openai-medium",
+      "complexity_threshold": 7,
+      "importance_threshold": 8,
+      "context_size_large_chars": 20000
+    },
+    "default_openai_tier": "low"
+  },
+  "logging": {
+    "enabled": true,
+    "log_path": "journal/state/model_routing_log.jsonl",
+    "max_entries": 2000
+  },
+  "task_categories": {
+    "simple_lookup": {
+      "description": "File search, grep, find config values",
+      "examples": [
+        "find email config",
+        "check token status",
+        "search knowledge store"
+      ]
+    },
+    "draft_boilerplate": {
+      "description": "Templates, standard replies, simple formatting",
+      "examples": [
+        "create meeting template",
+        "format timesheet entry",
+        "draft standard email"
+      ]
+    },
+    "code_review": {
+      "description": "PR reviews, bug analysis, code quality",
+      "examples": [
+        "review merge request",
+        "analyze bug",
+        "suggest refactor"
+      ]
+    },
+    "strategy_analysis": {
+      "description": "Business/personal strategy, planning",
+      "examples": [
+        "PRD writing",
+        "roadmap planning",
+        "process analysis"
+      ]
+    },
+    "trading_analysis": {
+      "description": "Trading performance, backtest results",
+      "examples": [
+        "analyze trading report",
+        "evaluate strategy",
+        "review loss patterns"
+      ]
+    },
+    "complex_synthesis": {
+      "description": "Multi-source synthesis, deep reasoning",
+      "examples": [
+        "weekly report from multiple sources",
+        "cross-domain analysis"
+      ]
+    }
+  }
+}

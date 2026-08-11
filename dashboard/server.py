@@ -29,6 +29,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR / '.agent' / 'scripts'))
 import ai_call  # noqa: E402  (needs BASE_DIR on sys.path first)
 
+# Single source of truth for multi-workspace context (workspaces.json). Used by
+# /api/chat-suggestions and /api/chat so suggestions + answers stay scoped to the
+# active (or requested) workspace and never mix data across workspaces.
+sys.path.insert(0, str(BASE_DIR / '.agent' / 'workspaces'))
+import workspace_resolver as ws_resolver  # noqa: E402
+
 DASHBOARD_PATH = BASE_DIR / 'Dashboard.md'
 PUBLIC_DIR = Path(__file__).resolve().parent / 'public'
 CLIENTS_DIR = BASE_DIR / 'Clients'
@@ -68,6 +74,39 @@ INBOX_CLI = '.agent/skills/inbox-hub/scripts/inbox_sweep.py'
 NEWS_BRIEFINGS_DIR = BASE_DIR / 'journal' / 'news_briefings'
 NEWS_BRIEFING_LOG = BASE_DIR / 'journal' / 'state' / 'news_briefing_log.json'
 SLACK_CLI = '.agent/skills/slack-connector/scripts/slack_client.py'
+WORKSPACES_JSON = BASE_DIR / '.agent' / 'workspaces' / 'workspaces.json'
+PERSONAL_FINANCE_PATH = BASE_DIR / '.agent' / 'workspaces' / 'personal' / 'finance.json'
+
+# ── Chatbox: permanent (static) suggestion categories ──────────────────────
+# The same five categories for every workspace; the workspace-scoped context
+# lives in the DYNAMIC list (built from live dashboard data). These never
+# require an LLM call.
+CHAT_PERMANENT_SUGGESTIONS = [
+    {'category': 'Today', 'icon': '⭐', 'questions': [
+        'What is important today?',
+        'What should I focus on first?',
+        'What tasks are due today?',
+        'What meetings do I have today?']},
+    {'category': 'Work', 'icon': '📋', 'questions': [
+        'What needs my attention?',
+        'What am I waiting for?',
+        'Who needs a follow-up?',
+        'What decisions are waiting for me?']},
+    {'category': 'Finance', 'icon': '💰', 'questions': [
+        'How is my financial situation?',
+        'What needs to be paid?',
+        'What payments are coming up?',
+        'What should I pay attention to financially?']},
+    {'category': 'Intelligence', 'icon': '📰', 'questions': [
+        'What is the most important news today?',
+        'What happened in AI today?',
+        'What important developments should I know about?']},
+    {'category': 'Second Brain', 'icon': '🧠', 'questions': [
+        'Give me my daily briefing.',
+        'What am I missing?',
+        'What should I be thinking about today?',
+        'What are my biggest risks right now?']},
+]
 
 # ── /api/inbox-send human-approval gate ──
 # Sending Slack AS OWNER is the one dashboard action with an irreversible external
@@ -1389,6 +1428,205 @@ def _scan_projects():
     return result
 
 # ═══════════════════════════════════════════
+# CHATBOX: WORKSPACE + SUGGESTION HELPERS
+# ═══════════════════════════════════════════
+
+def _resolve_workspace(name):
+    """Resolve a workspace name to a WorkspaceContext. Unknown/invalid/None
+    falls back to the active workspace from workspaces.json. Never raises."""
+    try:
+        if name:
+            return ws_resolver.get(name)
+        return ws_resolver.get()
+    except ValueError:
+        return ws_resolver.get()
+
+
+def _workspace_ctx(name):
+    """Context for a workspace name, or the active one; returns None only when
+    the registry itself is unreadable."""
+    try:
+        return _resolve_workspace(name)
+    except Exception:
+        return None
+
+
+def _workspace_md_head(ws_name):
+    """First ~1400 chars of a workspace's workspace.md (context hint for the
+    chat persona). Empty string when missing/unreadable. NEVER crosses
+    workspaces — only the requested workspace's file is read."""
+    try:
+        ctx = _resolve_workspace(ws_name)
+        md = Path(ctx.workspace_md)
+        if md.exists():
+            return md.read_text(encoding='utf-8').strip()[:1400]
+    except Exception:
+        pass
+    return ''
+
+
+def _read_latest_news_stories(limit=6):
+    """Top stories by importance across the most recent morning+midday
+    briefings (falls back up to 7 days back), newest briefing first."""
+    try:
+        now = datetime.now(WIB)
+        stories = []
+        morning = midday = None
+        for offset in range(7):
+            d = (now - timedelta(days=offset)).strftime('%Y-%m-%d')
+            if morning is None:
+                morning = _read_news_json_file(NEWS_BRIEFINGS_DIR / (d + '_morning.json'))
+            if midday is None:
+                midday = _read_news_json_file(NEWS_BRIEFINGS_DIR / (d + '_midday.json'))
+            if morning is not None and midday is not None:
+                break
+        for data in (morning, midday):
+            if data:
+                for s in data.get('stories', []):
+                    s = dict(s)
+                    s['briefing_mode'] = data.get('mode', '')
+                    stories.append(s)
+        stories.sort(key=lambda s: s.get('importance', 0) or 0, reverse=True)
+        return stories[:limit]
+    except Exception:
+        return []
+
+
+def _read_news_json_file(path):
+    """Read a news briefing JSON sidecar; None when missing or unparseable."""
+    if not path.exists():
+        return None
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _chat_dynamic_suggestions(ws_name):
+    """5-10 context-aware suggested questions built from LIVE dashboard data
+    for the given workspace. Deterministic + instant (no LLM call): the
+    permanent list is static, only this context list varies. Workspace
+    isolation: finance data is only included for /personal, Samudera news only
+    for /samudera, and catalyze-specific dev data only for /catalyze."""
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(WIB)
+    today = now.strftime('%Y-%m-%d')
+    suggestions = []
+
+    def add(text):
+        if text and text not in suggestions:
+            suggestions.append(text)
+
+    # ── shared work brain: tracker counts (all workspaces may surface) ──
+    try:
+        tickets = TICKETS_PATH.read_text(encoding='utf-8')
+        doc = json.loads(tickets)
+        tickets = doc.get('tickets', [])
+    except Exception:
+        tickets = []
+    open_states = ('todo', 'in_progress', 'blocked', 'waiting')
+    open_tickets = [t for t in tickets if t.get('status') in open_states]
+    overdue = [t for t in open_tickets if t.get('due') and t['due'] < today]
+    due_today = [t for t in open_tickets if t.get('due') == today]
+    p0 = [t for t in open_tickets if t.get('priority') == 'P0']
+    if overdue:
+        add(f'Why is "{overdue[0].get("title")}" overdue — and what do I do first?')
+    if due_today:
+        add(f'What is the plan for "{due_today[0].get("title")}", which is due today?')
+    if p0:
+        add(f'Which open P0 should I tackle first ({len(p0)} open)?')
+    if len(overdue) > 1:
+        add(f'There are {len(overdue)} overdue tickets. Which one hurts most right now?')
+
+    # ── waiting-on / escalations (shared brain) ──
+    try:
+        wstate = json.loads(WAITING_ON_PATH.read_text(encoding='utf-8'))
+        items = list((wstate.get('items') or {}).values())
+        breached = [it for it in items if it.get('status') == 'breached']
+        if breached:
+            add(f'Who should I chase about "{breached[0].get("what")}" — it has breached SLA?')
+        elif items:
+            add(f'{len(items)} item(s) are waiting on others. Who needs a nudge first?')
+    except Exception:
+        pass
+
+    # ── decisions (shared brain) ──
+    try:
+        dstate = json.loads(DECISIONS_PATH.read_text(encoding='utf-8'))
+        ditems = [it for it in (dstate.get('items') or {}).values() if it.get('status') == 'open']
+        if ditems:
+            add(f'{len(ditems)} decision(s) are still open. Which one blocks the most?')
+    except Exception:
+        pass
+
+    # ── commitments (shared brain) ──
+    try:
+        cstate = json.loads(COMMITMENTS_PATH.read_text(encoding='utf-8'))
+        citems = [it for it in (cstate.get('items') or {}).values() if it.get('status') == 'open']
+        if citems:
+            add(f'What commitment do I owe next ({len(citems)} open)?')
+    except Exception:
+        pass
+
+    # ── today's meetings (shared calendar) ──
+    try:
+        cal = _fetch_calendar_events(0, 0)
+        today_events = [e for e in cal.get('events', []) if e.get('isToday')]
+        if today_events:
+            add(f'What should I prepare for "{today_events[0].get("summary")}" today?')
+    except Exception:
+        pass
+
+    # ── workspace-scoped news ──
+    stories = _read_latest_news_stories(6)
+    if ws_name == 'samudera':
+        smdr = [s for s in stories if s.get('category') == 'samudera_indonesia']
+        if smdr:
+            add(f'What is the latest on Samudera Indonesia: "{smdr[0].get("headline")}"?')
+        add('What industry or shipping-logistics developments should I watch this week?')
+    elif ws_name == 'personal':
+        ai_news = [s for s in stories if s.get('category') == 'ai']
+        if ai_news:
+            add(f'What should I know about "{ai_news[0].get("headline")}"?')
+        add('What is one thing I should learn or build today?')
+    else:  # catalyze
+        ai_news = [s for s in stories if s.get('category') == 'ai']
+        if ai_news:
+            add(f'What is the most important AI/tech news right now: "{ai_news[0].get("headline")}"?')
+        add('What project needs my attention across my Catalyze clients today?')
+
+    # ── finance: ONLY the personal workspace ──
+    if ws_name == 'personal' and PERSONAL_FINANCE_PATH.exists():
+        try:
+            fin = json.loads(PERSONAL_FINANCE_PATH.read_text(encoding='utf-8'))
+            obligations = fin.get('critical_obligations') or []
+            income = fin.get('income_sources') or {}
+            if obligations:
+                add(f'Are my critical obligations covered this month ({", ".join(obligations[:3])})?')
+            if income:
+                add('When is my next income payment expected, and how much?')
+        except Exception:
+            pass
+
+    # ── default fallbacks (never return empty) ──
+    if len(suggestions) < 5:
+        fallbacks = [
+            'Give me my daily briefing.',
+            'What am I missing right now?',
+            'What should I be thinking about today?',
+            'What are my biggest risks right now?',
+            'What changed recently in my dashboard?',
+        ]
+        for f in fallbacks:
+            if len(suggestions) >= 5:
+                break
+            add(f)
+
+    return suggestions[:10]
+
+
+# ═══════════════════════════════════════════
 # HTTP HANDLER
 # ═══════════════════════════════════════════
 
@@ -1556,6 +1794,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_token_usage()
         elif self.path.split('?')[0] == '/api/ledger-find':
             self._handle_ledger_find()
+        elif self.path.split('?')[0] == '/api/chat-suggestions':
+            self._handle_get_chat_suggestions()
         elif self.path == '/api/token-efficiency':
             self._handle_get_token_efficiency()
         elif self.path == '/api/work-hours':
@@ -1630,6 +1870,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_post_ack_job()
         elif self.path == '/api/ai-task':
             self._handle_post_ai_task()
+        elif self.path == '/api/chat':
+            self._handle_post_chat()
         elif self.path == '/api/commitment-close':
             self._handle_post_commitment_close()
         elif self.path == '/api/waiting-close':
@@ -3999,6 +4241,96 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                                             ensure_ascii=False))
         except Exception as e:
             self._send_json(500, json.dumps({'error': 'ledger-find failed', 'details': str(e)}))
+
+    def _handle_get_chat_suggestions(self):
+        """GET /api/chat-suggestions?workspace=<name> — question suggestions for the
+        chatbox palette. Returns:
+          workspace     resolved workspace name
+          display_name  human label for the header
+          mode          persona mode (developer/executive/builder) for the UI
+          permanent     static categorized suggestions (5 categories, never an LLM)
+          dynamic       5-10 context-aware suggestions built from live dashboard
+                        data (tracker/waiting/decisions/commitments/calendar/news/
+                        finance), scoped so /samudera never sees finance or
+                        catalyze data and vice versa.
+        Deterministic + instant — the permanent list is static and the dynamic
+        list is heuristic, so opening the palette never blocks on an LLM."""
+        try:
+            ws_name = (parse_qs(urlsplit(self.path).query).get('workspace', [''])[0] or '').strip()
+            ctx = _resolve_workspace(ws_name)
+            dynamic = _chat_dynamic_suggestions(ctx.name)
+            self._send_json(200, json.dumps({
+                'workspace': ctx.name,
+                'display_name': ctx.display_name,
+                'mode': ctx.mode,
+                'generated_wib': datetime.now(WIB).isoformat(timespec='seconds'),
+                'permanent': CHAT_PERMANENT_SUGGESTIONS,
+                'dynamic': dynamic,
+            }, ensure_ascii=False))
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': 'chat-suggestions failed',
+                                             'details': str(e)}))
+
+    def _handle_post_chat(self):
+        """POST /api/chat {message, workspace} — answer a question in the workspace's
+        persona (role/mode + workspace.md head as grounding) via ai_call.run().
+        The prompt NEVER includes data from other workspaces; the workspace.md
+        context and the model call are both scoped to the requested workspace.
+        Returns {reply, model, backend, workspace}."""
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+            message = (body.get('message') or '').strip()
+            ws_name = (body.get('workspace') or '').strip()
+            if not message:
+                self._send_json(400, json.dumps({'error': 'message is required'}))
+                return
+            ctx = _resolve_workspace(ws_name)
+            if not ctx:
+                self._send_json(400, json.dumps({'error': f'unknown workspace {ws_name!r}'}))
+                return
+
+            persona = ' '.join(filter(None, [
+                f'Role: {ctx.role}' if ctx.role else '',
+                f'Mode: {ctx.mode}' if ctx.mode else '',
+                ctx.style if ctx.style else '',
+            ]))
+            ctx_head = _workspace_md_head(ctx.name)
+            system = (
+                f'You are the Second Brain assistant for the "{ctx.display_name}" '
+                f'workspace ({ctx.name}). {persona}\n\n'
+                f'Context from the workspace operating manual:\n{ctx_head or "(none)"}\n\n'
+                'Answer concisely and directly. Ground your answer in the context above '
+                'and in general knowledge when the context does not cover the question. '
+                'Never reference or reveal data from other workspaces. Keep the reply '
+                'under ~200 words unless the question asks for more.'
+            )
+            ok, text, meta = ai_call.run(system + '\n\nQuestion: ' + message,
+                                         task='draft', model='sonnet', timeout=120)
+            if not ok:
+                reason = (meta.get('reason') or 'ai call failed').strip()
+                if reason == 'fallback_to_claude' or meta.get('backend') == 'none':
+                    clean = ('I could not answer because no AI backend is available '
+                             'on this machine (no model CLI or API tokens configured). '
+                             'This is an environment issue, not a problem with your question.')
+                else:
+                    clean = 'The AI call failed: %s' % reason[:300]
+                self._send_json(200, json.dumps({
+                    'reply': clean,
+                    'error': 'AI backend unavailable',
+                    'workspace': ctx.name,
+                    'backend': meta.get('backend'),
+                }, ensure_ascii=False))
+                return
+            self._send_json(200, json.dumps({
+                'reply': text,
+                'model': meta.get('model'),
+                'backend': meta.get('backend'),
+                'workspace': ctx.name,
+            }, ensure_ascii=False))
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': 'chat failed', 'details': str(e)}))
+
 
     def _handle_get_token_efficiency(self):
         """GET /api/token-efficiency — read-only: journal/state/token_efficiency.json

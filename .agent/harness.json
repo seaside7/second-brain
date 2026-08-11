@@ -1,0 +1,23 @@
+{
+  "cache_schema": 1,
+  "extra": {},
+  "records": {
+    "opencode:": {
+      "backends": [],
+      "detected_at": 1786447708.472117,
+      "entrypoint": "unknown",
+      "hooks": false,
+      "model": "unknown",
+      "platform": "unknown",
+      "repo_root": "D:\\Coders\\ai-second-brain",
+      "run_prefix": "",
+      "run_suffix": "",
+      "runtime": "unknown",
+      "schema": 2,
+      "session_id": "",
+      "signature": "opencode:",
+      "subagents": false,
+      "tier": "unknown"
+    }
+  }
+}
