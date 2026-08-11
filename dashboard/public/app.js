@@ -71,7 +71,7 @@ function canRender(container) {
 }
 
 /* ── Router: #today (default) | #inbox | #work[/filter] | #meetings | #system ── */
-const TAB_NAMES = ['today', 'inbox', 'work', 'meetings', 'hours', 'system'];
+const TAB_NAMES = ['today', 'inbox', 'work', 'meetings', 'hours', 'news', 'system'];
 
 function parseHash() {
   const h = (location.hash || '#today').replace(/^#/, '');
