@@ -1,3 +1,0 @@
-{"job": "local-recorder", "ts_wib": "2026-08-13T14:15:00+07:00", "status": "ok", "summary": "2026-08-13_1408_Test_Meeting.wav: needs /mom manual (agy-bridge fallback_to_claude) (local-1786605299)", "needs_reauth": false}
-{"job": "local-recorder", "ts_wib": "2026-08-13T14:15:45+07:00", "status": "ok", "summary": "2026-08-13_1408_Test_Meeting.wav: drafted (local-1786605335)", "needs_reauth": false}
-{"job": "local-recorder", "ts_wib": "2026-08-13T14:24:52+07:00", "status": "ok", "summary": "2026-08-13_1423_Meeting_Title.wav: drafted (local-1786605868)", "needs_reauth": false}
