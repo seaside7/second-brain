@@ -7,6 +7,7 @@ import json
 import os
 import re
 import sys
+import time
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -127,28 +128,39 @@ def list_files(workspace_name=None, page_size=100):
         return [], f"Drive API error: {e}"
 
 
-def download_text(file_id, mime_type, workspace_name=None):
+def download_text(file_id, mime_type, workspace_name=None, token_workspace=None):
     """Download file content as text. Handles Google Docs export.
-    Returns (text, error)."""
+
+    `token_workspace` overrides WHICH workspace's drive token performs the
+    download. Meeting transcripts live in the PERSONAL drive and are listed
+    with the personal token, so the download must use it too - a samudera
+    workspace token cannot see those files (File not found: 404). Transient
+    503s are retried. Returns (text, error)."""
     cfg, ctx = _load_config(workspace_name)
-    service = _get_drive_service(ctx)
+    token_ctx = ws.get(token_workspace) if token_workspace else ctx
+    service = _get_drive_service(token_ctx)
     if not service:
         return None, "Drive auth failed."
 
-    try:
-        if mime_type in EXPORT_MIME:
-            # Google Docs: export as plain text
-            export_mime = EXPORT_MIME[mime_type]
-            request = service.files().export_media(fileId=file_id, mimeType=export_mime)
-            content = request.execute()
-            return content.decode("utf-8", errors="replace"), None
-        else:
-            # Regular files: download
-            request = service.files().get_media(fileId=file_id)
-            content = request.execute()
-            return content, None
-    except Exception as e:
-        return None, f"Download failed: {e}"
+    last_error = None
+    for attempt in range(3):
+        try:
+            if mime_type in EXPORT_MIME:
+                # Google Docs: export as plain text
+                export_mime = EXPORT_MIME[mime_type]
+                request = service.files().export_media(fileId=file_id, mimeType=export_mime)
+                content = request.execute()
+                return content.decode("utf-8", errors="replace"), None
+            else:
+                # Regular files: download
+                request = service.files().get_media(fileId=file_id)
+                content = request.execute()
+                return content, None
+        except Exception as e:
+            last_error = e
+            if attempt < 2:
+                time.sleep(2 * (attempt + 1))
+    return None, f"Download failed: {last_error}"
 
 
 # ---------- meeting transcript scoping (workspace rules) ----------

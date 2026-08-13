@@ -65,12 +65,15 @@ def cmd_sync(args):
     if args.meetings:
         # Meeting transcripts live in the PERSONAL drive; sync ONLY this
         # workspace's Meeting Transcripts/<client>/ folder into a dedicated,
-        # workspace-scoped index.
+        # workspace-scoped index. Downloads must use the PERSONAL token too
+        # (the target workspace's token cannot see those files -> 404).
         cfg = _meetings_config(ctx)
         files, error = list_meeting_files(args.workspace)
+        token_workspace = "personal"
         print(f"[{ctx.name}] Syncing meeting transcripts from PERSONAL drive...",
               file=sys.stderr)
     else:
+        token_workspace = None
         if not cfg:
             print(f"[{ctx.name}] No documents.json config found.")
             print(f"Create: .agent/workspaces/{ctx.name}/documents.json")
@@ -104,7 +107,8 @@ def cmd_sync(args):
         print(f"  [{name}] ", end="", file=sys.stderr)
 
         # Download content
-        content, dl_error = download_text(file_id, mime_type, args.workspace)
+        content, dl_error = download_text(file_id, mime_type, args.workspace,
+                                          token_workspace=token_workspace)
         if dl_error:
             print(f"SKIP ({dl_error})", file=sys.stderr)
             failed += 1
