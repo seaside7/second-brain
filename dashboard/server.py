@@ -1792,6 +1792,43 @@ def _recent_mom_action_items(ws_name, days=3):
     return out
 
 
+def _recent_meeting_transcripts(ws_name, days=3):
+    """Recent meeting transcripts from the doc-engine Drive sync index
+    (journal/state/<workspace>_meetings_index.json, built by
+    doc_engine.py sync --meetings). Workspace-scoped by construction: each
+    workspace syncs its own index. Deterministic + instant, never an LLM call.
+    Returns compact strings (name, date, first ~800 chars) or []."""
+    from datetime import datetime, timezone, timedelta
+    idx_path = BASE_DIR / 'journal' / 'state' / f'{ws_name}_meetings_index.json'
+    if not idx_path.exists():
+        return []
+    try:
+        idx = json.loads(idx_path.read_text(encoding='utf-8'))
+        docs = (idx.get('documents') or {}).values()
+    except Exception:
+        return []
+    now = datetime.now(WIB)
+    cutoff = now - timedelta(days=days)
+    out = []
+    for d in docs:
+        try:
+            modified = datetime.fromisoformat(
+                str(d.get('modified_time', '')).replace('Z', '+00:00'))
+            if modified.tzinfo is None:
+                modified = modified.replace(tzinfo=timezone.utc)
+            modified = modified.astimezone(WIB)
+        except (ValueError, TypeError):
+            continue
+        if modified < cutoff:
+            continue
+        name = d.get('name') or '(untitled)'
+        text = (d.get('text') or '').strip().replace('\n', ' ')[:800]
+        out.append(f'- {name} [{modified.strftime("%Y-%m-%d")}]: {text}')
+        if len(out) >= 8:
+            break
+    return out
+
+
 def _chat_live_context(ws_name):
     """Compact, workspace-scoped digest of TODAY's live dashboard data, injected
     into the chat answer's system prompt so the model answers from real data
@@ -1842,6 +1879,15 @@ def _chat_live_context(ws_name):
         if mom_items:
             lines.append('Recent meeting action items (last 3 days):')
             lines.extend(mom_items)
+    except Exception:
+        pass
+
+    # ── recent meeting transcripts (Drive sync index, last 3 days) ──
+    try:
+        tr_items = _recent_meeting_transcripts(ws_name)
+        if tr_items:
+            lines.append('Recent meeting transcripts synced from Drive (last 3 days):')
+            lines.extend(tr_items)
     except Exception:
         pass
 
