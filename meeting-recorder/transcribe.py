@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 """Transcription engine chain for the local meeting note-taker.
 
-Chain (engine=auto): Gemini API (audio-in, returns speaker labels) -> whisper.cpp
-on GPU (Vulkan on Radeon/Windows-Linux, Metal on Apple Silicon) as fallback when
-Gemini is unavailable/fails. Gemini is preferred so transcripts carry speaker
-labels instead of a single unlabelled stream. There is NO automatic CPU fallback:
-the owner's rule. engine=cpu (explicit only) shells out to the legacy faster-whisper
-script.
+Chain (engine=auto): OpenAI Whisper (whisper-1, $0.006/min, the owner's key in
+root .env) -> Gemini API (audio-in, speaker labels) -> whisper.cpp on GPU as
+fallback. There is NO automatic CPU fallback: the owner's rule. engine=cpu
+(explicit only) shells out to the legacy faster-whisper script.
 
 Usage:
   python3 transcribe.py --in recording.wav --out transcript.md \
-      [--engine auto|whispercpp|cli|cpu] [--lang auto|en|id]
+      [--engine auto|openai|whispercpp|cli|cpu] [--lang auto|en|id]
 
 Output: markdown transcript with **[mm:ss]** timestamps (same format the /mom
 pipeline already consumes) + a plain .txt sibling.
@@ -26,13 +24,17 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+import uuid
 
-from common import REPO_ROOT, fmt_ts, load_config, load_gemini_key
+from common import REPO_ROOT, fmt_ts, load_config, load_gemini_key, load_openai_key
 
 LOG_PATH = os.path.join(REPO_ROOT, "dashboard-data", "meeting_recorder_log.jsonl")
 GEMINI_BASE = "https://generativelanguage.googleapis.com"
 # Gemini audio pricing is folded into normal token pricing; log tokens + est cost.
 GEMINI_PRICE_PER_MTOK = {"in": 0.30, "out": 2.50}  # flash-tier list price, USD
+# OpenAI Whisper audio transcription list price, USD per minute of audio.
+OPENAI_WHISPER_PRICE_PER_MIN = 0.006
+OPENAI_TRANSCRIBE_URL = "https://api.openai.com/v1/audio/transcriptions"
 
 GEMINI_PROMPT = """Transcribe this meeting recording completely and accurately.
 The audio may mix English and Indonesian; transcribe each utterance in its
@@ -214,6 +216,62 @@ def run_gemini(audio, cfg, lang):
         raise EngineSkip("Gemini transcript empty")
     return lines, f"Gemini `{model}` (audio-in, speaker labels, ~${cost:.3f})"
 
+# ---------- engine: openai (Whisper API, cheapest) ----------
+
+def _multipart(fields, file_field, filename, data, content_type):
+    """Build a multipart/form-data body without pulling in a requests dep."""
+    boundary = "----psb" + uuid.uuid4().hex
+    parts = []
+    for k, v in fields.items():
+        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode())
+    parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{file_field}"; filename="{filename}"\r\nContent-Type: {content_type}\r\n\r\n'.encode())
+    parts.append(data)
+    parts.append(f"\r\n--{boundary}--\r\n".encode())
+    return b"".join(parts), boundary
+
+def run_openai_whisper(audio, cfg, lang):
+    key = load_openai_key()
+    machine = cfg["machine"]
+    ffmpeg = machine.get("ffmpeg", "ffmpeg")
+    model = cfg.get("openai_transcribe_model",
+                    os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1"))
+
+    with tempfile.TemporaryDirectory() as td:
+        ogg = os.path.join(td, "audio.ogg")
+        subprocess.run([ffmpeg, "-y", "-v", "quiet", "-i", audio, "-ac", "1",
+                        "-ar", "16000", "-c:a", "libopus", "-b:a", "24k", ogg],
+                       check=True, timeout=600)
+        fields = {"model": model, "response_format": "verbose_json"}
+        if lang != "auto":
+            fields["language"] = lang
+        body, boundary = _multipart(fields, "file", os.path.basename(audio),
+                                    open(ogg, "rb").read(), "audio/ogg")
+        req = urllib.request.Request(
+            OPENAI_TRANSCRIBE_URL, data=body,
+            headers={"Authorization": f"Bearer {key}",
+                     "Content-Type": f"multipart/form-data; boundary={boundary}"})
+        try:
+            with urllib.request.urlopen(req, timeout=1800) as r:
+                data = json.load(r)
+        except urllib.error.HTTPError as e:
+            raise EngineSkip(f"OpenAI HTTP {e.code}: {e.read().decode()[:300]}")
+
+    dur = audio_duration(audio, ffmpeg)
+    cost = dur / 60.0 * OPENAI_WHISPER_PRICE_PER_MIN
+    log_row({"kind": "transcribe", "engine": f"openai:{model}",
+             "file": os.path.basename(audio),
+             "est_usd": round(cost, 4)})
+
+    lines = []
+    for seg in data.get("segments", []):
+        text = seg.get("text", "").strip()
+        if not text:
+            continue
+        lines.append(f"**[{fmt_ts(seg.get('start', 0))}]** {text}")
+    if not lines:
+        raise EngineSkip("OpenAI whisper returned no text")
+    return lines, f"OpenAI `{model}` (~${cost:.3f})"
+
 # ---------- engine: cpu (explicit only, legacy faster-whisper) ----------
 
 def run_cpu(audio, cfg, lang, out_md):
@@ -233,10 +291,11 @@ def transcribe(audio, out_md, engine=None, lang=None, cfg=None):
     engine = engine or cfg.get("engine", "auto")
     lang = lang or cfg.get("language", "auto")
 
-    # auto prefers Gemini (audio-in, speaker labels); whisper.cpp is the fallback
-    # if Gemini is unavailable/fails. NEVER falls back to CPU (the owner's rule).
-    chain = {"auto": ["cli", "whispercpp"],
+    # auto prefers OpenAI Whisper (cheapest, the owner's key), then Gemini for
+    # speaker labels, then whisper.cpp on GPU. NEVER falls back to CPU.
+    chain = {"auto": ["openai", "cli", "whispercpp"],
              "whispercpp": ["whispercpp"],
+             "openai": ["openai"],
              "cli": ["cli"],
              "cpu": ["cpu"]}[engine]
 
@@ -247,8 +306,9 @@ def transcribe(audio, out_md, engine=None, lang=None, cfg=None):
             if eng == "cpu":
                 run_cpu(audio, cfg, lang, out_md)
                 return out_md, "faster-whisper (cpu, explicit)"
-            fn = run_whispercpp if eng == "whispercpp" else run_gemini
-            lines, note = fn(audio, cfg, lang)
+            fns = {"whispercpp": run_whispercpp, "cli": run_gemini,
+                   "openai": run_openai_whisper}
+            lines, note = fns[eng](audio, cfg, lang)
             dur = audio_duration(audio, cfg["machine"].get("ffmpeg", "ffmpeg"))
             header = (f"# Transcript: {os.path.basename(audio)}\n\n"
                       f"- Engine: {note}\n"
@@ -274,7 +334,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="inp", required=True)
     ap.add_argument("--out", dest="out", required=True)
-    ap.add_argument("--engine", choices=["auto", "whispercpp", "cli", "cpu"])
+    ap.add_argument("--engine", choices=["auto", "openai", "whispercpp", "cli", "cpu"])
     ap.add_argument("--lang", choices=["auto", "en", "id"])
     args = ap.parse_args()
     if not os.path.isfile(args.inp):

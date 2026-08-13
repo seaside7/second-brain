@@ -1704,6 +1704,94 @@ def _chat_dynamic_suggestions(ws_name):
     return suggestions[:10]
 
 
+def _mom_action_table(text):
+    """Rows (task, owner, deadline, priority) from a MOM's '## Action Items'
+    markdown table (templates/mom_work.md). Header/separator rows skipped."""
+    lines = text.splitlines()
+    idx = None
+    for i, ln in enumerate(lines):
+        if ln.strip().lower().startswith('## action items'):
+            idx = i
+            break
+    if idx is None:
+        return []
+    rows = []
+    for ln in lines[idx + 1:]:
+        if ln.strip().startswith('## '):
+            break
+        if not ln.strip().startswith('|'):
+            continue
+        cells = [c.strip() for c in ln.strip().strip('|').split('|')]
+        if not cells:
+            continue
+        # skip header row and table separators like '---' / ':---'
+        if cells[0] in ('#',) or all(set(c) <= set('-: ') for c in cells):
+            continue
+        cells = (cells + [''] * 5)[:5]
+        num, task, owner, deadline, priority = cells
+        if not task or task == 'Task':
+            continue
+        rows.append((task, owner, deadline, priority))
+    return rows
+
+
+def _recent_mom_action_items(ws_name, days=3):
+    """Action items from MOMs under Clients/<client>/meetings of the last `days`
+    days, workspace-scoped: samudera/personal read only their own client dir,
+    everything else reads Work (matches the recorder stack's client mapping).
+    Deterministic + instant, never an LLM call. Returns compact strings or []."""
+    from datetime import datetime, timezone, timedelta
+    client = {'samudera': 'Samudera', 'personal': 'Personal'}.get(ws_name, 'Work')
+    meet_dir = CLIENTS_DIR / client / 'meetings'
+    if not meet_dir.is_dir():
+        return []
+    now = datetime.now(WIB)
+    cutoff = now - timedelta(days=days)
+    _date_re = re.compile(r'^\|\s*Date\s*\|\s*(\d{4}-\d{2}-\d{2})')
+    try:
+        files = sorted(meet_dir.glob('*.md'),
+                       key=lambda f: f.stat().st_mtime, reverse=True)
+    except Exception:
+        return []
+    out = []
+    for f in files:
+        try:
+            mtime = datetime.fromtimestamp(f.stat().st_mtime)
+            text = f.read_text(encoding='utf-8')
+        except Exception:
+            continue
+        mdate = None
+        for line in text.splitlines()[:12]:
+            mm = _date_re.match(line)
+            if mm:
+                mdate = mm.group(1)
+                break
+        if mdate:
+            try:
+                recent = datetime.strptime(mdate, '%Y-%m-%d').date() >= cutoff.date()
+            except ValueError:
+                recent = False
+        else:
+            recent = mtime >= cutoff
+        if not recent:
+            continue
+        title = f.stem.replace('_', ' ')
+        for line in text.splitlines()[:5]:
+            if line.startswith('# '):
+                title = line[2:].strip()
+                break
+        for task, owner, deadline, priority in _mom_action_table(text):
+            line = f'- {title} [{mdate or "?"}]: {task}'
+            if owner and owner != '-':
+                line += f' (owner: {owner})'
+            if deadline and deadline != '-':
+                line += f' (due: {deadline})'
+            out.append(line)
+            if len(out) >= 10:
+                return out
+    return out
+
+
 def _chat_live_context(ws_name):
     """Compact, workspace-scoped digest of TODAY's live dashboard data, injected
     into the chat answer's system prompt so the model answers from real data
@@ -1747,6 +1835,15 @@ def _chat_live_context(ws_name):
             lines.append('No meetings today.')
     except Exception:
         lines.append('Calendar unavailable (no token).')
+
+    # ── recent meeting action items (workspace-scoped MOMs, last 3 days) ──
+    try:
+        mom_items = _recent_mom_action_items(ws_name)
+        if mom_items:
+            lines.append('Recent meeting action items (last 3 days):')
+            lines.extend(mom_items)
+    except Exception:
+        pass
 
     # ── open work (workspace-scoped tracker) ──
     try:

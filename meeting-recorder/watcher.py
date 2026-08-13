@@ -25,7 +25,10 @@ import subprocess
 import sys
 import time
 
-from common import REPO_ROOT, load_config, parse_json_tail, slugify
+from common import (
+    REPO_ROOT, load_config, parse_json_tail, slugify,
+    workspace_calendar_profile, workspace_client,
+)
 from transcribe import transcribe
 
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -172,18 +175,20 @@ def read_sidecar(base):
             pass
     return {}
 
-def calendar_match(start_wib, cfg):
-    """Best-effort: find a Work calendar event overlapping the recording start.
+def calendar_match(start_wib, cfg, profile="work"):
+    """Best-effort: find a calendar event overlapping the recording start.
 
     Picks the NEAREST event, not the first one inside the window: a 15:04
     recording must not claim a 15:15 "Prayer" block over the 14:30 standup it
     actually belongs to. Non-meeting blocks are skipped outright, since a
     recording matched to one produces a MOM that reads as done but holds no
-    meeting content, which is worse than no match at all."""
+    meeting content, which is worse than no match at all.
+    `profile` selects which Google calendar to match against (work | personal |
+    samudera); a missing/unconfigured profile fails soft (returns None)."""
     if not cfg.get("calendar_match", True):
         return None
     try:
-        r = subprocess.run([sys.executable, GCAL, "list", "--profile", "work",
+        r = subprocess.run([sys.executable, GCAL, "list", "--profile", profile,
                             "--days-back", "2", "--days-forward", "0", "--json"],
                            capture_output=True, text=True, timeout=120)
         events = parse_json_tail(r.stdout)
@@ -210,7 +215,7 @@ def calendar_match(start_wib, cfg):
         print(f"[watcher] calendar match skipped: {e}", file=sys.stderr)
     return None
 
-def register_recording(audio_path, meta, matched, duration_sec):
+def register_recording(audio_path, meta, matched, duration_sec, workspace=None):
     with open(REGISTRY_PATH, encoding="utf-8") as f:
         registry = json.load(f)
     rec_id = f"local-{int(time.time())}"
@@ -232,7 +237,8 @@ def register_recording(audio_path, meta, matched, duration_sec):
         "matched_meeting": matched,
         "match_source": "local-recorder",
         "confidence": "high" if matched else "medium",
-        "client": "Work",
+        "workspace": workspace,
+        "client": workspace_client(workspace),
         "project": None,
         "participants": [],
         "transcript_language": None,
@@ -373,20 +379,30 @@ def draft_mom(transcript_md, title, start_wib, matched, scratch, cfg=None,
 
 # ---------- main processing ----------
 
-def process(audio_path, cfg, state):
+def process(audio_path, cfg, state, workspace=None, output_dir=None):
     name = os.path.basename(audio_path)
     base = os.path.splitext(audio_path)[0]
     meta = read_sidecar(base)
     title = meta.get("title") or os.path.splitext(name)[0]
     print(f"[watcher] processing: {name} ({title})")
 
-    os.makedirs(TRANSCRIPTS_DIR, exist_ok=True)
+    # Workspace-aware output: legacy local runs keep Clients/Work/meetings;
+    # VPS runs write under Clients/<client>/meetings so personal and samudera
+    # material never share a folder (workspace isolation on disk too).
+    client = workspace_client(workspace)
+    if output_dir is None:
+        out_root = os.path.join(REPO_ROOT, "Clients", client, "meetings")
+    else:
+        out_root = output_dir
+    transcripts_dir = os.path.join(out_root, "transcripts")
+    os.makedirs(transcripts_dir, exist_ok=True)
     slug = slugify(title)
-    transcript_md = os.path.join(TRANSCRIPTS_DIR, os.path.splitext(name)[0] + ".md")
+    transcript_md = os.path.join(transcripts_dir, os.path.splitext(name)[0] + ".md")
     transcript_md, engine_note = transcribe(audio_path, transcript_md, cfg=cfg)
 
     duration = meta.get("duration_sec", 0)
-    rec_id, start_wib = register_recording(audio_path, meta, None, duration)
+    rec_id, start_wib = register_recording(audio_path, meta, None, duration,
+                                           workspace=workspace)
     ad_hoc = bool(meta.get("ad_hoc"))
     attendees = meta.get("attendees") or []
     if ad_hoc:
@@ -394,12 +410,14 @@ def process(audio_path, cfg, state):
         # Matching it to an overlapping calendar event would rename the MOM,
         # brief the wrong room, and dedupe it against an unrelated recording.
         matched = None
+        match_source = (f"{'vps' if workspace else 'local'}-recorder-adhoc")
         update_registry_entry(rec_id, matched_meeting=title, confidence="high",
-                              match_source="local-recorder-adhoc",
+                              match_source=match_source,
                               participants=attendees)
         print(f"[watcher] ad-hoc meeting, calendar match skipped: {title}")
     else:
-        matched = calendar_match(start_wib, cfg)
+        matched = calendar_match(start_wib, cfg,
+                                 profile=workspace_calendar_profile(workspace))
         if matched:
             update_registry_entry(rec_id, matched_meeting=matched, confidence="high")
         if attendees:
@@ -429,7 +447,7 @@ def process(audio_path, cfg, state):
             mom = None
         if mom:
             mom_path = os.path.join(
-                MOM_DIR, f"MOM_{slug}_{start_wib.strftime('%Y-%m-%d')}.md")
+                out_root, f"MOM_{slug}_{start_wib.strftime('%Y-%m-%d')}.md")
             header = (f"> Status: DRAFT (local pipeline, belum direview)\n"
                       f"> Source: local recording `{name}`, {engine_note}\n"
                       f"> Registry: {rec_id} | Review via /mom before sharing\n\n")

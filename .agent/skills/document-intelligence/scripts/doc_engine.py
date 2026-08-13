@@ -27,7 +27,7 @@ sys.path.insert(0, str(REPO_ROOT / ".agent" / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / ".agent" / "workspaces"))
 
 import workspace_resolver as ws
-from doc_connector import list_files, download_text, SUPPORTED_MIME_TYPES
+from doc_connector import list_files, list_meeting_files, download_text, SUPPORTED_MIME_TYPES
 from doc_parser import parse_document
 from doc_store import (upsert_document, search_documents, list_documents,
                        get_document, update_sync_time, get_stats)
@@ -48,20 +48,37 @@ def _get_config(workspace_name=None):
     return ctx.config("documents"), ctx
 
 
+def _meetings_config(ctx):
+    """Scoped config for meeting transcripts: each workspace gets its OWN index
+    so /samudera can only ever search samudera meetings (workspace-scoping
+    rules), never the shared default index."""
+    return {"source": "google_drive", "meetings": True,
+            "index_path": f"journal/state/{ctx.name}_meetings_index.json"}
+
+
 # ── Commands ──
 
 def cmd_sync(args):
     """Sync documents from Google Drive into the local index."""
     cfg, ctx = _get_config(args.workspace)
-    if not cfg:
-        print(f"[{ctx.name}] No documents.json config found.")
-        print(f"Create: .agent/workspaces/{ctx.name}/documents.json")
-        print(f'  {{"source": "google_drive", "folder_id": "YOUR_FOLDER_ID"}}')
-        return
 
-    print(f"[{ctx.name}] Syncing documents from Google Drive...", file=sys.stderr)
+    if args.meetings:
+        # Meeting transcripts live in the PERSONAL drive; sync ONLY this
+        # workspace's Meeting Transcripts/<client>/ folder into a dedicated,
+        # workspace-scoped index.
+        cfg = _meetings_config(ctx)
+        files, error = list_meeting_files(args.workspace)
+        print(f"[{ctx.name}] Syncing meeting transcripts from PERSONAL drive...",
+              file=sys.stderr)
+    else:
+        if not cfg:
+            print(f"[{ctx.name}] No documents.json config found.")
+            print(f"Create: .agent/workspaces/{ctx.name}/documents.json")
+            print(f'  {{"source": "google_drive", "folder_id": "YOUR_FOLDER_ID"}}')
+            return
+        print(f"[{ctx.name}] Syncing documents from Google Drive...", file=sys.stderr)
+        files, error = list_files(args.workspace)
 
-    files, error = list_files(args.workspace)
     if error:
         print(f"[ERROR] {error}")
         return
@@ -139,6 +156,8 @@ def cmd_sync(args):
 def cmd_search(args):
     """Search indexed documents by keyword/phrase."""
     cfg, ctx = _get_config(args.workspace)
+    if args.meetings:
+        cfg = _meetings_config(ctx)
     results = search_documents(args.query, config=cfg, limit=args.limit)
 
     if not results:
@@ -157,6 +176,8 @@ def cmd_search(args):
 def cmd_ask(args):
     """Answer a question using indexed documents + LLM."""
     cfg, ctx = _get_config(args.workspace)
+    if args.meetings:
+        cfg = _meetings_config(ctx)
 
     # 1. Search for relevant documents
     results = search_documents(args.query, config=cfg, limit=3)
@@ -264,14 +285,24 @@ def main():
     p.add_argument("--workspace", default=None)
     sub = p.add_subparsers(dest="cmd")
 
-    sub.add_parser("sync", help="Sync documents from Google Drive")
+    sp = sub.add_parser("sync", help="Sync documents from Google Drive")
+    sp.add_argument("--meetings", action="store_true",
+                    help="sync ONLY this workspace's meeting transcripts from "
+                         "the personal drive (Meeting Transcripts/<client>/) "
+                         "into a dedicated workspace-scoped index")
 
     sp = sub.add_parser("search", help="Search indexed documents")
     sp.add_argument("--query", required=True)
     sp.add_argument("--limit", type=int, default=10)
+    sp.add_argument("--meetings", action="store_true",
+                    help="scope to this workspace's meeting transcripts "
+                         "(Meeting Transcripts/<client>/ in the personal drive)")
 
     ap = sub.add_parser("ask", help="Ask a question about documents")
     ap.add_argument("--query", required=True)
+    ap.add_argument("--meetings", action="store_true",
+                    help="scope to this workspace's meeting transcripts "
+                         "(Meeting Transcripts/<client>/ in the personal drive)")
 
     sub.add_parser("list", help="List indexed documents")
 

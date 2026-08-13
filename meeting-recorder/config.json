@@ -1,0 +1,19 @@
+{
+  "_comment": "Local meeting note-taker config (Windows). recordings_dir is where recorder.py drops finished captures; watcher.py polls it and uploads via the v0 storage pipeline. To transcribe, set GEMINI_API_KEY (env var or .agent/skills/gemini-image/token.env) - without it the chain fails soft after whisper.cpp (not configured on Windows).",
+  "engine": "auto",
+  "language": "auto",
+  "gemini_model": "gemini-2.5-flash",
+  "auto_draft": true,
+  "draft_model": "",
+  "draft_backend": "agy",
+  "calendar_match": true,
+  "require_gpu": true,
+  "machines": {
+    "windows": {
+      "recordings_dir": "C:\\MeetingRecordings",
+      "ffmpeg": "ffmpeg",
+      "whispercpp_bin": "",
+      "whispercpp_model": ""
+    }
+  }
+}

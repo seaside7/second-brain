@@ -13,7 +13,10 @@ import shutil
 import sys
 
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
-REPO_ROOT = os.path.dirname(MODULE_DIR)
+# PSB_REPO_ROOT lets tests point the recorder stack at a scratch repo (registry,
+# Clients/, data/ all resolve there). Unset in production: repo root = parent of
+# meeting-recorder/. Prefer --import-style over modifying files below this line.
+REPO_ROOT = os.environ.get("PSB_REPO_ROOT") or os.path.dirname(MODULE_DIR)
 CONFIG_PATH = os.path.join(MODULE_DIR, "config.json")
 
 # Appended, not inserted at 0, so this never shadows a module the recorder
@@ -101,6 +104,30 @@ def slugify(title):
     slug = re.sub(r"[^A-Za-z0-9]+", "_", title).strip("_")
     return slug[:60] or "meeting"
 
+# Workspace scoping for the recorder stack (single source of truth - watcher,
+# v0-storage, v0-index and the smoke test all read these). `workspace` is
+# stamped into every registry entry so a personal recording can never surface
+# in the samudera scope (enforced in storage, indexing, and dashboard).
+# None = the legacy on-machine pipeline (client "Work", existing behavior).
+WORKSPACE_CLIENT = {
+    None: "Work",
+    "personal": "Personal",
+    "samudera": "Samudera",
+    "catalyze": "Work",
+}
+WORKSPACE_CALENDAR_PROFILE = {
+    None: "work",
+    "personal": "personal",
+    "samudera": "samudera",
+    "catalyze": "work",
+}
+
+def workspace_client(workspace):
+    return WORKSPACE_CLIENT.get(workspace, "Personal")
+
+def workspace_calendar_profile(workspace):
+    return WORKSPACE_CALENDAR_PROFILE.get(workspace, "personal")
+
 def fmt_ts(seconds):
     m, s = divmod(int(seconds), 60)
     h, m = divmod(m, 60)
@@ -126,3 +153,16 @@ def load_gemini_key():
             if line.startswith("GEMINI_API_KEY="):
                 return line.split("=", 1)[1].strip()
     sys.exit("ERROR: no GEMINI_API_KEY (env or .agent/skills/gemini-image/token.env)")
+
+def load_openai_key():
+    """OpenAI API key from the root .env, the same source openai_call.py uses."""
+    key = os.environ.get("OPENAI_API_KEY")
+    if key:
+        return key
+    env_path = os.path.join(REPO_ROOT, ".env")
+    if os.path.exists(env_path):
+        for line in open(env_path, encoding="utf-8"):
+            line = line.strip()
+            if line.startswith("OPENAI_API_KEY="):
+                return line.split("=", 1)[1].strip()
+    sys.exit("ERROR: no OPENAI_API_KEY (env or root .env)")
