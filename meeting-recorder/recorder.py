@@ -233,6 +233,10 @@ def main():
     ap.add_argument("--attendees", default="",
                     help="comma-separated names, used to resolve Speaker 1/2 labels "
                          "in the MOM draft")
+    ap.add_argument("--workspace", default=None,
+                    choices=["personal", "samudera", "catalyze"],
+                    help="route the recording to this workspace's client folder "
+                         "(default = Work)")
     args = ap.parse_args()
 
     cfg = load_config()
@@ -278,6 +282,19 @@ def main():
     finally:
         if os.path.exists(marker):
             os.remove(marker)
+
+    # Auto-process: watcher mixes -> transcribes (OpenAI) -> MOM -> Drive upload.
+    here = os.path.dirname(os.path.abspath(__file__))
+    if os.path.exists(base + ".json") and cfg.get("auto_process", True):
+        print("[recorder] auto-processing recording (transcribe -> MOM -> Drive)...")
+        wargv = [sys.executable, os.path.join(here, "watcher.py"), "--once"]
+        if args.workspace:
+            wargv += ["--workspace", args.workspace]
+        r = subprocess.run(wargv, capture_output=True, text=True, timeout=3600)
+        if r.stdout.strip():
+            print(r.stdout.strip())
+        if r.returncode != 0 and r.stderr.strip():
+            print(r.stderr.strip(), file=sys.stderr)
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,14 @@
+You are extracting raw facts from a meeting transcript for minutes.
+Return, as plain structured text: participants (from speaker labels/context), topics discussed with key points, decisions made with rationale, action items with owner and deadline if stated, notable quotes. Do NOT synthesize or prioritize; facts only. Keep the original language of quotes.
+
+=== TRANSCRIPT ===
+# Transcript: 2026-08-13_1423_Meeting_Title.wav
+
+- Engine: OpenAI `whisper-1` (~$0.000)
+- Audio duration: 00:00
+- Generated: 2026-08-13 14:24
+
+---
+
+**[00:00]** Halo, ya hari ini Sa'id ada task untuk meeting C-MAP nanti jam 3, lalu jam 4 ada janji untuk kirim summary meeting C-MAP jam 4 ke Pak Rando
+**[00:28]** Ya, I think that's all

@@ -1,0 +1,82 @@
+Write meeting minutes (MOM) in ENGLISH following EXACTLY this markdown template structure (replace placeholders, keep the section order and table formats). No em-dashes anywhere. Meeting: Meeting Title. Date: 2026-08-13, start 14:23 WIB.
+
+=== TEMPLATE ===
+# MOM: [Meeting Topic]
+
+| Field | Value |
+|:---|:---|
+| Date | [YYYY-MM-DD] |
+| Time | [HH:MM] WIB / [HH:MM] AST |
+| Duration | [e.g. 60 minutes] |
+| Participants | [Name (Role), Name (Role)] |
+| Facilitator | Your Name |
+| Subject | [One-line meeting subject] |
+
+---
+
+## Executive Summary
+[2–3 sentences: what was discussed, what was decided, what are the next steps]
+
+---
+
+## Discussion
+
+### [Topic 1]
+[Key points raised, context, and outcome of discussion]
+
+### [Topic 2]
+[Key points raised, context, and outcome of discussion]
+
+---
+
+## Decisions Made
+
+| # | Decision | Rationale |
+|:---|:---|:---|
+| 1 | [What was decided] | [Why this decision was made] |
+| 2 | [What was decided] | [Why] |
+
+---
+
+## Action Items
+
+| # | Task | Owner | Deadline | Priority |
+|:---|:---|:---|:---|:---|
+| 1 | [Task description] | [Name] | [YYYY-MM-DD] | High |
+| 2 | [Task description] | [Name] | [YYYY-MM-DD] | Medium |
+
+---
+
+## Next Meeting
+- **Date**: [YYYY-MM-DD or TBD]
+- **Agenda**: [Topics to carry forward]
+
+---
+
+## Revision History
+
+| Revision | Date | Summary |
+|:---|:---|:---|
+| v1.0 | [YYYY-MM-DD] | Initial MOM |
+
+
+=== EXTRACTED FACTS ===
+Participants:
+- Speaker tidak teridentifikasi
+- Sa'id
+- Pak Rando
+
+Topics discussed:
+- Sa'id memiliki tugas untuk meeting C-MAP pada pukul 15.00.
+- Ada janji untuk mengirim summary meeting C-MAP kepada Pak Rando pada pukul 16.00.
+
+Decisions made:
+- Tidak ada keputusan eksplisit yang disebutkan.
+
+Action items:
+- Sa'id: Menangani task untuk meeting C-MAP pada pukul 15.00. Deadline: pukul 15.00.
+- Pemilik tidak disebutkan: Mengirim summary meeting C-MAP kepada Pak Rando. Deadline: pukul 16.00.
+
+Notable quotes:
+- “Halo, ya hari ini Sa'id ada task untuk meeting C-MAP nanti jam 3, lalu jam 4 ada janji untuk kirim summary meeting C-MAP jam 4 ke Pak Rando”
+- “Ya, I think that's all”

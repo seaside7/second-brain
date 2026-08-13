@@ -21,8 +21,10 @@ import argparse
 import datetime
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 
 from common import (
@@ -215,9 +217,16 @@ def calendar_match(start_wib, cfg, profile="work"):
         print(f"[watcher] calendar match skipped: {e}", file=sys.stderr)
     return None
 
+def _read_registry():
+    """fathom_registry.json contents; {} when the file does not exist yet."""
+    try:
+        with open(REGISTRY_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
 def register_recording(audio_path, meta, matched, duration_sec, workspace=None):
-    with open(REGISTRY_PATH, encoding="utf-8") as f:
-        registry = json.load(f)
+    registry = _read_registry()
     rec_id = f"local-{int(time.time())}"
     start_utc = meta.get("start_utc")
     if start_utc:
@@ -253,8 +262,7 @@ def register_recording(audio_path, meta, matched, duration_sec, workspace=None):
 
 def update_registry_entry(rec_id, **fields):
     """Merge fields into one registry entry (atomic write)."""
-    with open(REGISTRY_PATH, encoding="utf-8") as f:
-        registry = json.load(f)
+    registry = _read_registry()
     if rec_id not in registry:
         return
     registry[rec_id].update(fields)
@@ -270,8 +278,7 @@ def find_related(matched, date_wib, exclude_id=None):
     if not matched:
         return []
     key = matched.strip().lower()
-    with open(REGISTRY_PATH, encoding="utf-8") as f:
-        registry = json.load(f)
+    registry = _read_registry()
     return [(rid, e) for rid, e in registry.items()
             if rid != exclude_id and e.get("date_wib") == date_wib
             and (e.get("matched_meeting") or "").strip().lower() == key]
@@ -325,10 +332,26 @@ def agy(task, prompt, workdir, model=None, backend=None):
               file=sys.stderr)
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=1200)
     if r.returncode == 3:
-        return None
+        return _openai_fallback(task, prompt)
     if r.returncode != 0:
         raise RuntimeError(f"agy-bridge {task} failed: {r.stderr[-300:]}")
     return _strip_narration(r.stdout.strip())
+
+def _openai_fallback(task, prompt):
+    """OpenAI path for MOM harvest/draft when agy-bridge is unavailable on
+    this machine. Uses the owner's OPENAI_API_KEY from root .env (via
+    openai_call, the dashboard's own backend). Returns None on failure."""
+    try:
+        import openai_call
+    except Exception:
+        return None
+    ok, text, meta = openai_call.call(prompt, tier='low', max_tokens=8192,
+                                      timeout=600)
+    if not ok:
+        print(f"[watcher] openai fallback failed: "
+              f"{meta.get('reason', '')}", file=sys.stderr)
+        return None
+    return _strip_narration(text.strip())
 
 def _strip_narration(text):
     """Drop agentic-CLI preamble ('I have created...') before the MOM body."""
@@ -337,6 +360,47 @@ def _strip_narration(text):
         idx = text.find("\n# ")
         idx = idx + 1 if idx != -1 else -1
     return text[idx:].strip() if idx > 0 else text
+
+# ---------- drive upload (audio + transcript + MOM) ----------
+
+def _mom_upload_copy(mom_path):
+    """Stage the MOM under its own name so Drive keys stay distinct from the
+    transcript (transcript -> <slug>.md, MOM -> MOM_<name>.md). Returns the
+    staged path; the caller cleans up afterwards."""
+    name = os.path.splitext(os.path.basename(mom_path))[0]
+    staged = os.path.join(tempfile.gettempdir(), f"{name}.md")
+    shutil.copy2(mom_path, staged)
+    return staged
+
+def _upload_artifacts(audio_path, transcript_md, mom_path, workspace):
+    """Push the audio, transcript, and MOM into the personal drive under
+    Meeting Transcripts/<client>/<YYYY>/<MM>/ via v0-upload.py (the single
+    upload entry point). Fail-soft: never raises."""
+    staged_mom = None
+    argv = [sys.executable, os.path.join(MODULE_DIR, "v0-upload.py"),
+            audio_path, "--cloud", "drive"]
+    if workspace:
+        argv += ["--workspace", workspace]
+    if transcript_md and os.path.exists(transcript_md):
+        argv += ["--extra", transcript_md]
+    if mom_path and os.path.exists(mom_path):
+        staged_mom = _mom_upload_copy(mom_path)
+        argv += ["--extra", staged_mom]
+    try:
+        r = subprocess.run(argv, capture_output=True, text=True, timeout=900)
+        if r.stdout.strip():
+            print(f"[watcher] {r.stdout.strip()}")
+        if r.returncode != 0:
+            print(f"[watcher] drive upload failed: "
+                  f"{(r.stderr or r.stdout or '')[-300:]}", file=sys.stderr)
+    except Exception as e:
+        print(f"[watcher] drive upload error: {e}", file=sys.stderr)
+    finally:
+        if staged_mom:
+            try:
+                os.remove(staged_mom)
+            except OSError:
+                pass
 
 def draft_mom(transcript_md, title, start_wib, matched, scratch, cfg=None,
               attendees=None):
@@ -466,15 +530,19 @@ def process(audio_path, cfg, state, workspace=None, output_dir=None):
         "ts": datetime.datetime.now(WIB).isoformat(timespec="seconds"),
     }
     save_state(state)
+
+    if cfg.get("auto_upload", True):
+        _upload_artifacts(audio_path, transcript_md, mom_path, workspace)
+
     heartbeat("ok", f"{name}: {status} ({rec_id})")
     activity(rec_id, f"local recording {name}: {status}")
 
-def scan_once(cfg, state):
+def scan_once(cfg, state, workspace=None):
     rec_dir = cfg["machine"].get("recordings_dir", "")
     ffmpeg = cfg["machine"].get("ffmpeg", "ffmpeg")
     for path in find_candidates(rec_dir, state, ffmpeg):
         try:
-            process(path, cfg, state)
+            process(path, cfg, state, workspace=workspace)
         except Exception as e:
             prev = state["processed"].get(path)
             attempts = (prev.get("attempts", 0) if isinstance(prev, dict) else 0) + 1
@@ -521,6 +589,9 @@ def main():
     ap.add_argument("--file", help="process one specific audio file, then exit")
     ap.add_argument("--status", action="store_true",
                     help="list failing/quarantined recordings, then exit")
+    ap.add_argument("--workspace", default=None,
+                    choices=["personal", "samudera", "catalyze"],
+                    help="workspace scope -> Clients/<client>/meetings")
     ap.add_argument("--interval", type=int, default=30)
     args = ap.parse_args()
 
@@ -533,15 +604,15 @@ def main():
     if args.file:
         path = os.path.abspath(args.file)
         state["processed"].pop(path, None)
-        process(path, cfg, state)
+        process(path, cfg, state, workspace=args.workspace)
         return
     if args.once:
-        scan_once(cfg, state)
+        scan_once(cfg, state, workspace=args.workspace)
         return
     print(f"[watcher] polling {cfg['machine'].get('recordings_dir')} "
           f"every {args.interval}s (Ctrl-C to stop)")
     while True:
-        scan_once(cfg, state)
+        scan_once(cfg, state, workspace=args.workspace)
         time.sleep(args.interval)
 
 if __name__ == "__main__":

@@ -29,13 +29,21 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR / '.agent' / 'scripts'))
 import ai_call  # noqa: E402  (needs BASE_DIR on sys.path first)
 
-# OpenAI is the configured chat backend (OPENAI_API_KEY in .env via openai_call).
-# Optional import on purpose: machines without python-dotenv must not take down
-# the whole dashboard just because the chat backend is missing.
+# OpenAI is a chat backend (OPENAI_API_KEY in .env via openai_call). Optional
+# import on purpose: machines without python-dotenv must not take down the whole
+# dashboard just because a chat backend is missing.
 try:
     import openai_call  # noqa: E402
 except Exception:
     openai_call = None
+
+# DeepSeek is the CHEAP backend (deepseek-chat) used first for routine chat
+# answers - reading and summarizing simple tasks and words. OpenAI/agy-bridge
+# are only fallbacks when DeepSeek fails.
+try:
+    import deepseek_call  # noqa: E402
+except Exception:
+    deepseek_call = None
 
 # Single source of truth for multi-workspace context (workspaces.json). Used by
 # /api/chat-suggestions and /api/chat so suggestions + answers stay scoped to the
@@ -4703,9 +4711,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def _handle_post_chat(self):
         """POST /api/chat {message, workspace} — answer a question in the workspace's
-        persona (role/mode + workspace.md head as grounding). OpenAI first
-        (OPENAI_API_KEY in .env, via openai_call), falling back to ai_call.run()
-        (agy-bridge) when OpenAI is not configured. The prompt NEVER includes data
+        persona (role/mode + workspace.md head as grounding). DeepSeek first
+        (deepseek-chat, the cheap backend for reading/summarizing simple tasks),
+        falling back to OpenAI (via openai_call) and then ai_call.run()
+        (agy-bridge) when DeepSeek is not configured. The prompt NEVER includes data
         from other workspaces; the workspace.md context and the model call are both
         scoped to the requested workspace.
         Returns {reply, model, backend, workspace}."""
@@ -4745,7 +4754,14 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
             ok, text, meta = False, '', {}
             backend = None
-            if openai_call is not None:
+            # DeepSeek first: cheapest backend, plenty for reading/summarizing
+            # simple tasks and words. OpenAI and agy-bridge are fallbacks only.
+            if deepseek_call is not None:
+                ok, text, meta = deepseek_call.call(
+                    system + '\n\nQuestion: ' + message, max_tokens=1024,
+                    temperature=0.3, timeout=120)
+                backend = 'deepseek'
+            if not ok and openai_call is not None:
                 ok, text, meta = openai_call.call(message, system=system, tier='medium',
                                                   max_tokens=1024, timeout=120)
                 backend = 'openai'

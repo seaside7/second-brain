@@ -166,7 +166,10 @@ def _gemini_upload_file(path, mime, key):
     raise EngineSkip(f"Gemini file stuck in state {info.get('state')}")
 
 def run_gemini(audio, cfg, lang):
-    key = load_gemini_key()
+    try:
+        key = load_gemini_key()
+    except SystemExit:
+        raise EngineSkip("no GEMINI_API_KEY configured")
     machine = cfg["machine"]
     ffmpeg = machine.get("ffmpeg", "ffmpeg")
     model = cfg.get("gemini_model", "gemini-2.5-flash")
@@ -237,15 +240,15 @@ def run_openai_whisper(audio, cfg, lang):
                     os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1"))
 
     with tempfile.TemporaryDirectory() as td:
-        ogg = os.path.join(td, "audio.ogg")
+        m4a = os.path.join(td, "audio.m4a")
         subprocess.run([ffmpeg, "-y", "-v", "quiet", "-i", audio, "-ac", "1",
-                        "-ar", "16000", "-c:a", "libopus", "-b:a", "24k", ogg],
+                        "-ar", "16000", "-c:a", "aac", "-b:a", "32k", m4a],
                        check=True, timeout=600)
         fields = {"model": model, "response_format": "verbose_json"}
         if lang != "auto":
             fields["language"] = lang
-        body, boundary = _multipart(fields, "file", os.path.basename(audio),
-                                    open(ogg, "rb").read(), "audio/ogg")
+        body, boundary = _multipart(fields, "file", "audio.m4a",
+                                    open(m4a, "rb").read(), "audio/mp4")
         req = urllib.request.Request(
             OPENAI_TRANSCRIBE_URL, data=body,
             headers={"Authorization": f"Bearer {key}",

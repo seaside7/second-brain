@@ -63,6 +63,19 @@ def _get_drive_service(ctx, token_file=None):
     if not os.path.exists(token_file):
         return None
 
+    # Use the token's OWN stored scopes when present: Google rejects a refresh
+    # whose requested scope differs from what the token was authorized for
+    # (invalid_scope: Bad Request). The personal drive token is authorized for
+    # `drive` (read/write, used by v0-upload); requesting drive.readonly here
+    # fails exactly like that. read-only is a default only when the token has
+    # no scopes field.
+    try:
+        _tok = json.loads(open(token_file, encoding="utf-8").read())
+    except Exception:
+        _tok = {}
+    if _tok.get("scopes"):
+        scopes = _tok["scopes"]
+
     creds = Credentials.from_authorized_user_file(token_file, scopes)
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:

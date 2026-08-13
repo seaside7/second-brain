@@ -114,6 +114,9 @@ def main():
                     help="workspace scope -> destination subfolder")
     ap.add_argument("--cloud", default="drive", choices=["drive", "dry-run"],
                     help="cloud backend (default drive = real personal-drive upload)")
+    ap.add_argument("--extra", action="append", default=[],
+                    metavar="PATH", help="additional file (transcript .md/.txt, "
+                    "MOM .md) uploaded next to the audio under the same slug")
     args = ap.parse_args()
 
     rec, src_path = build_recording(args.target, args.workspace)
@@ -129,6 +132,13 @@ def main():
     print(f"  local store        : {result['local_rel']}")
     print(f"  cloud status       : {result['cloud_status']}")
     print(f"  cloud key          : {result['cloud_path']}")
+    for extra in args.extra:
+        if not os.path.exists(extra):
+            print(f"  extra SKIP (missing): {extra}")
+            continue
+        name = os.path.splitext(os.path.basename(extra))[0]
+        key, status = cloud.upload_recording(extra, rec, name=name)
+        print(f"  extra {status}: {key}")
     return 0
 
 

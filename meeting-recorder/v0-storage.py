@@ -85,12 +85,17 @@ def relative_storage_path(rec, ext: str) -> str:
     return os.path.join("recordings", rec.date_wib, f"{rec.storage_slug()}.{ext}")
 
 
-def cloud_storage_key(rec, ext: str) -> str:
+def cloud_storage_key(rec, ext: str, name: str | None = None) -> str:
     """Cloud key: Meeting Transcripts/<client>/<YYYY>/<MM>/<slug>.<ext>. The
     workspace (-> client) is the top namespace below the meeting root, so a
-    samudera recording can never resolve to a personal key."""
+    samudera recording can never resolve to a personal key.
+
+    `name` overrides the slug (used for sidecar artifacts like transcript and
+    MOM that must keep their own filename so they never collide with the
+    audio key)."""
     y, m = _ym(rec)
-    return os.path.join(MEETING_ROOT, rec.client, y, m, f"{rec.storage_slug()}.{ext}")
+    return os.path.join(MEETING_ROOT, rec.client, y, m,
+                        f"{(name or rec.storage_slug())}.{ext}")
 
 
 class LocalStore:
@@ -111,7 +116,7 @@ class LocalStore:
 class CloudStore:
     """Interface for pushing recordings + index to cloud storage."""
 
-    def upload_recording(self, src_path: str, rec) -> tuple[str, str]:
+    def upload_recording(self, src_path: str, rec, name: str | None = None) -> tuple[str, str]:
         raise NotImplementedError
 
     def push_index(self, index_payload: dict, workspace: str | None) -> str:
@@ -121,8 +126,8 @@ class CloudStore:
 class DryRunCloudStore(CloudStore):
     """Default backend: fail-soft. Logs the intended key, uploads nothing."""
 
-    def upload_recording(self, src_path: str, rec) -> tuple[str, str]:
-        key = cloud_storage_key(rec, _ext(src_path))
+    def upload_recording(self, src_path: str, rec, name: str | None = None) -> tuple[str, str]:
+        key = cloud_storage_key(rec, _ext(src_path), name=name)
         print(f"[cloud:dry-run] upload -> {key}")
         return key, "dry-run"
 
@@ -194,14 +199,15 @@ class GoogleDriveCloudStore(CloudStore):
             body=body, media_body=MediaFileUpload(src_path, mimetype=mime),
             fields="id,webViewLink").execute()["id"]
 
-    def upload_recording(self, src_path: str, rec) -> tuple[str, str]:
-        key = cloud_storage_key(rec, _ext(src_path))
+    def upload_recording(self, src_path: str, rec, name: str | None = None) -> tuple[str, str]:
+        key = cloud_storage_key(rec, _ext(src_path), name=name)
+        file_name = f"{name}.{_ext(src_path)}" if name else os.path.basename(src_path)
         try:
             service, err = self._service()
             if err:
                 return key, f"failed: {err}"
             folder_id = self._target_folder(service, rec)
-            self._upload(service, folder_id, os.path.basename(src_path), src_path)
+            self._upload(service, folder_id, file_name, src_path)
             print(f"[cloud:drive] uploaded -> {key}")
             return key, "uploaded"
         except Exception as e:
