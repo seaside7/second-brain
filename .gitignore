@@ -40,7 +40,22 @@ Clients/*/meetings/*.md
 Clients/*/strategy/*.md
 Clients/*/Research/*.md
 Clients/*/*/*.md
+Clients/*/recordings/
 journal/todo_*.md
+
+# Runtime data, logs & machine-local state (never commit)
+dashboard-data/
+journal/activity_log.jsonl
+journal/state/
+journal/fathom_registry.json
+journal/trading/
+journal/news_briefings/
+meeting-recorder/config.json
+meeting-recorder/state.json
+meeting-recorder/scratch/
+
+# Agent runtime logs
+.agent/**/*.log
 
 # Editor
 .vscode/
