@@ -1837,6 +1837,58 @@ def _recent_meeting_transcripts(ws_name, days=3):
     return out
 
 
+# Guard so concurrent /api/chat requests never run two meeting syncs at once.
+_MEETINGS_SYNC_LOCK = threading.Lock()
+
+
+def _ensure_meetings_synced(ws_name, max_age_min=30):
+    """Make sure the workspace's meeting index is fresh before the chat answers.
+
+    If journal/state/<ws>_meetings_index.json is missing or last synced more
+    than max_age_min ago, kick `doc_engine.py sync --meetings` so MOMs and
+    transcripts uploaded minutes ago show up without waiting for the hourly
+    cron. Fail-soft: never raises, never blocks beyond the timeout, and skips
+    entirely if another request is already syncing."""
+    from datetime import datetime, timezone, timedelta
+    idx_path = BASE_DIR / 'journal' / 'state' / f'{ws_name}_meetings_index.json'
+
+    stale = True
+    if idx_path.exists():
+        try:
+            idx = json.loads(idx_path.read_text(encoding='utf-8'))
+            last = idx.get('last_sync')
+            if last:
+                modified = datetime.fromisoformat(str(last).replace('Z', '+00:00'))
+                if modified.tzinfo is None:
+                    modified = modified.replace(tzinfo=timezone.utc)
+                stale = (datetime.now(timezone.utc) - modified) > \
+                    timedelta(minutes=max_age_min)
+            else:
+                stale = (time.time() - idx_path.stat().st_mtime) > \
+                    timedelta(minutes=max_age_min).total_seconds()
+        except Exception:
+            stale = True
+    if not stale:
+        return
+
+    if not _MEETINGS_SYNC_LOCK.acquire(blocking=False):
+        return  # another request already syncing; don't stack them
+    try:
+        cmd = [sys.executable,
+               str(BASE_DIR / '.agent' / 'skills' / 'document-intelligence' /
+                   'scripts' / 'doc_engine.py'),
+               '--workspace', ws_name, 'sync', '--meetings']
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+        print(f'[chat] meeting sync for {ws_name}: '
+              f'{"ok" if r.returncode == 0 else "failed"}', file=sys.stderr)
+        if r.returncode != 0 and r.stderr:
+            print(r.stderr.strip()[-400:], file=sys.stderr)
+    except Exception as e:
+        print(f'[chat] meeting sync error for {ws_name}: {e}', file=sys.stderr)
+    finally:
+        _MEETINGS_SYNC_LOCK.release()
+
+
 def _chat_live_context(ws_name):
     """Compact, workspace-scoped digest of TODAY's live dashboard data, injected
     into the chat answer's system prompt so the model answers from real data
@@ -4737,6 +4789,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 ctx.style if ctx.style else '',
             ]))
             ctx_head = _workspace_md_head(ctx.name)
+            _ensure_meetings_synced(ctx.name)
             live_ctx = _chat_live_context(ctx.name)
             system = (
                 f'You are the Second Brain assistant for the "{ctx.display_name}" '
