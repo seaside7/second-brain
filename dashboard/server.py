@@ -109,6 +109,14 @@ SAMUDERA_COMMITMENTS_PATH = SAMUDERA_STATE_DIR / 'commitments.json'
 SAMUDERA_WAITING_ON_PATH = SAMUDERA_STATE_DIR / 'waiting_on.json'
 SAMUDERA_INBOX_PATH = SAMUDERA_STATE_DIR / 'inbox.json'
 
+# ── Approval queue (Phase 1) ──────────────────────────────────────────────
+# Shared queue file + append-only audit log (single-writer via the skill CLI).
+APPROVAL_QUEUE_PATH = BASE_DIR / 'journal' / 'state' / 'approval_queue.json'
+ACTION_AUDIT_PATH = BASE_DIR / 'journal' / 'state' / 'action_audit.jsonl'
+APPROVAL_QUEUE_CLI = '.agent/skills/approval-queue/scripts/approval_queue.py'
+EXECUTIVE_PM_CLI = '.agent/skills/executive-pm/scripts/executive_pm.py'
+EXECUTIVE_ORCHESTRATOR_CLI = '.agent/skills/executive-orchestrator/scripts/executive_orchestrator.py'
+
 # Endpoints the /samudera dashboard is allowed to call. Anything else under
 # /api/* while in samudera mode is denied by default (404 + scope:'samudera')
 # so combined/personal/Catalyze data can never cross into the office-safe view.
@@ -116,7 +124,17 @@ SAMUDERA_ALLOWED_GET = {
     '/api/calendar', '/api/news', '/api/tracker', '/api/overview',
     '/api/decisions', '/api/commitments', '/api/waiting-on', '/api/followups',
     '/api/inbox', '/api/ledger-find', '/api/chat-suggestions',
+    '/api/approval-queue',
+    # Agents / AI Architecture panel (read-only views: map + skill detail)
+    '/api/agents-map', '/api/agents-skill',
 }
+
+# POST routes the /samudera dashboard may call. Everything else in samudera
+# mode is denied by default. /api/chat is the read-mostly assistant; the
+# approval queue's decide endpoint only flips a flag + appends an audit line
+# (no external effect) and is workspace-scoped.
+SAMUDERA_ALLOWED_POST = {'/api/chat', '/api/approval-decision',
+                         '/api/agents-skill-save'}
 
 # ── Chatbox: permanent (static) suggestion categories ──────────────────────
 # The same five categories for every workspace; the workspace-scoped context
@@ -2015,6 +2033,89 @@ def _chat_live_context(ws_name):
 
 
 # ═══════════════════════════════════════════
+# SLASH COMMANDS (deterministic, no LLM)
+# ═══════════════════════════════════════════
+
+def _run_executive_digest_cli(ws_name, subcmd='digest'):
+    """Run the executive-pm skill CLI for a workspace and return (ok, text)."""
+    try:
+        r = subprocess.run(
+            [sys.executable, EXECUTIVE_PM_CLI, subcmd, '--workspace', ws_name],
+            cwd=str(BASE_DIR), capture_output=True, text=True, timeout=30)
+        out = (r.stdout or '').strip() or (r.stderr or '').strip()
+        return r.returncode == 0, out
+    except Exception as e:
+        return False, f'executive-pm unavailable: {e}'
+
+
+def _run_executive_orchestrator(ws_name, prompt):
+    """Run the executive-orchestrator skill CLI (classify -> gather -> synthesize).
+    Returns (ok, text). May take up to ~3.5 min for complex synthesis."""
+    try:
+        r = subprocess.run(
+            [sys.executable, EXECUTIVE_ORCHESTRATOR_CLI, 'run',
+             '--workspace', ws_name, '--prompt', prompt],
+            cwd=str(BASE_DIR), capture_output=True, text=True, timeout=240)
+        out = (r.stdout or '').strip() or (r.stderr or '').strip()
+        return r.returncode == 0, out
+    except Exception as e:
+        return False, f'executive-orchestrator unavailable: {e}'
+
+
+def _run_slash_command(message, ctx):
+    """Handle a leading-'/' command for the chat. Returns a reply string.
+    Deterministic + instant (no AI call): digests read the workspace ledgers
+    directly. Workspace-scoped: samudera reads only samudera ledgers."""
+    cmd = message.strip().split(' ')[0].lower()
+    args = message.strip().split(' ')[1:]
+    ws = ctx.name
+
+    if cmd in ('/focus', '/digest'):
+        ok, out = _run_executive_digest_cli(ws, 'digest')
+        return out if ok else f'Could not build the digest: {out}'
+    if cmd == '/risk':
+        ok, out = _run_executive_digest_cli(ws, 'risk')
+        return out if ok else f'Could not build the risk snapshot: {out}'
+    if cmd == '/brief':
+        ok, digest = _run_executive_digest_cli(ws, 'digest')
+        live = _chat_live_context(ws)
+        head = ('# Daily Brief - %s\n\n## Live context\n%s\n\n## Focus digest\n%s'
+                % (ctx.display_name, live, digest if ok else f'_(digest failed: {digest})_'))
+        return head
+    if cmd == '/approvals':
+        try:
+            doc = json.loads(APPROVAL_QUEUE_PATH.read_text(encoding='utf-8'))
+            items = [i for i in (doc.get('items') or {}).values() if i.get('workspace') == ws]
+        except Exception:
+            items = []
+        if not items:
+            return f'No approval-queue items for workspace "{ws}".'
+        lines = ['# Approval Queue - %s' % ws]
+        for i in sorted(items, key=lambda x: x.get('proposed_wib', '')):
+            lines.append(f'- {i["id"]} [{i["status"]}] {i.get("action")} -> '
+                         f'{i.get("target")}: {i.get("detail", "")[:120]}')
+        lines.append('')
+        lines.append('Use the dashboard approval panel or /help to act on items.')
+        return '\n'.join(lines)
+    if cmd == '/orchestrate':
+        prompt = ' '.join(args).strip()
+        if not prompt:
+            return 'Usage: /orchestrate <your executive request>'
+        ok, out = _run_executive_orchestrator(ws, prompt)
+        return out if ok else f'Orchestrator failed: {out}'
+    if cmd in ('/help', '/commands'):
+        return ('Available commands:\n'
+                '- /focus - executive digest (overdue, due-today, blocked, waiting, decisions, commitments, inbox)\n'
+                '- /risk - risk snapshot\n'
+                '- /brief - daily brief: live context + focus digest\n'
+                '- /approvals - pending approval-queue items for this workspace\n'
+                '- /orchestrate <request> - executive orchestrator: classifies intent, gathers the relevant specialists, synthesizes a decision-oriented answer\n'
+                '- /help - this list\n\n'
+                'Anything else is answered by the assistant.')
+    return ('Unknown command %r. Try /help for the available commands.' % cmd)
+
+
+# ═══════════════════════════════════════════
 # HTTP HANDLER
 # ═══════════════════════════════════════════
 
@@ -2216,6 +2317,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_get_harness()
         elif self.path == '/api/command-queue':
             self._handle_get_command_queue()
+        elif self.path.split('?')[0] == '/api/approval-queue':
+            self._handle_get_approval_queue()
+        elif self.path.split('?')[0] == '/api/agents-map':
+            self._handle_get_agents_map()
+        elif self.path.split('?')[0] == '/api/agents-skill':
+            self._handle_get_agents_skill()
         elif self.path == '/api/harness-map':
             self._handle_get_harness_map()
         elif self.path == '/api/decisions':
@@ -2303,10 +2410,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if not self._check_client_ip():
             return
         self.ws = self._request_ws()
-        if self.ws == 'samudera' and self.path.split('?')[0] != '/api/chat':
-            # Samudera mode is read-only except the (workspace-scoped) chat.
-            # The ledger/inbox/system writers target shared files and would
-            # leak Samudera input into the combined dashboard — deny them.
+        if self.ws == 'samudera' and self.path.split('?')[0] not in SAMUDERA_ALLOWED_POST:
+            # Samudera mode is read-only except the (workspace-scoped) chat and
+            # the approval queue's decide endpoint (flag flip + audit only; no
+            # external effect). The ledger/inbox/system writers target shared
+            # files and would leak Samudera input into the combined dashboard -
+            # deny them.
             self._samudera_denied(self.path)
             return
         if self.path == '/api/toggle':
@@ -2323,6 +2432,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_post_ai_task()
         elif self.path == '/api/chat':
             self._handle_post_chat()
+        elif self.path == '/api/approval-decision':
+            self._handle_post_approval_decision()
+        elif self.path == '/api/agents-skill-save':
+            self._handle_post_agents_skill_save()
+        elif self.path == '/api/approval-execute':
+            self._handle_post_approval_execute()
         elif self.path == '/api/commitment-close':
             self._handle_post_commitment_close()
         elif self.path == '/api/waiting-close':
@@ -4783,6 +4898,17 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 self._send_json(400, json.dumps({'error': f'unknown workspace {ws_name!r}'}))
                 return
 
+            # ── slash commands: deterministic digests, no LLM call ──
+            if message.startswith('/'):
+                reply = _run_slash_command(message, ctx)
+                self._send_json(200, json.dumps({
+                    'reply': reply,
+                    'model': None,
+                    'backend': 'local',
+                    'workspace': ctx.name,
+                }, ensure_ascii=False))
+                return
+
             persona = ' '.join(filter(None, [
                 f'Role: {ctx.role}' if ctx.role else '',
                 f'Mode: {ctx.mode}' if ctx.mode else '',
@@ -4846,6 +4972,515 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             self._send_json(500, json.dumps({'error': 'chat failed', 'details': str(e)}))
 
+
+    # ── Agents / AI Architecture (panel) ──────────────────────────────
+    # Conceptual executive-agent map for the /samudera dashboard. Each node's
+    # `skill` points at the REAL implemented skill under .agent/skills/<skill>/
+    # (never invented); None = planned (concept only, no fake files). Node
+    # status is derived at request time from the registry + script files, not
+    # hardcoded here. The prompt editor writes the skill's OWN .md instruction
+    # files back to disk — the files stay the single source of truth.
+
+    # The /samudera page is the panel's primary home; the combined dashboard
+    # hides the Agents tab (app.js SAMUDERA_ONLY_TABS), so these endpoints are
+    # effectively Samudera-only in practice even though dispatch stays open.
+    AGENTS_JOIN_DATE = '2026-08-18'
+
+    # per-node metadata. `level` orders the flow bands in the UI (0 = root).
+    AGENTS_ARCHITECTURE = [
+        {'id': 'orchestrator', 'name': 'Orchestrator', 'emoji': '🎯', 'level': 0,
+         'skill': 'executive-orchestrator',
+         'purpose': 'Central router for every executive request: classify the intent, '
+                    'pick the minimum relevant specialists, gather their scoped answers, '
+                    'and synthesize a decision-oriented response.',
+         'responsibilities': [
+             'Classify intent into 8 categories (status, approvals, briefing, documents, '
+             'research, knowledge, data, synthesize)',
+             'Select the minimum specialist set for each request',
+             'Gather workspace-scoped answers from the chosen specialists',
+             'Synthesize the final answer, escalating model tier only for complex work'],
+         'capabilities': [
+             'Deterministic categories never call an LLM',
+             'Escalates synthesis to OpenAI high tier when complexity >= 7 or importance >= 8',
+             'Delegates data requests to the Data/BI agent and research to Transformation Strategy'],
+         'model_routing': 'Intent classification: DeepSeek (deepseek-chat, 120 max tokens) with '
+                          'heuristic fallback. Synthesis: OpenAI tier medium, escalating to tier high '
+                          'for complex/important work (2600-token budget, retries at 3400).',
+         'planned_note': None},
+        {'id': 'executive_pm', 'name': 'Executive PM', 'emoji': '📋', 'level': 1,
+         'skill': 'executive-pm',
+         'purpose': 'The day-to-day operations specialist: a single workspace-scoped view of '
+                    'what is due, overdue, waiting, decided, blocked, and pending in the inbox.',
+         'responsibilities': [
+             'Tasks - open, overdue, due today',
+             'Overdue / due-today visibility',
+             'Commitments (meeting action items)',
+             'Waiting-on items and escalations',
+             'Decisions due and open',
+             'Inbox scan',
+             'Blocked / risk items'],
+         'capabilities': [
+             'Workspace-scoped: reads only the active workspace journal/state',
+             'Digest + focused views, no fabrication',
+             'Read-only - this agent never issues writes'],
+         'model_routing': 'Deterministic aggregation from workspace state files; no LLM required.',
+         'planned_note': None},
+        {'id': 'transformation_strategy', 'name': 'Transformation Strategy', 'emoji': '🗺️', 'level': 1,
+         'skill': 'transformation-strategy',
+         'purpose': 'The strategic framing layer of the Digital Transformation Head role: '
+                    'group DT roadmap, alignment to holding-company objectives, target '
+                    'operating model, transformation priorities, maturity assessment, '
+                    'opportunity identification, sequencing, and the executive recommendation. '
+                    'Evidence gathering is delegated to Transformation Research; strategy '
+                    'frames, it never fabricates.',
+         'responsibilities': [
+             'Group Digital Transformation Roadmap',
+             'Alignment with holding-company strategy and long-term objectives',
+             'Digital principles and target operating model',
+             'Transformation priorities across subsidiaries',
+             'Current-state assessment',
+             'Digital maturity assessment',
+             'Business / process pain-point identification',
+             'Transformation opportunity identification',
+             'Technology and solution evaluation',
+             'Transformation roadmap and sequencing',
+             'Dependencies and implementation constraints',
+             'Change-management / adoption implications',
+             'KPI and business-objective alignment',
+             'Operational excellence and financial-transparency impact',
+             'Governance, audit, risk, security and regulatory implications',
+             'Executive recommendation and decision framing'],
+         'capabilities': [
+             'Delegates evidence gathering to Transformation Research (reused, not duplicated)',
+             'Delegates domain work via the matrix (PM, Process Excellence, Data/BI, Integration, Governance, Business Case, Risk, Advisor, Communication)',
+             'Tags claims: facts / internal evidence / external research / inference / recommendation / assumptions / missing info',
+             'States exactly what internal info is missing and what data/person/team should provide it',
+             'Asks clarifying questions on ambiguous requests instead of inventing assumptions',
+             'Never fabricates - no Samudera corporate data assumed before join (2026-08-18)'],
+         'model_routing': 'Framework, delegation and evidence are deterministic. Strategy '
+                          'synthesis: OpenAI tier medium, escalating to tier high when '
+                          'complexity >= 7.',
+         'planned_note': None},
+        {'id': 'research', 'name': 'Transformation Research', 'emoji': '🔎', 'level': 1,
+         'skill': 'transformation-research',
+         'purpose': 'The evidence engine behind strategy work: gathers facts only from '
+                    'sources genuinely available today - news briefings, the Samudera '
+                    'meeting archive, and the knowledge store - with explicit source and '
+                    'gap reporting.',
+         'responsibilities': [
+             'Scan available sources before answering',
+             'Build research briefs that cite sources and flag gaps',
+             'Synthesize findings, labeling public knowledge as unverified'],
+         'capabilities': [
+             'Never fabricates data',
+             'Flags missing access (web research not configured; ERP/BI are post-join) instead of guessing'],
+         'model_routing': 'Source scan is deterministic. Synthesis: OpenAI tier medium, escalating '
+                          'to tier high when complexity >= 7.',
+         'planned_note': None},
+        {'id': 'process_excellence', 'name': 'Process Excellence', 'emoji': '🔄', 'level': 1,
+         'skill': None,
+         'purpose': 'Process mapping and operating-model improvement: current-state flows, '
+                    'waste identification, and operating-model KPIs.',
+         'responsibilities': [
+             'Map current-state processes',
+             'Identify waste and improvement opportunities',
+             'Track operating-model KPIs'],
+         'capabilities': [],
+         'model_routing': '',
+         'planned_note': 'Concept only - no skill implemented yet.'},
+        {'id': 'data_bi', 'name': 'Data / BI', 'emoji': '📊', 'level': 1,
+         'skill': 'data-agent',
+         'purpose': 'Read-only Data/BI specialist: reports exactly what data is usable today '
+                    'and answers queries only from real files/config sources.',
+         'responsibilities': [
+             'Report data availability per domain',
+             'Answer queries strictly from real data files',
+             'Say "data unavailable" gracefully instead of guessing'],
+         'capabilities': [
+             'Never fabricates data',
+             'Backed by the shared availability registry + the workspace data drop folder',
+             'Read-only'],
+         'model_routing': 'Deterministic availability checks and queries; no LLM required.',
+         'planned_note': None},
+        {'id': 'enterprise_integration', 'name': 'Enterprise Integration', 'emoji': '🔗', 'level': 2,
+         'skill': None,
+         'purpose': 'Integration architecture for ERP/BI/comms systems; wiring Samudera '
+                    'corporate systems post-join.',
+         'responsibilities': [
+             'Map systems and data flows',
+             'Design integration contracts and APIs',
+             'Sequence post-join integrations'],
+         'capabilities': [],
+         'model_routing': '',
+         'planned_note': 'Concept only - no skill implemented yet. Post-join (>= 2026-08-18).'},
+        {'id': 'governance_standards', 'name': 'Governance & Standards', 'emoji': '🏛️', 'level': 2,
+         'skill': 'approval-queue',
+         'purpose': 'Human-approval gate for every external action, with an append-only audit trail.',
+         'responsibilities': [
+             'Queue proposed external actions (send, doc, commit)',
+             'Approve/reject with one audit line (append-only action_audit.jsonl)',
+             'Hold execution until explicitly enabled'],
+         'capabilities': [
+             'Workspace-tagged items',
+             'A decision alone has no external effect',
+             'Execution stays disabled until credentials are provisioned'],
+         'model_routing': 'No LLM - deterministic queue CLI.',
+         'planned_note': None},
+        {'id': 'business_case', 'name': 'Business Case', 'emoji': '💰', 'level': 2,
+         'skill': None,
+         'purpose': 'Business-case modeling: ROI, cost/benefit and financial evaluation of '
+                    'transformation initiatives.',
+         'responsibilities': [
+             'Build cost/benefit models',
+             'Compute ROI and payback scenarios',
+             'Sensitize key assumptions'],
+         'capabilities': [],
+         'model_routing': '',
+         'planned_note': 'Concept only - no skill implemented yet.'},
+        {'id': 'risk_audit_security', 'name': 'Risk / Audit / Security', 'emoji': '🛡️', 'level': 3,
+         'skill': None,
+         'purpose': 'Risk register, control mapping, audit evidence, and security review.',
+         'responsibilities': [
+             'Track a transformation risk register',
+             'Map controls to processes',
+             'Review security posture and audit readiness'],
+         'capabilities': [],
+         'model_routing': '',
+         'planned_note': 'Concept only - no skill implemented yet.'},
+        {'id': 'executive_advisor', 'name': 'Executive Advisor', 'emoji': '👔', 'level': 4,
+         'skill': None,
+         'purpose': 'Senior advisor layer: judgment calls, tradeoffs, and meeting-critical coaching.',
+         'responsibilities': [
+             'Frame decisions and tradeoffs',
+             'Play devil\u2019s advocate on proposals',
+             'Prep for high-stakes conversations'],
+         'capabilities': [],
+         'model_routing': '',
+         'planned_note': 'Concept only - no skill implemented yet.'},
+        {'id': 'communication', 'name': 'Communication', 'emoji': '📝', 'level': 5,
+         'skill': None,
+         'purpose': 'Internal/external communication drafts: town halls, executive updates, '
+                    'and stakeholder messages.',
+         'responsibilities': [
+             'Draft exec updates and town-hall notes',
+             'Tone-match messages to audience',
+             'Stage drafts through the approval queue'],
+         'capabilities': [],
+         'model_routing': '',
+         'planned_note': 'Concept only - no skill implemented yet.'},
+    ]
+    AGENTS_NODES_BY_ID = {n['id']: n for n in AGENTS_ARCHITECTURE}
+    # skills the prompt editor may write to (nodes' own skills only - never
+    # arbitrary files, and nothing outside .agent/skills/<skill>/*.md)
+    AGENTS_EDITABLE_SKILLS = {n['skill'] for n in AGENTS_ARCHITECTURE if n['skill']}
+
+    def _agents_skill_status(self, skill):
+        """active | unavailable | planned - derived live, never hardcoded.
+        active: registered in orchestrator SKILL_REGISTRY AND its script file
+        exists. unavailable: a skill dir exists but is not registered/usable.
+        planned: concept with no skill at all."""
+        if not skill:
+            return 'planned'
+        try:
+            from orchestrator import SKILL_REGISTRY
+            if skill in SKILL_REGISTRY:
+                script = BASE_DIR / '.agent' / SKILL_REGISTRY[skill]['script']
+                if script.is_file():
+                    return 'active'
+                return 'unavailable'
+        except Exception:
+            pass
+        if (BASE_DIR / '.agent' / 'skills' / skill).is_dir():
+            return 'unavailable'
+        return 'planned'
+
+    def _agents_skill_dir(self, skill):
+        """Validated .agent/skills/<skill> dir for an architecture skill, or None."""
+        if skill not in self.AGENTS_EDITABLE_SKILLS:
+            return None
+        d = (BASE_DIR / '.agent' / 'skills' / skill).resolve()
+        if d.parent != (BASE_DIR / '.agent' / 'skills').resolve() or not d.is_dir():
+            return None
+        return d
+
+    def _agents_skill_md(self, skill, filename):
+        """Resolve a direct-child .md file inside the skill dir, or None.
+        Only <skill>/<file>.md - no subdirs, no other extensions, no traversal,
+        no dotfiles. The file must already exist (the editor edits real files;
+        it never creates new ones)."""
+        d = self._agents_skill_dir(skill)
+        if d is None:
+            return None
+        name = (filename or 'SKILL.md').strip()
+        if (not name.endswith('.md') or name.startswith('.')
+                or '/' in name or '\\' in name):
+            return None
+        p = (d / name).resolve()
+        if p.parent != d or not p.is_file():
+            return None
+        return p
+
+    def _agents_skill_files(self, skill):
+        """Direct-child .md instruction files of a skill (name/bytes/mtime)."""
+        d = self._agents_skill_dir(skill)
+        if d is None:
+            return []
+        out = []
+        for p in sorted(d.glob('*.md')):
+            if p.name.startswith('.'):
+                continue
+            st = p.stat()
+            out.append({
+                'name': p.name,
+                'bytes': st.st_size,
+                'mtime_wib': datetime.fromtimestamp(
+                    st.st_mtime, tz=timezone(timedelta(hours=7))).isoformat(),
+            })
+        return out
+
+    def _agents_credentials_for(self, skill):
+        """Credentials that list this skill in used_by (credentials_status.json).
+        Reports status + scope only - never values, never .env contents."""
+        out = []
+        try:
+            doc = json.loads((SAMUDERA_DIR / 'credentials_status.json')
+                             .read_text(encoding='utf-8'))
+            for name, info in (doc.get('status') or {}).items():
+                if skill in (info.get('used_by') or []):
+                    out.append({
+                        'name': name,
+                        'status': info.get('status'),
+                        'platform': info.get('platform'),
+                        'min_scope': info.get('min_scope'),
+                        'required': bool(info.get('required')),
+                        'read_only': bool(info.get('read_only')),
+                    })
+        except Exception:
+            pass
+        return out
+
+    def _agents_node_payload(self, node):
+        """Light map card payload for one node (no markdown - the detail
+        endpoint loads that on demand)."""
+        status = self._agents_skill_status(node['skill'])
+        return {
+            'id': node['id'], 'name': node['name'], 'emoji': node['emoji'],
+            'level': node['level'], 'skill': node['skill'], 'status': status,
+            'purpose': node['purpose'], 'planned_note': node['planned_note'],
+        }
+
+    def _handle_get_agents_map(self):
+        """GET /api/agents-map - the full architecture map. Light per-node
+        payloads (status derived live) + the join date, nothing else. Read-only."""
+        try:
+            now = datetime.now(timezone(timedelta(hours=7))).isoformat()
+            nodes = [self._agents_node_payload(n) for n in self.AGENTS_ARCHITECTURE]
+            self._send_json(200, json.dumps({
+                'scope': self.ws or 'combined',
+                'generated_wib': now,
+                'join_date': self.AGENTS_JOIN_DATE,
+                'nodes': nodes,
+            }, ensure_ascii=False, indent=2))
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': 'agents-map failed',
+                                             'details': str(e)}))
+
+    def _handle_get_agents_skill(self):
+        """GET /api/agents-skill?node=<id>&file=<name> - full detail for one
+        node: metadata + (if implemented) registry info, required credentials,
+        its .md instruction files, and the content of the requested file
+        (SKILL.md by default). Never returns credentials values or .env."""
+        try:
+            qs = parse_qs(urlsplit(self.path).query)
+            node_id = (qs.get('node', [''])[0] or '').strip()
+            file_explicit = bool(qs.get('file'))
+            file_name = (qs.get('file', [''])[0] or '').strip() or 'SKILL.md'
+            node = self.AGENTS_NODES_BY_ID.get(node_id)
+            if not node:
+                self._send_json(404, json.dumps({'error': f'unknown node: {node_id}'}))
+                return
+            status = self._agents_skill_status(node['skill'])
+            skill_info = None
+            files = []
+            markdown = None
+            markdown_path = None
+            if node['skill']:
+                try:
+                    from orchestrator import SKILL_REGISTRY
+                    reg = SKILL_REGISTRY.get(node['skill'])
+                    script = (BASE_DIR / '.agent' / reg['script']) if reg else None
+                    skill_info = {
+                        'name': node['skill'],
+                        'registered': node['skill'] in SKILL_REGISTRY,
+                        'category': (reg or {}).get('category'),
+                        'description': (reg or {}).get('description'),
+                        'available': bool(script and script.is_file()),
+                        'path': str(script) if script else None,
+                    }
+                except Exception:
+                    skill_info = {'name': node['skill'], 'registered': False,
+                                  'available': False}
+                files = self._agents_skill_files(node['skill'])
+                md = self._agents_skill_md(node['skill'], file_name)
+                if md is not None:
+                    try:
+                        markdown = md.read_text(encoding='utf-8')
+                        markdown_path = str(md)
+                    except Exception:
+                        markdown = None
+                elif file_explicit:
+                    # caller named a file that isn't an existing .md in the
+                    # skill dir - reject rather than silently serve a fallback
+                    self._send_json(404, json.dumps({
+                        'error': f'file "{file_name}" is not an instruction file '
+                                 f'of {node["skill"]}',
+                        'files': files,
+                    }))
+                    return
+                elif files:
+                    # no file requested and SKILL.md absent - fall back to the
+                    # first real instruction file so the editor always has a target
+                    md = self._agents_skill_md(node['skill'], files[0]['name'])
+                    if md is not None:
+                        file_name = files[0]['name']
+                        try:
+                            markdown = md.read_text(encoding='utf-8')
+                            markdown_path = str(md)
+                        except Exception:
+                            markdown = None
+            self._send_json(200, json.dumps({
+                'scope': self.ws or 'combined',
+                'node': {
+                    'id': node['id'], 'name': node['name'], 'emoji': node['emoji'],
+                    'level': node['level'], 'skill': node['skill'], 'status': status,
+                    'purpose': node['purpose'],
+                    'responsibilities': node['responsibilities'],
+                    'capabilities': node['capabilities'],
+                    'model_routing': node['model_routing'],
+                    'planned_note': node['planned_note'],
+                },
+                'skill': skill_info,
+                'credentials': self._agents_credentials_for(node['skill']) if node['skill'] else [],
+                'files': files,
+                'file': file_name,
+                'markdown': markdown,
+                'markdown_path': markdown_path,
+            }, ensure_ascii=False, indent=2))
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': 'agents-skill failed',
+                                             'details': str(e)}))
+
+    def _handle_post_agents_skill_save(self):
+        """POST /api/agents-skill-save {node, file, content} - write an edited
+        .md instruction file back to disk (single file, the skill's own dir).
+        The markdown file stays the single source of truth; this endpoint never
+        touches .env, credentials, or anything outside .agent/skills/<skill>/.
+        Content is validated as a string and written UTF-8."""
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+            node_id = (body.get('node') or '').strip()
+            file_name = (body.get('file') or '').strip() or 'SKILL.md'
+            content = body.get('content')
+            node = self.AGENTS_NODES_BY_ID.get(node_id)
+            if not node or not node['skill']:
+                self._send_json(400, json.dumps(
+                    {'error': f'node "{node_id}" is not editable (planned nodes have no skill)'}))
+                return
+            if not isinstance(content, str):
+                self._send_json(400, json.dumps({'error': 'content must be a string'}))
+                return
+            target = self._agents_skill_md(node['skill'], file_name)
+            if target is None:
+                self._send_json(400, json.dumps(
+                    {'error': f'file "{file_name}" is not an editable instruction file '
+                              f'of {node["skill"]} (must be an existing .md in the skill dir)'}))
+                return
+            target.write_text(content, encoding='utf-8')
+            self._send_json(200, json.dumps({
+                'ok': True,
+                'node': node_id,
+                'skill': node['skill'],
+                'file': target.name,
+                'path': str(target),
+                'bytes': len(content.encode('utf-8')),
+            }, ensure_ascii=False))
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': 'agents-skill-save failed',
+                                             'details': str(e)}))
+
+    def _handle_get_approval_queue(self):
+        """GET /api/approval-queue — read-only listing of the approval queue,
+        filtered to the requested workspace (self.ws == 'samudera' for the
+        office-safe view; combined view lists everything or accepts ?ws=).
+        Samudera items never leak into other views and vice versa."""
+        try:
+            doc = json.loads(APPROVAL_QUEUE_PATH.read_text(encoding='utf-8'))
+            items = list((doc.get('items') or {}).values())
+        except Exception:
+            items = []
+        qs = parse_qs(urlsplit(self.path).query)
+        ws_filter = self.ws or (qs.get('ws', [''])[0] or '').strip() or None
+        if ws_filter:
+            items = [i for i in items if i.get('workspace') == ws_filter]
+        items.sort(key=lambda i: i.get('proposed_wib', ''))
+        self._send_json(200, json.dumps({'count': len(items), 'items': items},
+                                        ensure_ascii=False, indent=2))
+
+    def _handle_post_approval_decision(self):
+        """POST /api/approval-decision {id, decision: approve|reject, workspace?, note?}
+        — human gate on a pending external action. Only flips the item's status
+        and appends one line to the append-only action_audit.jsonl; has NO
+        external effect (the separate /api/approval-execute does that, and only
+        after an approval). Shells to the skill CLI (single-writer)."""
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+            iid = (body.get('id') or '').strip()
+            decision = (body.get('decision') or '').strip().lower()
+            note = (body.get('note') or '').strip()
+            ws = (body.get('workspace') or '').strip() or self.ws or None
+            if not iid or decision not in ('approve', 'reject'):
+                self._send_json(400, json.dumps({'error': 'id and decision (approve|reject) are required'}))
+                return
+            argv = [sys.executable, APPROVAL_QUEUE_CLI, decision, '--id', iid]
+            if ws:
+                argv += ['--workspace', ws]
+            if note:
+                argv += ['--note', note]
+            r = subprocess.run(argv, cwd=str(BASE_DIR), capture_output=True, text=True, timeout=20)
+            out = (r.stdout or '').strip() or (r.stderr or '').strip()
+            if r.returncode != 0:
+                self._send_json(400, json.dumps({'error': f'{decision} failed', 'details': out[:300]}))
+                return
+            self._send_json(200, out)
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': 'approval-decision error', 'details': str(e)}))
+
+    def _handle_post_approval_execute(self):
+        """POST /api/approval-execute {id, workspace?} — run the registered executor
+        for an APPROVED item. Denied in samudera mode (not in SAMUDERA_ALLOWED_POST);
+        also blocked by construction when no executor is registered for the item's
+        action type (approval-queue skill EXECUTORS map)."""
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+            iid = (body.get('id') or '').strip()
+            ws = (body.get('workspace') or '').strip() or None
+            if not iid:
+                self._send_json(400, json.dumps({'error': 'id is required'}))
+                return
+            argv = [sys.executable, APPROVAL_QUEUE_CLI, 'execute', '--id', iid]
+            if ws:
+                argv += ['--workspace', ws]
+            r = subprocess.run(argv, cwd=str(BASE_DIR), capture_output=True, text=True, timeout=60)
+            out = (r.stdout or '').strip() or (r.stderr or '').strip()
+            if r.returncode != 0:
+                self._send_json(400, json.dumps({'error': 'execute failed', 'details': out[:300]}))
+                return
+            self._send_json(200, out)
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': 'approval-execute error', 'details': str(e)}))
 
     def _handle_get_token_efficiency(self):
         """GET /api/token-efficiency — read-only: journal/state/token_efficiency.json

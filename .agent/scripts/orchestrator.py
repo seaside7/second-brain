@@ -99,6 +99,42 @@ SKILL_REGISTRY = {
         "description": "Financial analysis, forecasting, cash flow, obligations",
         "cli_style": "positional",
     },
+    "executive-pm": {
+        "script": "skills/executive-pm/scripts/executive_pm.py",
+        "category": "simple_lookup",
+        "description": "Workspace-scoped executive digest: overdue/due-today/blocked/waiting/decisions/commitments/inbox",
+        "cli_style": "flag",
+    },
+    "approval-queue": {
+        "script": "skills/approval-queue/scripts/approval_queue.py",
+        "category": "simple_lookup",
+        "description": "Human-approval gate for external actions (propose/approve/reject/execute) with append-only audit log",
+        "cli_style": "flag",
+    },
+    "executive-orchestrator": {
+        "script": "skills/executive-orchestrator/scripts/executive_orchestrator.py",
+        "category": "complex_synthesis",
+        "description": "Samudera executive router: classify intent, gather minimum specialists, synthesize (escalates to strong model only for complex synthesis)",
+        "cli_style": "flag",
+    },
+    "data-agent": {
+        "script": "skills/data-agent/scripts/data_agent.py",
+        "category": "simple_lookup",
+        "description": "Read-only Data/BI agent: reports data availability and answers queries ONLY from real files/config sources; graceful 'data unavailable' otherwise; never fabricates",
+        "cli_style": "flag",
+    },
+    "transformation-research": {
+        "script": "skills/transformation-research/scripts/transformation_research.py",
+        "category": "complex_synthesis",
+        "description": "Grounded Samudera research (news briefings + meeting archive + knowledge store) with explicit source/gap reporting; no fabrication",
+        "cli_style": "flag",
+    },
+    "transformation-strategy": {
+        "script": "skills/transformation-strategy/scripts/transformation_strategy.py",
+        "category": "complex_synthesis",
+        "description": "Samudera DT strategy framing: roadmap, operating model, maturity, priorities, options, sequencing, KPI/risk/governance alignment, executive recommendation; delegates evidence gathering to transformation-research",
+        "cli_style": "flag",
+    },
 }
 
 

@@ -91,7 +91,7 @@ function canRender(container) {
 }
 
 /* ── Router: #today (default) | #inbox | #work[/filter] | #meetings | #system ── */
-const TAB_NAMES = ['today', 'inbox', 'work', 'meetings', 'hours', 'news', 'system'];
+const TAB_NAMES = ['today', 'inbox', 'approvals', 'agents', 'work', 'meetings', 'hours', 'news', 'system'];
 
 function parseHash() {
   const h = (location.hash || '#today').replace(/^#/, '');
@@ -905,6 +905,13 @@ function renderMeetingsSlot() {
 /* ── boot ── */
 const SAMUDERA_HIDDEN_TABS = ['meetings', 'hours', 'system'];
 
+/* Tabs that exist ONLY in the /samudera view (the combined dashboard hides
+   them so personal/Catalyze chrome never mixes with Samudera). The Agents
+   panel is Samudera-primary: its endpoints are read-mostly + a prompt editor
+   that writes .agent/skills/<skill>/ markdown, so it only ships to the
+   office-safe view. */
+const SAMUDERA_ONLY_TABS = ['agents'];
+
 function applySamuderaMode() {
   /* hide personal-harness tabs and force a safe tab if the hash targets one */
   const hidden = new Set(SAMUDERA_HIDDEN_TABS);
@@ -921,8 +928,25 @@ function applySamuderaMode() {
   }
 }
 
+function applyCombinedMode() {
+  /* hide the samudera-only tabs on the combined dashboard */
+  const only = new Set(SAMUDERA_ONLY_TABS);
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    if (only.has(b.dataset.tab)) b.style.display = 'none';
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => {
+    if (only.has(p.id.replace('tab-', ''))) p.style.display = 'none';
+  });
+  const { tab } = parseHash();
+  if (only.has(tab)) {
+    location.hash = '#today';   // parseHash/applyRoute re-run via hashchange
+    applyRoute();
+  }
+}
+
 function boot() {
   if (PSB_SAMUDERA) applySamuderaMode();
+  else applyCombinedMode();
   UI.load();
   Drawer.init();
   updateChrome();

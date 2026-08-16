@@ -1180,12 +1180,14 @@ const Drawer = {
 
   /* shared shell painter: title + body HTML + slide in. Returns the body
      element (or null if there's no #drawer-root to mount into).
-     `wide` toggles the ~72%-width variant; open/openHtml always reset it
-     so a normal open after openWide snaps back (back-compatible). */
-  _paint(title, bodyHtml, wide = false) {
+     `wide` toggles the ~72%-width slide-over variant; `full` the centered
+     near-fullscreen modal. open/openHtml always reset both so a normal open
+     after openFull/openWide snaps back (back-compatible). */
+  _paint(title, bodyHtml, wide = false, full = false) {
     if (!this.root) this.init();
     if (!this.root) return null;
     this.root.querySelector('.drawer').classList.toggle('drawer--wide', !!wide);
+    this.root.querySelector('.drawer').classList.toggle('drawer--full', !!full);
     const tEl = this.root.querySelector('.drawer-title');
     tEl.textContent = title;
     tEl.title = title;
@@ -1217,6 +1219,12 @@ const Drawer = {
      same overlay/✕/ESC close wiring. */
   openWide(title, html) {
     this._paint(title || '', html || '', true);
+  },
+
+  /* centered near-fullscreen modal — the Agent detail/editor popup. Trusted
+     HTML, same overlay/✕/ESC close wiring. */
+  openFull(title, html) {
+    this._paint(title || '', html || '', false, true);
   },
 
   close() {

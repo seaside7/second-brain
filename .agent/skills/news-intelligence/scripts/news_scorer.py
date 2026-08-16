@@ -19,6 +19,7 @@ CONFIG_PATH = REPO_ROOT / "config" / "news_intelligence.json"
 SCRIPTS_DIR = REPO_ROOT / ".agent" / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 from deepseek_call import call as deepseek_call
+from openai_call import call as openai_call
 
 WIB = timezone(timedelta(hours=7))
 
@@ -99,10 +100,21 @@ def score_candidates(articles, category):
     print(f"[INFO] Scoring {len(articles)} candidate articles for category '{category}'", file=sys.stderr)
 
     prompt = build_scoring_payload(articles, category)
+
     ok, text, meta = deepseek_call(prompt, max_tokens=4096, temperature=0.2, timeout=90)
+    provider = "deepseek"
+    if not ok:
+        # Fallback to OpenAI (cheap tier) when DeepSeek is down/unconfigured.
+        # Mirrors model_routing fallback_chains: deepseek-chat -> gpt-5.6-luna.
+        print(f"[INFO] DeepSeek scoring failed ({meta.get('reason', 'unknown')}); "
+              f"falling back to OpenAI", file=sys.stderr)
+        ok, text, meta = openai_call(prompt, tier="low", max_tokens=4096,
+                                     temperature=0.2, timeout=120)
+        provider = "openai"
 
     if not ok:
-        print(f"[ERROR] DeepSeek scoring failed: {meta.get('reason', 'unknown')}", file=sys.stderr)
+        print(f"[ERROR] {provider} scoring failed: {meta.get('reason', 'unknown')}",
+              file=sys.stderr)
         return {"stories": [], "scores": {"all": []}, "selected_count": 0,
                 "total_candidates": len(articles), "error": meta.get("reason")}
 
@@ -116,7 +128,8 @@ def score_candidates(articles, category):
             text = text[:-3]
         result = json.loads(text.strip())
     except json.JSONDecodeError as e:
-        print(f"[ERROR] Failed to parse DeepSeek response as JSON: {e}", file=sys.stderr)
+        print(f"[ERROR] Failed to parse {provider} response as JSON: {e}",
+              file=sys.stderr)
         print(f"[DEBUG] Raw response (first 500 chars): {text[:500]}", file=sys.stderr)
         return {"stories": [], "scores": {"all": []}, "selected_count": 0,
                 "total_candidates": len(articles), "error": "json_parse_failed"}
@@ -135,8 +148,9 @@ def score_candidates(articles, category):
     result["stories"] = result["stories"][:3]
     result["selected_count"] = len(result["stories"])
 
-    print(f"[INFO] DeepSeek selected {result['selected_count']} stories "
-          f"from {len(articles)} candidates (tokens: {meta.get('total_tokens', 0)})", file=sys.stderr)
+    print(f"[INFO] {provider} selected {result['selected_count']} stories "
+          f"from {len(articles)} candidates (tokens: {meta.get('total_tokens', 0)})",
+          file=sys.stderr)
     return result
 
 

@@ -1,4 +1,5 @@
 {
   "source": "google_drive",
-  "folder_id": "YOUR_SAMUDERA_DRIVE_FOLDER_ID"
+  "folder_id": "1IL_fiBKaWmLv1JL3ZQOmvdV6In2mFry5",
+  "note": "Samudera workspace has no corporate Drive token. This folder is the Samudera meetings archive inside the PERSONAL drive (Meeting Transcripts/Samudera). Meeting syncs use token_workspace=personal; this folder_id is only for the general document sync when a samudera drive token exists."
 }

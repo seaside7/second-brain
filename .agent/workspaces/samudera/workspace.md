@@ -2,107 +2,119 @@
 
 ## Company Overview
 
-<!-- Company background, industry, size, public/private, headquarters -->
+<!-- TODO: fill in — company background, industry, size, public/private, HQ -->
+- **Industry**: Shipping / maritime logistics (conglomerate)
+- **Public/private**: <!-- TODO -->
+- **HQ**: <!-- TODO -->
+- **About**: Samudera Indonesia is an Indonesian logistics and shipping group with container shipping, terminal, and logistics businesses.
 
 ---
 
 ## My Role
 
 - **Title**: Head of Digital Transformation
-- **Reports to**: <!-- direct reporting line -->
-- **Scope**: <!-- what functions/BUs I oversee for DT -->
-- **Started**: <!-- start date -->
+- **Reports to**: <!-- TODO: direct reporting line -->
+- **Scope**: Digital transformation strategy, AI initiatives, business process analysis, technology roadmaps across the group
+- **Started**: **2026-08-18** (official first day — until then NO Samudera corporate access is assumed)
 
 ---
 
 ## Organization Structure
 
-<!-- Org chart: CEO, C-suite, my position, direct reports, dotted lines -->
+<!-- TODO: org chart — CEO, C-suite, position, direct reports, dotted lines -->
 <!-- Key: who makes decisions, who blocks, who enables -->
 
 ---
 
 ## Business Units
 
-<!-- List each BU I interact with, what they do, and their DT maturity -->
+<!-- TODO: list each BU, what they do, DT maturity -->
 
 ---
 
 ## Key Stakeholders
 
-<!-- Name | Title | Relationship | Communication preference | Notes -->
+<!-- TODO: Name | Title | Relationship | Communication preference | Notes -->
+
+| Name | Title | Relationship | Notes |
+|---|---|---|---|
+| Pak Rando | <!-- TODO --> | <!-- TODO --> | Expects C-MAP meeting summaries (per MOM 2026-08-13) |
 
 ---
 
 ## Current Initiatives
 
-<!-- Active DT programs, each with: status, owner, timeline, success metric -->
+| Initiative | Status | Owner | Timeline | Success metric |
+|---|---|---|---|---|
+| C-MAP coordination | Active | Sa'id | 2026-08-13+ | Meeting task handled; summary delivered to Pak Rando (verify status) |
 
 ---
 
 ## Digital Transformation Roadmap
 
-<!-- Phased plan: what has been done, what is in progress, what is next -->
+<!-- TODO: phased plan — done / in progress / next -->
 <!-- Include: quick wins, medium-term projects, long-term vision -->
 
 ---
 
 ## AI Opportunities
 
-<!-- Where AI can be applied in the business -->
+<!-- TODO: where AI can be applied in the business -->
 <!-- Prioritized by: impact, feasibility, data readiness, stakeholder buy-in -->
 
 ---
 
 ## Meetings
 
-<!-- Recurring meetings: name, cadence, attendees, purpose -->
-<!-- How to prepare for each one -->
+<!-- TODO: recurring meetings — name, cadence, attendees, purpose, prep -->
+
+| Meeting | Cadence | Purpose |
+|---|---|---|
+| C-MAP coordination | Ad hoc | C-MAP program coordination and follow-ups (first recorded 2026-08-13) |
 
 ---
 
 ## SOPs
 
-<!-- Standard operating procedures I own or follow -->
-<!-- How decisions get made, how projects get approved, how budget works -->
+<!-- TODO: SOPs owned/followed — how decisions get made, approvals, budget -->
 
 ---
 
 ## Systems
 
-<!-- Current tech stack, ERP, internal tools, legacy systems -->
-<!-- What is being replaced, what is being introduced -->
+<!-- TODO: tech stack, ERP, internal tools, legacy systems -->
 
 ---
 
 ## Vendors
 
-<!-- External vendors, consultants, SIs I manage or interact with -->
+<!-- TODO: external vendors, consultants, SIs -->
 
 ---
 
 ## Weekly Reports
 
-<!-- What reports I produce, for whom, in what format, on what cadence -->
+<!-- TODO: what reports produced, for whom, format, cadence -->
 
 ---
 
 ## KPIs
 
-<!-- Metrics I am measured on or track for the transformation program -->
+<!-- TODO: metrics for the transformation program -->
 
 ---
 
 ## Decision Log
 
-<!-- Major decisions made, pending, or escalated -->
-<!-- Use the decision-log skill to track these formally -->
+<!-- Major decisions made, pending, or escalated — use the decision-log skill to track formally -->
 
 ---
 
 ## Current Priorities
 
-<!-- Top 3-5 things in focus right now -->
+1. **C-MAP coordination** — handle the C-MAP meeting task and deliver the meeting summary to Pak Rando (deadlines 2026-08-13; status to verify).
+2. <!-- TODO -->
+3. <!-- TODO -->
 
 ---
 
@@ -110,14 +122,53 @@
 
 | Tool | Status | Purpose |
 |---|---|---|
-| Gmail | Not connected | Email communication |
-| Google Drive | Not connected | Document storage |
-| Google Calendar | Not connected | Meeting management |
-| GitLab | Not connected | Technical projects |
-| Slack | Not connected | Team communication |
+| Gmail | Not connected (post-join: 2026-08-18+) | Email communication |
+| Google Drive | Meeting archive only (personal drive) | Meeting transcripts/MOM storage |
+| Google Calendar | Not connected (post-join: 2026-08-18+) | Meeting management |
+| Slack | Not connected | Team communication (platform UNKNOWN at Samudera) |
+| Fathom | Not connected | Meeting transcripts |
+
+**Full credential/access status: see `CREDENTIALS.md` and `credentials_status.json`
+in this workspace. Everything not marked `post_join` is what actually works now.**
+
+## Executive layer
+
+- `executive-pm` skill: workspace-scoped digest (`/focus`, `/risk`).
+- `approval-queue` skill: human-approval gate for external actions
+  (`/approvals`); execution disabled by design until after join.
+- `executive-orchestrator` skill (`/orchestrate <request>` in chat): classifies
+  intent, gathers only the minimum relevant specialists, synthesizes a
+  decision-oriented answer (escalates to a strong model only for complex
+  synthesis). Read-only on workspace data; never executes external actions.
+
+## Phase 3 - Data/BI + research (no corporate data assumed)
+
+- `data-agent` skill: read-only Data/BI agent. `availability` reports exactly
+  what is usable today; `query` answers ONLY from real files or
+  `configured_working` sources. Anything needing Samudera corporate data that
+  was not actually provided returns a graceful "data unavailable" message
+  (what is missing, why, when expected, where to drop an export). NEVER
+  fabricates numbers.
+- `transformation-research` skill: grounded research from news briefings +
+  meeting archive + knowledge store; states gaps explicitly (web research not
+  configured; ERP/BI post_join >= 2026-08-18). No fabrication.
+- Shared availability registry: `.agent/scripts/availability_registry.py` reads
+  `credentials_status.json` + the data drop folder.
+- Data drop folder: `.agent/workspaces/samudera/data/` - the owner drops
+  read-only CSVs/exports here AFTER joining; a source is available only when a
+  matching file actually exists (see `data/README.md`).
 
 ---
 
 ## Notes
 
 <!-- Anything else: cultural norms, communication style, politics, gotchas -->
+- **Credential/access constraint:** No Samudera corporate credentials, OAuth,
+  databases, BI systems, ERP, or internal tools are assumed available before the
+  join date **2026-08-18**. This workspace runs on the personal-drive meeting
+  archive + shared AI keys until then. Do not ask the owner for post-join
+  credentials early, and never fabricate corporate access or data. Track all of
+  it in `CREDENTIALS.md`; do not let the chat/orchestrator claim access it does
+  not have.
+- Working language: Indonesian for internal chat, English for documents.
+- Meetings are recorded locally (meeting-recorder) and archived to the personal drive under `Meeting Transcripts/Samudera/YYYY/MM/`.
