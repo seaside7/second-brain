@@ -1,0 +1,35 @@
+{
+  "query": "Samudera business",
+  "top_k": 5,
+  "timestamp_wib": "2026-08-21T09:29:18+07:00",
+  "result_count": 3,
+  "results": [
+    {
+      "source": "knowledge",
+      "category": "business",
+      "title": "Role and company context",
+      "date": "",
+      "confidence": "medium",
+      "content": "### Role and company context\n- **Date**: 2026-08-14\n- **Tags**: #samudera, #role, #dt\n- **Source**: manual\n- **Confidence**: high\n\nSaid is Head of Digital Transformation at Samudera Indonesia, a shipping/maritime logistics group in Indonesia. Mandate: digital transformation strategy, AI initiatives, business process analysis, technology roadmaps. Works in initiatives, not tickets.",
+      "score": 1.0
+    },
+    {
+      "source": "knowledge",
+      "category": "people",
+      "title": "Pak Rando",
+      "date": "",
+      "confidence": "medium",
+      "content": "### Pak Rando\n- **Date**: 2026-08-14\n- **Tags**: #samudera, #stakeholder, #cmap\n- **Source**: manual\n- **Confidence**: high\n\nPak Rando is a Samudera stakeholder who expects C-MAP meeting summaries. First engagement recorded in MOM 2026-08-13 (C-MAP coordination).",
+      "score": 0.5
+    },
+    {
+      "source": "knowledge",
+      "category": "projects",
+      "title": "C-MAP coordination",
+      "date": "",
+      "confidence": "medium",
+      "content": "### C-MAP coordination\n- **Date**: 2026-08-14\n- **Tags**: #samudera, #cmap\n- **Source**: manual\n- **Confidence**: high\n\nC-MAP program coordination. Two open action items from 2026-08-13 MOM: (1) handle the C-MAP meeting task (deadline 15:00 WIB 2026-08-13), (2) send C-MAP meeting summary to Pak Rando (deadline 16:00 WIB 2026-08-13). Both need status verification.",
+      "score": 0.5
+    }
+  ]
+}

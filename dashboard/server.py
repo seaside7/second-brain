@@ -127,6 +127,10 @@ SAMUDERA_ALLOWED_GET = {
     '/api/approval-queue',
     # Agents / AI Architecture panel (read-only views: map + skill detail)
     '/api/agents-map', '/api/agents-skill',
+    # Drive index + memory recall (read-only views for Memory/Dashboard tab)
+    '/api/drive-index', '/api/drive-projects', '/api/drive-search',
+    '/api/memory-recall', '/api/memory-status', '/api/memory-last',
+    '/api/knowledge-status', '/api/knowledge-entries',
 }
 
 # POST routes the /samudera dashboard may call. Everything else in samudera
@@ -134,7 +138,8 @@ SAMUDERA_ALLOWED_GET = {
 # approval queue's decide endpoint only flips a flag + appends an audit line
 # (no external effect) and is workspace-scoped.
 SAMUDERA_ALLOWED_POST = {'/api/chat', '/api/approval-decision',
-                         '/api/agents-skill-save'}
+                         '/api/agents-skill-save',
+                         '/api/drive-index-rebuild', '/api/knowledge-build-embeddings'}
 
 # ── Chatbox: permanent (static) suggestion categories ──────────────────────
 # The same five categories for every workspace; the workspace-scoped context
@@ -2359,6 +2364,23 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_get_news()
         elif self.path == '/api/progress':
             self._handle_get_progress()
+        # ── Drive Index / Memory Recall routes ──
+        elif self.path.split('?')[0] == '/api/drive-index':
+            self._handle_get_drive_index()
+        elif self.path.split('?')[0] == '/api/drive-projects':
+            self._handle_get_drive_projects()
+        elif self.path.split('?')[0] == '/api/drive-search':
+            self._handle_get_drive_search()
+        elif self.path.split('?')[0] == '/api/memory-recall':
+            self._handle_get_memory_recall()
+        elif self.path.split('?')[0] == '/api/memory-status':
+            self._handle_get_memory_status()
+        elif self.path.split('?')[0] == '/api/memory-last':
+            self._handle_get_memory_last()
+        elif self.path.split('?')[0] == '/api/knowledge-status':
+            self._handle_get_knowledge_status()
+        elif self.path.split('?')[0] == '/api/knowledge-entries':
+            self._handle_get_knowledge_entries()
         else:
             super().do_GET()
 
@@ -2454,6 +2476,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_post_inbox_send_token()
         elif self.path == '/api/inbox-send':
             self._handle_post_inbox_send()
+        elif self.path == '/api/drive-index-rebuild':
+            self._handle_post_drive_index_rebuild()
+        elif self.path == '/api/knowledge-build-embeddings':
+            self._handle_post_knowledge_build_embeddings()
         else:
             self.send_error(404, 'Not Found')
 
@@ -5168,6 +5194,80 @@ class DashboardHandler(SimpleHTTPRequestHandler):
          'capabilities': [],
          'model_routing': '',
          'planned_note': 'Concept only - no skill implemented yet.'},
+        # ── Memory System nodes ──
+        {'id': 'drive_indexer', 'name': 'Drive Indexer', 'emoji': '📂', 'level': 1,
+         'skill': 'drive-indexer',
+         'purpose': 'Recursively indexes the Samudera Drive folder tree into a local '
+                    'JSON index. Auto-detects new top-level folders as projects. '
+                    'Classifies general/shared folders by pattern. Uses personal Drive token.',
+         'responsibilities': [
+             'Recursive scan of the configured root folder',
+             'Auto-detect new top-level folders as projects',
+             'Classify folders: project (default) or general (shared)',
+             'Store structured metadata: id, name, type, path, project, dates, size',
+             'Support re-index on demand',
+             'Provide local project list and keyword search',
+             'Export file content via personal Drive API'],
+         'capabilities': [
+             'Workspace-scoped to samudera',
+             'Uses personal Drive token (configurable)',
+             'No hardcoded project list - fully dynamic',
+             'General folder detection via explicit overrides + pattern fallback'],
+         'model_routing': 'Deterministic - no LLM required.',
+         'planned_note': None},
+        {'id': 'drive_search', 'name': 'Drive Search', 'emoji': '🔍', 'level': 2,
+         'skill': 'drive-search',
+         'purpose': 'Searches the local Drive index by name, path, and project. '
+                    'Exports file content on demand via the personal Drive API.',
+         'responsibilities': [
+             'Keyword search on name + folder_path + project',
+             'Project-scoped filtering',
+             'File content export (Google-native + standard formats)',
+             'Project listing'],
+         'capabilities': [
+             'Searches local index without API calls',
+             'Export on demand only',
+             'Handles Google Docs/Sheets/Slides + md/txt/pdf/doc/docx/xls/xlsx/csv/json/ppt/pptx'],
+         'model_routing': 'Deterministic - no LLM required.',
+         'planned_note': None},
+        {'id': 'embedding_index', 'name': 'Embedding Index', 'emoji': '🧮', 'level': 2,
+         'skill': 'embedding-index',
+         'purpose': 'Builds and queries a FAISS vector index of knowledge store entries '
+                    'using OpenAI text-embedding-3-small (1536 dimensions). '
+                    'Enables semantic search across all knowledge categories.',
+         'responsibilities': [
+             'Parse all knowledge entries from category .md files',
+             'Generate embeddings via OpenAI API',
+             'Build FAISS index with metadata',
+             'Semantic search: embed query -> nearest neighbors',
+             'Status reporting'],
+         'capabilities': [
+             'FAISS IndexFlatL2 for exact nearest-neighbor search',
+             'Batched embedding (50 entries per API call)',
+             'Falls back to substring search if no index exists'],
+         'model_routing': 'Deterministic - no LLM required (embedding API call only).',
+         'planned_note': None},
+        {'id': 'memory_recall', 'name': 'Memory Recall', 'emoji': '🧠', 'level': 1,
+         'skill': 'memory-recall',
+         'purpose': 'Unified memory recall pipeline that searches three sources in parallel: '
+                    'knowledge store (FAISS semantic), Drive index (keyword), and state files. '
+                    'Ranks by semantic score + recency + confidence. Injects context into '
+                    'the orchestrator prompt.',
+         'responsibilities': [
+             'Search knowledge store via FAISS semantic search',
+             'Search local Drive index via keyword matching',
+             'Search state files (tasks, timeline, milestones)',
+             'Rank results: semantic_score * 0.5 + recency * 0.3 + confidence * 0.2',
+             'Deduplicate across sources',
+             'Return top-K results with source labels',
+             'Cache last recall results for dashboard display'],
+         'capabilities': [
+             'Completes in <0.2s for typical queries',
+             'Graceful degradation if any source unavailable',
+             'Cost: ~$0.0001/query for embedding API',
+             'Toggleable recall flag on orchestrator gather'],
+         'model_routing': 'Deterministic - no LLM required.',
+         'planned_note': None},
     ]
     AGENTS_NODES_BY_ID = {n['id']: n for n in AGENTS_ARCHITECTURE}
     # skills the prompt editor may write to (nodes' own skills only - never
@@ -6022,6 +6122,238 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
         self.wfile.write(body.encode('utf-8'))
+
+    # ── Drive Index / Memory Recall handlers ────────────────────────────
+    def _run_script(self, script, args_list, timeout=60):
+        """Run a Python script with args, return (exit_code, stdout, stderr)."""
+        cmd = [sys.executable, script] + args_list
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True,
+                               cwd=str(BASE_DIR), timeout=timeout)
+            return r.returncode, r.stdout, r.stderr
+        except subprocess.TimeoutExpired:
+            return -1, '', 'timeout'
+        except Exception as e:
+            return -1, '', str(e)
+
+    def _handle_get_drive_index(self):
+        """GET /api/drive-index — return the local Drive index JSON."""
+        ws = self._request_ws()
+        idx_path = BASE_DIR / '.agent' / 'workspaces' / ws / 'state' / 'drive_index.json'
+        if not idx_path.exists():
+            self._send_json(200, json.dumps({
+                'exists': False, 'message': 'No drive index. Rebuild via POST /api/drive-index-rebuild.',
+            }))
+            return
+        try:
+            data = json.loads(idx_path.read_text(encoding='utf-8'))
+            data['exists'] = True
+            self._send_json(200, json.dumps(data, ensure_ascii=False))
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': str(e)}))
+
+    def _handle_get_drive_projects(self):
+        """GET /api/drive-projects — return project list from the Drive index."""
+        ws = self._request_ws()
+        idx_path = BASE_DIR / '.agent' / 'workspaces' / ws / 'state' / 'drive_index.json'
+        if not idx_path.exists():
+            self._send_json(200, json.dumps([]))
+            return
+        try:
+            data = json.loads(idx_path.read_text(encoding='utf-8'))
+            projects = []
+            for name, info in data.get('projects', {}).items():
+                projects.append({
+                    'name': name,
+                    'project_type': info.get('project_type', 'project'),
+                    'file_count': info.get('file_count', 0),
+                    'last_modified': info.get('last_modified', ''),
+                })
+            projects.sort(key=lambda x: -x['file_count'])
+            self._send_json(200, json.dumps(projects, ensure_ascii=False))
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': str(e)}))
+
+    def _handle_get_drive_search(self):
+        """GET /api/drive-search?q=TERM&project=NAME — search the local Drive index."""
+        ws = self._request_ws()
+        qs = parse_qs(urlsplit(self.path).query)
+        q = (qs.get('q', [''])[0]).strip()
+        project = (qs.get('project', [''])[0]).strip() or None
+        if not q:
+            self._send_json(400, json.dumps({'error': 'q parameter required'}))
+            return
+        idx_path = BASE_DIR / '.agent' / 'workspaces' / ws / 'state' / 'drive_index.json'
+        if not idx_path.exists():
+            self._send_json(200, json.dumps({'results': [], 'message': 'No index'}))
+            return
+        try:
+            data = json.loads(idx_path.read_text(encoding='utf-8'))
+            terms = [t.lower() for t in q.split() if len(t) > 1]
+            results = []
+            for f in data.get('files', []):
+                if project and f.get('project') != project:
+                    continue
+                blob = (f.get('name', '') + ' ' + f.get('folder_path', '') +
+                        ' ' + f.get('project', '')).lower()
+                score = sum(1 for t in terms if t in blob)
+                if terms and score == 0:
+                    continue
+                results.append({**f, '_score': score})
+            results.sort(key=lambda x: -x['_score'])
+            self._send_json(200, json.dumps(results[:20], ensure_ascii=False))
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': str(e)}))
+
+    def _handle_get_memory_recall(self):
+        """GET /api/memory-recall?q=TERM&top=N — unified memory recall."""
+        ws = self._request_ws()
+        qs = parse_qs(urlsplit(self.path).query)
+        q = (qs.get('q', [''])[0]).strip()
+        top = int(qs.get('top', ['10'])[0])
+        if not q:
+            self._send_json(400, json.dumps({'error': 'q parameter required'}))
+            return
+        script = str(BASE_DIR / '.agent' / 'skills' / 'memory-recall' / 'scripts' / 'memory_recall.py')
+        code, out, err = self._run_script(script, ['recall', '--workspace', ws, '--query', q, '--top', str(top)])
+        if code != 0:
+            self._send_json(500, json.dumps({'error': err or 'recall failed'}))
+            return
+        cache_path = BASE_DIR / '.agent' / 'workspaces' / ws / 'state' / 'last_recall.json'
+        if cache_path.exists():
+            try:
+                data = json.loads(cache_path.read_text(encoding='utf-8'))
+                self._send_json(200, json.dumps(data, ensure_ascii=False))
+                return
+            except Exception:
+                pass
+        self._send_json(200, json.dumps({'results': [], 'query': q}))
+
+    def _handle_get_memory_status(self):
+        """GET /api/memory-status — status of all memory sources."""
+        ws = self._request_ws()
+        state_dir = BASE_DIR / '.agent' / 'workspaces' / ws / 'state'
+        kdir = BASE_DIR / '.agent' / 'workspaces' / ws / 'knowledge'
+
+        has_faiss = (state_dir / 'knowledge_embeddings.faiss').exists() and \
+                    (state_dir / 'knowledge_embeddings_meta.json').exists()
+        has_drive = (state_dir / 'drive_index.json').exists()
+        drive_files = 0
+        drive_indexed = ''
+        if has_drive:
+            try:
+                idx = json.loads((state_dir / 'drive_index.json').read_text(encoding='utf-8'))
+                drive_files = idx.get('stats', {}).get('total_files', 0)
+                drive_indexed = idx.get('indexed_wib', '')
+            except Exception:
+                pass
+
+        knowledge_count = 0
+        if kdir.exists():
+            for md in kdir.glob('*.md'):
+                try:
+                    content = md.read_text(encoding='utf-8')
+                    knowledge_count += content.count('### ')
+                except Exception:
+                    pass
+
+        state_files = {}
+        for f in ['tasks.json', 'timeline.json', 'milestones.json', 'last_recall.json']:
+            fp = state_dir / f
+            state_files[f] = fp.exists()
+
+        self._send_json(200, json.dumps({
+            'knowledge_faiss': has_faiss,
+            'knowledge_entries': knowledge_count,
+            'drive_index': has_drive,
+            'drive_files': drive_files,
+            'drive_indexed_wib': drive_indexed,
+            'state_files': state_files,
+        }))
+
+    def _handle_get_memory_last(self):
+        """GET /api/memory-last — cached last recall results."""
+        ws = self._request_ws()
+        cache_path = BASE_DIR / '.agent' / 'workspaces' / ws / 'state' / 'last_recall.json'
+        if not cache_path.exists():
+            self._send_json(200, json.dumps({'results': []}))
+            return
+        try:
+            data = json.loads(cache_path.read_text(encoding='utf-8'))
+            self._send_json(200, json.dumps(data, ensure_ascii=False))
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': str(e)}))
+
+    def _handle_get_knowledge_status(self):
+        """GET /api/knowledge-status — entry counts per knowledge category."""
+        ws = self._request_ws()
+        kdir = BASE_DIR / '.agent' / 'workspaces' / ws / 'knowledge'
+        status = {}
+        if kdir.exists():
+            for md in kdir.glob('*.md'):
+                try:
+                    content = md.read_text(encoding='utf-8')
+                    status[md.stem] = content.count('### ')
+                except Exception:
+                    status[md.stem] = 0
+        self._send_json(200, json.dumps(status))
+
+    def _handle_get_knowledge_entries(self):
+        """GET /api/knowledge-entries?category=NAME — list entries in a category."""
+        ws = self._request_ws()
+        qs = parse_qs(urlsplit(self.path).query)
+        cat = (qs.get('category', [''])[0]).strip()
+        kdir = BASE_DIR / '.agent' / 'workspaces' / ws / 'knowledge'
+        if not kdir.exists():
+            self._send_json(200, json.dumps([]))
+            return
+        entries = []
+        files = [cat + '.md'] if cat and (kdir / cat + '.md').exists() else \
+                [f.name for f in kdir.glob('*.md')]
+        for fname in files:
+            fp = kdir / fname
+            try:
+                content = fp.read_text(encoding='utf-8')
+                blocks = content.split('---')
+                for block in blocks:
+                    block = block.strip()
+                    if not block or '###' not in block:
+                        continue
+                    title_match = re.search(r'^### (.+)', block, re.M)
+                    date_match = re.search(r'\*\*Date:\*\*\s*(.+)', block)
+                    conf_match = re.search(r'\*\*Confidence:\*\*\s*(\w+)', block)
+                    tags_match = re.search(r'\*\*Tags:\*\*\s*(.+)', block)
+                    entries.append({
+                        'category': fname[:-3],
+                        'title': title_match.group(1).strip() if title_match else 'untitled',
+                        'date': date_match.group(1).strip() if date_match else '',
+                        'confidence': conf_match.group(1).strip() if conf_match else 'medium',
+                        'tags': tags_match.group(1).strip() if tags_match else '',
+                        'preview': block[:300],
+                    })
+            except Exception:
+                pass
+        self._send_json(200, json.dumps(entries, ensure_ascii=False))
+
+    def _handle_post_drive_index_rebuild(self):
+        """POST /api/drive-index-rebuild — trigger a Drive index rebuild."""
+        ws = self._request_ws()
+        script = str(BASE_DIR / '.agent' / 'skills' / 'drive-indexer' / 'scripts' / 'drive_index.py')
+        code, out, err = self._run_script(script, ['scan', '--workspace', ws], timeout=120)
+        if code != 0:
+            self._send_json(500, json.dumps({'error': err or 'scan failed', 'output': out}))
+            return
+        self._send_json(200, json.dumps({'ok': True, 'output': out}))
+
+    def _handle_post_knowledge_build_embeddings(self):
+        """POST /api/knowledge-build-embeddings — build/rebuild the FAISS index."""
+        ws = self._request_ws()
+        script = str(BASE_DIR / '.agent' / 'skills' / 'knowledge-store' / 'scripts' / 'embedding_index.py')
+        code, out, err = self._run_script(script, ['build', '--workspace', ws], timeout=180)
+        if code != 0:
+            self._send_json(500, json.dumps({'error': err or 'build failed', 'output': out}))
+            return
+        self._send_json(200, json.dumps({'ok': True, 'output': out}))
 
     def log_message(self, format, *args):
         if args and isinstance(args[0], str) and '/api/' in args[0]:

@@ -237,6 +237,33 @@ def _gather_credential_status(ws):
     return '\n'.join(lines)
 
 
+MR_CLI = BASE_DIR / '.agent' / 'skills' / 'memory-recall' / 'scripts' / 'memory_recall.py'
+DI_CLI = BASE_DIR / '.agent' / 'skills' / 'drive-indexer' / 'scripts' / 'drive_index.py'
+
+
+def _gather_memory(ws, query):
+    """Unified memory recall: knowledge (FAISS) + Drive index + state files."""
+    if not MR_CLI.is_file():
+        return f'(memory-recall skill not found: {MR_CLI})'
+    ok, out = _sh([str(MR_CLI), 'recall', '--workspace', ws, '--query', query, '--top', '8'])
+    return out if ok else f'(memory recall unavailable: {out})'
+
+
+def _gather_drive_status(ws):
+    """Drive index status summary."""
+    idx_path = BASE_DIR / '.agent' / 'workspaces' / ws / 'state' / 'drive_index.json'
+    data = _read_json(idx_path)
+    if not data:
+        return 'No Drive index built. Run: drive_index.py scan --workspace %s' % ws
+    stats = data.get('stats', {})
+    lines = ['Drive index (last scan: %s)' % data.get('indexed_wib', '?')]
+    lines.append('  %d files across %d projects' % (
+        stats.get('total_files', 0), stats.get('total_projects', 0)))
+    for name, count in stats.get('by_project', {}).items():
+        lines.append('    %s: %d files' % (name, count))
+    return '\n'.join(lines)
+
+
 def _gather(category, ws, prompt):
     if category == 'status':
         return {'digest': _gather_digest(ws)}
@@ -247,27 +274,33 @@ def _gather(category, ws, prompt):
     if category == 'documents':
         return {'documents': _gather_documents(ws, prompt)}
     if category == 'research':
-        # Phase 3: delegate to the transformation-research skill (grounded
-        # multi-source scan; gaps reported explicitly)
         ok, out = _sh([str(TR_CLI), 'scan', '--workspace', ws, '--query', prompt])
         if ok:
             return {'research_scan': out}
         return {'news': _gather_news(ws), 'knowledge': _gather_knowledge(ws, prompt)}
     if category == 'knowledge':
-        return {'knowledge': _gather_knowledge(ws, prompt)}
+        # Use memory recall (FAISS semantic + Drive + state) if available
+        memory = _gather_memory(ws, prompt) if ws == 'samudera' else None
+        knowledge = _gather_knowledge(ws, prompt)
+        result = {'knowledge': knowledge}
+        if memory:
+            result['memory_recall'] = memory
+        return result
     if category == 'data':
-        # Phase 3: delegate to the data-agent skill (graceful 'data unavailable'
-        # for anything not actually provided - never a fabricated number)
         ok, out = _sh([str(DA_CLI), 'query', '--workspace', ws, '--question', prompt])
         if ok:
             return {'data_agent': out}
         return {'credential_status': _gather_credential_status(ws),
                 'digest_counts': _gather_digest(ws)}
-    # synthesize: bring the broad picture
-    return {'digest': _gather_digest(ws),
-            'approvals': _gather_approvals(ws),
-            'documents': _gather_documents(ws, ''),
-            'news': _gather_news(ws)}
+    # synthesize: bring the broad picture + memory recall for samudera
+    result = {'digest': _gather_digest(ws),
+              'approvals': _gather_approvals(ws),
+              'documents': _gather_documents(ws, ''),
+              'news': _gather_news(ws)}
+    if ws == 'samudera' and prompt:
+        result['memory_recall'] = _gather_memory(ws, prompt)
+        result['drive_status'] = _gather_drive_status(ws)
+    return result
 
 
 # ── synthesize ───────────────────────────────────────────────────────────

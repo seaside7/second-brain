@@ -135,6 +135,30 @@ SKILL_REGISTRY = {
         "description": "Samudera DT strategy framing: roadmap, operating model, maturity, priorities, options, sequencing, KPI/risk/governance alignment, executive recommendation; delegates evidence gathering to transformation-research",
         "cli_style": "flag",
     },
+    "drive-indexer": {
+        "script": "skills/drive-indexer/scripts/drive_index.py",
+        "category": "simple_lookup",
+        "description": "Recursively index Samudera Drive folder tree into local JSON; auto-detect projects; workspace-scoped to samudera",
+        "cli_style": "positional",
+    },
+    "drive-search": {
+        "script": "skills/drive-indexer/scripts/drive_search.py",
+        "category": "simple_lookup",
+        "description": "Search local Drive index by name/project; read files via personal Drive API on demand",
+        "cli_style": "positional",
+    },
+    "memory-recall": {
+        "script": "skills/memory-recall/scripts/memory_recall.py",
+        "category": "simple_lookup",
+        "description": "Unified memory recall: FAISS semantic search + Drive index keyword + state files; ranked by score + recency + confidence",
+        "cli_style": "positional",
+    },
+    "embedding-index": {
+        "script": "skills/knowledge-store/scripts/embedding_index.py",
+        "category": "simple_lookup",
+        "description": "Build/query FAISS embedding index for knowledge store using OpenAI text-embedding-3-small",
+        "cli_style": "positional",
+    },
 }
 
 

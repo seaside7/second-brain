@@ -1,0 +1,21 @@
+{
+  "root_folder_id": "10PLl9Z2umQSoIVXF2LVvJdvK8sihOICH",
+  "root_folder_name": "Samudera Indonesia",
+  "token_path": ".agent/workspaces/personal/token_drive.json",
+  "general_folder_patterns": ["general", "shared", "common", "company", "corporate"],
+  "index_file_extensions": [
+    ".md", ".txt", ".pdf", ".doc", ".docx",
+    ".xls", ".xlsx", ".csv", ".json",
+    ".ppt", ".pptx",
+    "application/vnd.google-apps.document",
+    "application/vnd.google-apps.spreadsheet",
+    "application/vnd.google-apps.presentation"
+  ],
+  "google_native_mimes": [
+    "application/vnd.google-apps.document",
+    "application/vnd.google-apps.spreadsheet",
+    "application/vnd.google-apps.presentation"
+  ],
+  "max_results_per_folder": 200,
+  "max_depth": 10
+}

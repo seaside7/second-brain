@@ -103,6 +103,23 @@ ACTION_POLICIES = {
     ("knowledge-store", "add"): POLICY_READ,
     ("knowledge-store", "list"): POLICY_READ,
     ("knowledge-store", "status"): POLICY_READ,
+    ("knowledge-store", "update"): POLICY_READ,
+    ("knowledge-store", "update-entry"): POLICY_READ,
+    # Drive Indexer
+    ("drive-indexer", "scan"): POLICY_READ,
+    ("drive-indexer", "status"): POLICY_READ,
+    # Drive Search
+    ("drive-search", "search"): POLICY_READ,
+    ("drive-search", "read"): POLICY_READ,
+    ("drive-search", "projects"): POLICY_READ,
+    # Memory Recall
+    ("memory-recall", "recall"): POLICY_READ,
+    ("memory-recall", "last"): POLICY_READ,
+    ("memory-recall", "status"): POLICY_READ,
+    # Embedding Index
+    ("embedding-index", "build"): POLICY_READ,
+    ("embedding-index", "search"): POLICY_READ,
+    ("embedding-index", "status"): POLICY_READ,
     # Document Intelligence (read-only)
     ("document-intelligence", "sync"): POLICY_READ,
     ("document-intelligence", "search"): POLICY_READ,
@@ -176,6 +193,22 @@ INTENT_PATTERNS = [
      "knowledge-store", "add", {"category": None, "content": None}),
     (["recall", "search knowledge", "what do i know about"],
      "knowledge-store", "search", {"query": None}),
+    (["update knowledge", "edit knowledge", "change knowledge entry"],
+     "knowledge-store", "update", {"category": None, "title_query": None, "content": None}),
+    # Drive
+    (["index drive", "scan drive", "rebuild drive index", "update drive index"],
+     "drive-indexer", "scan", {"workspace": None}),
+    (["search drive files", "find drive file", "drive file search"],
+     "drive-search", "search", {"query": None}),
+    (["list drive projects", "drive projects"],
+     "drive-search", "projects", {}),
+    (["read drive file", "open drive file", "export drive file"],
+     "drive-search", "read", {"id": None}),
+    # Memory recall
+    (["recall memory", "search memory", "what do i remember", "memory search", "recall all"],
+     "memory-recall", "recall", {"query": None}),
+    (["memory status", "recall status"],
+     "memory-recall", "status", {}),
     # Calendar
     (["calendar", "schedule", "my meetings today", "today events"],
      "google-calendar-connector", "sweep", {}),

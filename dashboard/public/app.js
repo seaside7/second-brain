@@ -910,7 +910,7 @@ const SAMUDERA_HIDDEN_TABS = ['meetings', 'hours', 'system'];
    panel is Samudera-primary: its endpoints are read-mostly + a prompt editor
    that writes .agent/skills/<skill>/ markdown, so it only ships to the
    office-safe view. */
-const SAMUDERA_ONLY_TABS = ['agents'];
+const SAMUDERA_ONLY_TABS = ['agents', 'memory'];
 
 function applySamuderaMode() {
   /* hide personal-harness tabs and force a safe tab if the hash targets one */

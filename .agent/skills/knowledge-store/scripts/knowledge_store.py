@@ -6,6 +6,11 @@ Stores durable knowledge per workspace, auto-classified into category files.
 Each entry is a markdown block with metadata. Deduplicated by content similarity.
 
 Storage: .agent/workspaces/<workspace>/knowledge/<category>.md
+
+Upgrades (this version):
+  --semantic  : search via FAISS embeddings (requires embedding_index.py build first)
+  update      : update an existing entry by category + title substring
+  update-entry: update an existing entry by exact category + block index
 """
 import argparse
 import hashlib
@@ -274,6 +279,230 @@ def list_entries(workspace_name=None, category=None):
     return results
 
 
+def update_knowledge(category, title_query, new_content, workspace_name=None,
+                     tags=None, confidence=None):
+    """Update an existing knowledge entry by category and title substring match.
+
+    Args:
+        category: category file to search in
+        title_query: substring to match against entry titles
+        new_content: replacement content for the entry body
+        workspace_name: workspace (default: active)
+        tags: optional new tags (list of strings)
+        confidence: optional new confidence level
+
+    Returns:
+        dict with result info, or None if not found
+    """
+    ctx = ws.get(workspace_name)
+    workspace_name = ctx.name
+    filepath = _category_file(workspace_name, category)
+
+    if not os.path.exists(filepath):
+        return None
+
+    content = _read_file(filepath)
+    blocks = re.split(r'\n---\n', content)
+    new_blocks = []
+    updated = False
+
+    for block in blocks:
+        block_stripped = block.strip()
+        if not block_stripped:
+            new_blocks.append(block)
+            continue
+        title_match = re.search(r'^### (.+)', block_stripped, re.M)
+        if title_match and title_query.lower() in title_match.group(1).lower():
+            old_title = title_match.group(1).strip()
+            date_str = datetime.now(WIB).strftime('%Y-%m-%d')
+            tags_str = ', '.join(f'#{t.strip().lstrip("#")}' for t in (tags or []))
+            conf_str = confidence or 'high'
+
+            lines = []
+            lines.append(f'### {old_title}')
+            lines.append(f'- **Date**: {date_str}')
+            if tags_str:
+                lines.append(f'- **Tags**: {tags_str}')
+            lines.append(f'- **Source**: manual')
+            lines.append(f'- **Confidence**: {conf_str}')
+            lines.append('')
+            lines.append(new_content.strip())
+            block = '\n'.join(lines)
+            updated = True
+        new_blocks.append(block)
+
+    if not updated:
+        return None
+
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write('\n---\n'.join(new_blocks))
+
+    return {
+        'workspace': workspace_name,
+        'category': category,
+        'title_query': title_query,
+        'updated': True,
+    }
+
+
+def update_entry(category, block_index, new_content, workspace_name=None,
+                 tags=None, confidence=None):
+    """Update a knowledge entry by exact category + block index.
+
+    Args:
+        category: category file to search in
+        block_index: 0-based index of the entry block within the category file
+        new_content: replacement content for the entry body
+        workspace_name: workspace (default: active)
+        tags: optional new tags (list of strings)
+        confidence: optional new confidence level
+
+    Returns:
+        dict with result info, or None if not found
+    """
+    ctx = ws.get(workspace_name)
+    workspace_name = ctx.name
+    filepath = _category_file(workspace_name, category)
+
+    if not os.path.exists(filepath):
+        return None
+
+    content = _read_file(filepath)
+    blocks = re.split(r'\n---\n', content)
+
+    entry_blocks = []
+    for block in blocks:
+        block_stripped = block.strip()
+        if not block_stripped:
+            continue
+        if block_stripped.startswith('# ') and '###' not in block_stripped:
+            continue
+        entry_blocks.append(block)
+
+    if block_index < 0 or block_index >= len(entry_blocks):
+        return None
+
+    old_block = entry_blocks[block_index]
+    title_match = re.search(r'^### (.+)', old_block, re.M)
+    old_title = title_match.group(1).strip() if title_match else 'untitled'
+
+    date_str = datetime.now(WIB).strftime('%Y-%m-%d')
+    tags_str = ', '.join(f'#{t.strip().lstrip("#")}' for t in (tags or []))
+    conf_str = confidence or 'high'
+
+    lines = []
+    lines.append(f'### {old_title}')
+    lines.append(f'- **Date**: {date_str}')
+    if tags_str:
+        lines.append(f'- **Tags**: {tags_str}')
+    lines.append(f'- **Source**: manual')
+    lines.append(f'- **Confidence**: {conf_str}')
+    lines.append('')
+    lines.append(new_content.strip())
+    new_block = '\n'.join(lines)
+
+    entry_blocks[block_index] = new_block
+    new_content_str = '\n---\n'.join(entry_blocks)
+
+    header_match = re.match(r'^(# .+\n\n?)', content)
+    if header_match:
+        new_content_str = header_match.group(1) + new_content_str
+
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write(new_content_str)
+
+    return {
+        'workspace': workspace_name,
+        'category': category,
+        'title': old_title,
+        'block_index': block_index,
+        'updated': True,
+    }
+
+
+def semantic_search_knowledge(query, workspace_name=None, top_k=5):
+    """Semantic search via FAISS embeddings. Falls back to substring if no index.
+
+    Args:
+        query: search string
+        workspace_name: workspace (default: active)
+        top_k: max results
+
+    Returns:
+        list of matching entries with scores
+    """
+    ctx = ws.get(workspace_name)
+    workspace_name = ctx.name
+
+    state_dir = os.path.join(ctx.dir, 'state')
+    faiss_path = os.path.join(state_dir, 'knowledge_embeddings.faiss')
+    meta_path = os.path.join(state_dir, 'knowledge_embeddings_meta.json')
+
+    if not os.path.exists(faiss_path) or not os.path.exists(meta_path):
+        return search_knowledge(query, workspace_name=workspace_name)
+
+    try:
+        import faiss
+        import numpy as np
+    except ImportError:
+        return search_knowledge(query, workspace_name=workspace_name)
+
+    with open(meta_path, 'r', encoding='utf-8') as fh:
+        meta = json.load(fh)
+
+    index = faiss.read_index(faiss_path)
+
+    api_key = None
+    env_path = os.path.join(REPO_ROOT, '.env')
+    if os.path.exists(env_path):
+        with open(env_path, 'r', encoding='utf-8') as fh:
+            for line in fh:
+                if line.strip().startswith('OPENAI_API_KEY='):
+                    api_key = line.strip().split('=', 1)[1].strip()
+    if not api_key:
+        api_key = os.environ.get('OPENAI_API_KEY')
+
+    if not api_key:
+        return search_knowledge(query, workspace_name=workspace_name)
+
+    import urllib.request
+    url = 'https://api.openai.com/v1/embeddings'
+    payload = json.dumps({
+        'model': meta.get('model', 'text-embedding-3-small'),
+        'input': [query],
+    }).encode('utf-8')
+    req = urllib.request.Request(url, data=payload, headers={
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer %s' % api_key,
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+        q_embedding = data['data'][0]['embedding']
+    except Exception:
+        return search_knowledge(query, workspace_name=workspace_name)
+
+    q_vec = np.array([q_embedding], dtype=np.float32)
+    distances, indices = index.search(q_vec, min(top_k, len(meta['entries'])))
+
+    results = []
+    for dist, idx in zip(distances[0], indices[0]):
+        if idx < 0 or idx >= len(meta['entries']):
+            continue
+        e = meta['entries'][idx]
+        score = max(0.0, 1.0 - dist / 100.0)
+        results.append({
+            'category': e['category'],
+            'title': e['title'],
+            'tags': e.get('tags', ''),
+            'date': e.get('date', ''),
+            'content': e.get('body', ''),
+            'score': round(score, 3),
+        })
+
+    return results
+
+
 def get_status(workspace_name=None):
     """Get entry counts per category."""
     ctx = ws.get(workspace_name)
@@ -329,8 +558,12 @@ def cmd_add(args):
 
 def cmd_search(args):
     ctx = ws.get(args.workspace)
-    results = search_knowledge(args.query, workspace_name=args.workspace,
-                               category=args.category)
+    if args.semantic:
+        results = semantic_search_knowledge(args.query, workspace_name=args.workspace,
+                                            top_k=args.limit)
+    else:
+        results = search_knowledge(args.query, workspace_name=args.workspace,
+                                   category=args.category)
 
     if not results:
         print(f"[{ctx.name}] No results for '{args.query}'.")
@@ -338,8 +571,10 @@ def cmd_search(args):
 
     print(f"[{ctx.name}] Found {len(results)} result(s) for '{args.query}':\n")
     for r in results:
-        print(f"  [{r['category']}] {r['title']} ({r['date']})")
-        # Show snippet
+        score_str = ''
+        if 'score' in r:
+            score_str = '  score=%.3f' % r['score']
+        print(f"  [{r['category']}] {r['title']} ({r['date']}){score_str}")
         lines = r['content'].split('\n')
         content_lines = [l for l in lines
                          if not l.startswith('- **') and not l.startswith('###') and l.strip()]
@@ -372,11 +607,44 @@ def cmd_status(args):
         print(f"  {cat:<15} {count:>3}  {bar}")
 
 
+def cmd_update(args):
+    ctx = ws.get(args.workspace)
+    tags = [t.strip() for t in args.tags.split(',')] if args.tags else None
+    result = update_knowledge(
+        category=args.category,
+        title_query=args.title_query,
+        new_content=args.content,
+        workspace_name=args.workspace,
+        tags=tags,
+        confidence=args.confidence,
+    )
+    if result:
+        print(f"[{ctx.name}] Updated entry in {result['category']} matching '{result['title_query']}'")
+    else:
+        print(f"[{ctx.name}] No entry found matching '{args.title_query}' in {args.category}")
+
+
+def cmd_update_entry(args):
+    ctx = ws.get(args.workspace)
+    tags = [t.strip() for t in args.tags.split(',')] if args.tags else None
+    result = update_entry(
+        category=args.category,
+        block_index=args.index,
+        new_content=args.content,
+        workspace_name=args.workspace,
+        tags=tags,
+        confidence=args.confidence,
+    )
+    if result:
+        print(f"[{ctx.name}] Updated entry '{result['title']}' (index {result['block_index']}) in {result['category']}")
+    else:
+        print(f"[{ctx.name}] No entry found at index {args.index} in {args.category}")
+
+
 def main():
     p = argparse.ArgumentParser(description='Knowledge Store')
     sub = p.add_subparsers(dest='cmd')
 
-    # add
     ap = sub.add_parser('add', help='Add a knowledge entry')
     ap.add_argument('--workspace', default=None)
     ap.add_argument('--category', required=True, choices=VALID_CATEGORIES)
@@ -386,18 +654,33 @@ def main():
     ap.add_argument('--source', default='manual')
     ap.add_argument('--confidence', default='high', choices=['high', 'medium', 'low'])
 
-    # search
     sp = sub.add_parser('search', help='Search knowledge')
     sp.add_argument('--workspace', default=None)
     sp.add_argument('--query', required=True)
     sp.add_argument('--category', default=None, choices=VALID_CATEGORIES)
+    sp.add_argument('--semantic', action='store_true', help='Use FAISS semantic search')
+    sp.add_argument('--limit', type=int, default=5, help='Max results for semantic search')
 
-    # list
+    up = sub.add_parser('update', help='Update entry by category + title match')
+    up.add_argument('--workspace', default=None)
+    up.add_argument('--category', required=True, choices=VALID_CATEGORIES)
+    up.add_argument('--title-query', required=True, help='Substring to match against titles')
+    up.add_argument('--content', required=True, help='New content for the entry')
+    up.add_argument('--tags', default='', help='Comma-separated tags')
+    up.add_argument('--confidence', default='high', choices=['high', 'medium', 'low'])
+
+    ue = sub.add_parser('update-entry', help='Update entry by category + block index')
+    ue.add_argument('--workspace', default=None)
+    ue.add_argument('--category', required=True, choices=VALID_CATEGORIES)
+    ue.add_argument('--index', type=int, required=True, help='0-based block index')
+    ue.add_argument('--content', required=True, help='New content for the entry')
+    ue.add_argument('--tags', default='', help='Comma-separated tags')
+    ue.add_argument('--confidence', default='high', choices=['high', 'medium', 'low'])
+
     lp = sub.add_parser('list', help='List entries')
     lp.add_argument('--workspace', default=None)
     lp.add_argument('--category', default=None, choices=VALID_CATEGORIES)
 
-    # status
     stp = sub.add_parser('status', help='Show entry counts')
     stp.add_argument('--workspace', default=None)
 
@@ -406,6 +689,8 @@ def main():
     handlers = {
         'add': cmd_add,
         'search': cmd_search,
+        'update': cmd_update,
+        'update-entry': cmd_update_entry,
         'list': cmd_list,
         'status': cmd_status,
     }
