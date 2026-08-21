@@ -381,7 +381,7 @@ def cmd_recall(args):
     }
     os.makedirs(os.path.dirname(cache_path), exist_ok=True)
     with open(cache_path, 'w', encoding='utf-8') as fh:
-        json.dump(cache, fh, ensure_ascii=False, indent=2)
+        json.dump(cache, fh, ensure_ascii=False, indent=2, default=lambda o: float(o) if hasattr(o, '__float__') else str(o))
 
 
 def cmd_last(args):
