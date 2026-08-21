@@ -2518,7 +2518,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             length = int(self.headers.get('Content-Length', 0))
             body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
             tid = body.get('id')
-            doc = json.loads(TICKETS_PATH.read_text(encoding='utf-8'))
+            ws = getattr(self, 'ws', None) or 'combined'
+            tickets_path = _workspace_ledger_path(ws, TICKETS_PATH)
+            doc = json.loads(tickets_path.read_text(encoding='utf-8'))
             tickets = doc.get('tickets', [])
             creating = False
 
@@ -2565,11 +2567,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     return
             if creating:
                 doc['tickets'] = tickets
-                tmp = str(TICKETS_PATH) + '.tmp'
+                tmp = str(tickets_path) + '.tmp'
                 with open(tmp, 'w', encoding='utf-8') as fh:
                     json.dump(doc, fh, ensure_ascii=False, indent=2)
                 json.loads(open(tmp, encoding='utf-8').read())
-                os.replace(tmp, TICKETS_PATH)
+                os.replace(tmp, tickets_path)
                 try:
                     subprocess.run(['python3', '.agent/scripts/activity_log.py', '--actor', 'owner',
                                     '--action', 'ticket_create', '--project', t.get('project', 'Other'),
@@ -2605,11 +2607,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                                   'change': '; '.join(changes), 'text': comment})
             doc['tickets'] = tickets
             # atomic swap: write tmp, validate, replace
-            tmp = str(TICKETS_PATH) + '.tmp'
+            tmp = str(tickets_path) + '.tmp'
             with open(tmp, 'w', encoding='utf-8') as fh:
                 json.dump(doc, fh, ensure_ascii=False, indent=2)
             json.loads(open(tmp, encoding='utf-8').read())  # validate
-            os.replace(tmp, TICKETS_PATH)
+            os.replace(tmp, tickets_path)
             # log the event (full-context memory) incl. the reason
             summary = f"{tid}: " + ('; '.join(changes) if changes else 'comment')
             if comment:
