@@ -1918,42 +1918,75 @@ def _ensure_meetings_synced(ws_name, max_age_min=30):
 
 
 def _chat_memory_context(ws_name, query):
-    """Run memory recall for the user's query and return formatted context.
-    Includes knowledge entries + Drive file content snippets."""
-    import subprocess as _sp
-    script = str(BASE_DIR / '.agent' / 'skills' / 'memory-recall' / 'scripts' / 'memory_recall.py')
+    """Inline keyword search across Drive index + knowledge store for chat.
+    No subprocess, no OpenAI call — just fast JSON search."""
     ws = ws_name or 'samudera'
-    try:
-        r = _sp.run([sys.executable, script, 'recall', '--workspace', ws,
-                      '--query', query, '--top', '5'],
-                     capture_output=True, text=True, cwd=str(BASE_DIR), timeout=30)
-        code = r.returncode
-    except Exception:
-        code = -1
-    cache_path = BASE_DIR / '.agent' / 'workspaces' / ws / 'state' / 'last_recall.json'
-    if code != 0 or not cache_path.exists():
-        return '(no memory results)'
-    try:
-        data = json.loads(cache_path.read_text(encoding='utf-8'))
-    except Exception:
-        return '(no memory results)'
-    results = data.get('results', [])
+    ws_dir = BASE_DIR / '.agent' / 'workspaces' / ws
+    terms = [t.lower() for t in query.split() if len(t) > 2]
+    if not terms:
+        return '(no relevant memory found)'
+
+    results = []
+
+    # Drive index search
+    drive_path = ws_dir / 'state' / 'drive_index.json'
+    if drive_path.exists():
+        try:
+            idx = json.loads(drive_path.read_text(encoding='utf-8'))
+            for f in idx.get('files', []):
+                blob = (f.get('name', '') + ' ' + f.get('folder_path', '') +
+                        ' ' + f.get('project', '') + ' ' + f.get('content', '')).lower()
+                score = sum(1 for t in terms if t in blob)
+                if score == 0:
+                    continue
+                content_preview = (f.get('content') or '')[:1200]
+                results.append({
+                    'source': 'drive',
+                    'title': f.get('name', '?'),
+                    'project': f.get('project', ''),
+                    'content': content_preview,
+                    'score': score / len(terms),
+                })
+        except Exception:
+            pass
+
+    # Knowledge store search
+    kb_dir = ws_dir / 'knowledge'
+    if kb_dir.exists():
+        for md_file in kb_dir.glob('*.md'):
+            try:
+                text = md_file.read_text(encoding='utf-8')
+                blob = text.lower()
+                score = sum(1 for t in terms if t in blob)
+                if score == 0:
+                    continue
+                # Extract relevant snippet around first match
+                idx_match = min((blob.find(t) for t in terms if t in blob), default=0)
+                start = max(0, idx_match - 200)
+                end = min(len(text), idx_match + 1200)
+                snippet = text[start:end]
+                results.append({
+                    'source': 'knowledge',
+                    'title': md_file.stem,
+                    'content': snippet,
+                    'score': score / len(terms),
+                })
+            except Exception:
+                pass
+
+    results.sort(key=lambda x: -x['score'])
+    results = results[:5]
     if not results:
         return '(no relevant memory found)'
+
     lines = []
     for r in results:
-        src = r.get('source', '?')
-        title = r.get('title', '?')
-        content = r.get('content', '')
-        project = r.get('project', '')
-        score = r.get('score', 0)
-        header = f'[{src}] {title}'
-        if project:
-            header += f' (project: {project})'
-        header += f' [relevance: {score}]'
+        header = f'[{r["source"]}] {r["title"]}'
+        if r.get('project'):
+            header += f' (project: {r["project"]})'
+        header += f' [relevance: {r["score"]:.1f}]'
         lines.append(header)
-        if content:
-            lines.append(content[:1500])
+        lines.append(r['content'])
         lines.append('')
     return '\n'.join(lines)
 
