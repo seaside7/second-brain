@@ -1,36 +1,5 @@
 {
-  "updated_wib": "2026-08-14",
+  "updated_wib": "2026-08-21",
   "source": "manual-seed",
-  "tickets": [
-    {
-      "id": "SAM-0001",
-      "title": "Handle the task for the C-MAP meeting",
-      "priority": "P1",
-      "status": "todo",
-      "kind": "action",
-      "owner": "Sa'id",
-      "project": "C-MAP",
-      "due": "2026-08-13",
-      "note": "Seeded from MOM 2026-08-13 (C-MAP coordination). Deadline was 15:00 WIB 2026-08-13 - verify status.",
-      "links": ["Clients/Samudera/meetings/MOM_Meeting_Title_2026-08-13.md"],
-      "initiative_id": null,
-      "created_at": "2026-08-14T00:00:00+07:00",
-      "updated_at": "2026-08-14T00:00:00+07:00"
-    },
-    {
-      "id": "SAM-0002",
-      "title": "Send the C-MAP meeting summary to Pak Rando",
-      "priority": "P1",
-      "status": "todo",
-      "kind": "action",
-      "owner": "Sa'id",
-      "project": "C-MAP",
-      "due": "2026-08-13",
-      "note": "Seeded from MOM 2026-08-13 (C-MAP coordination). Deadline was 16:00 WIB 2026-08-13 - verify status.",
-      "links": ["Clients/Samudera/meetings/MOM_Meeting_Title_2026-08-13.md"],
-      "initiative_id": null,
-      "created_at": "2026-08-14T00:00:00+07:00",
-      "updated_at": "2026-08-14T00:00:00+07:00"
-    }
-  ]
+  "tickets": []
 }

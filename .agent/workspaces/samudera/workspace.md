@@ -36,17 +36,11 @@
 
 <!-- TODO: Name | Title | Relationship | Communication preference | Notes -->
 
-| Name | Title | Relationship | Notes |
-|---|---|---|---|
-| Pak Rando | <!-- TODO --> | <!-- TODO --> | Expects C-MAP meeting summaries (per MOM 2026-08-13) |
-
 ---
 
 ## Current Initiatives
 
-| Initiative | Status | Owner | Timeline | Success metric |
-|---|---|---|---|---|
-| C-MAP coordination | Active | Sa'id | 2026-08-13+ | Meeting task handled; summary delivered to Pak Rando (verify status) |
+<!-- TODO -->
 
 ---
 
@@ -67,10 +61,6 @@
 ## Meetings
 
 <!-- TODO: recurring meetings — name, cadence, attendees, purpose, prep -->
-
-| Meeting | Cadence | Purpose |
-|---|---|---|
-| C-MAP coordination | Ad hoc | C-MAP program coordination and follow-ups (first recorded 2026-08-13) |
 
 ---
 
@@ -112,9 +102,7 @@
 
 ## Current Priorities
 
-1. **C-MAP coordination** — handle the C-MAP meeting task and deliver the meeting summary to Pak Rando (deadlines 2026-08-13; status to verify).
-2. <!-- TODO -->
-3. <!-- TODO -->
+<!-- TODO -->
 
 ---
 

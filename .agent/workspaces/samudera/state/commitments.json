@@ -1,32 +1,6 @@
 {
-  "next_seq": 2,
-  "items": {
-    "COM-0001": {
-      "id": "COM-0001",
-      "text": "Send the C-MAP meeting summary to Pak Rando",
-      "to": "Pak Rando",
-      "to_slug": "pak-rando",
-      "channel": null,
-      "channel_name": null,
-      "thread_ts": null,
-      "permalink": "Clients/Samudera/meetings/MOM_Meeting_Title_2026-08-13.md",
-      "due": "2026-08-13",
-      "project": "C-MAP",
-      "source": {
-        "type": "meeting-local",
-        "ref": "Clients/Samudera/meetings/MOM_Meeting_Title_2026-08-13.md"
-      },
-      "status": "open",
-      "confidence": "high",
-      "first_seen": 1786581600.0,
-      "closed_at": null,
-      "closed_by": null,
-      "priority": true,
-      "notes": [
-        "Seeded from MOM 2026-08-13 (C-MAP coordination). Deadline was 16:00 WIB 2026-08-13 - verify status."
-      ]
-    }
-  },
+  "next_seq": 1,
+  "items": {},
   "slack_search_watermark": 0.0,
   "local_watermark": 0.0,
   "processed_fathom_ids": [],
