@@ -11,7 +11,7 @@
 window.Tabs = window.Tabs || {};
 
 const MemoryTab = (() => {
-  const { h, fetchJSON, toast } = U;
+  const { toast } = U;
 
   /* ── State ──────────────────────────────────────────────────────── */
   let _status = null;
@@ -22,31 +22,31 @@ const MemoryTab = (() => {
   /* ── API helpers ────────────────────────────────────────────────── */
   async function getStatus() {
     try {
-      return await fetchJSON('/api/memory-status');
+      return await U.fetchJSON('/api/memory-status');
     } catch { return null; }
   }
 
   async function recall(q, top = 10) {
     try {
-      return await fetchJSON('/api/memory-recall?q=' + encodeURIComponent(q) + '&top=' + top);
+      return await U.fetchJSON('/api/memory-recall?q=' + encodeURIComponent(q) + '&top=' + top);
     } catch { return { results: [] }; }
   }
 
   async function lastRecall() {
     try {
-      return await fetchJSON('/api/memory-last');
+      return await U.fetchJSON('/api/memory-last');
     } catch { return { results: [] }; }
   }
 
   async function driveIndex() {
     try {
-      return await fetchJSON('/api/drive-index');
+      return await U.fetchJSON('/api/drive-index');
     } catch { return { exists: false }; }
   }
 
   async function driveProjects() {
     try {
-      return await fetchJSON('/api/drive-projects');
+      return await U.fetchJSON('/api/drive-projects');
     } catch { return []; }
   }
 
@@ -54,32 +54,32 @@ const MemoryTab = (() => {
     const params = new URLSearchParams({ q });
     if (project) params.set('project', project);
     try {
-      return await fetchJSON('/api/drive-search?' + params.toString());
+      return await U.fetchJSON('/api/drive-search?' + params.toString());
     } catch { return []; }
   }
 
   async function knowledgeStatus() {
     try {
-      return await fetchJSON('/api/knowledge-status');
+      return await U.fetchJSON('/api/knowledge-status');
     } catch { return {}; }
   }
 
   async function knowledgeEntries(cat) {
     const params = cat ? '?category=' + encodeURIComponent(cat) : '';
     try {
-      return await fetchJSON('/api/knowledge-entries' + params);
+      return await U.fetchJSON('/api/knowledge-entries' + params);
     } catch { return []; }
   }
 
   async function rebuildDriveIndex() {
     try {
-      return await fetchJSON('/api/drive-index-rebuild', { method: 'POST' });
+      return await U.fetchJSON('/api/drive-index-rebuild', { method: 'POST' });
     } catch (e) { return { error: e.message }; }
   }
 
   async function buildEmbeddings() {
     try {
-      return await fetchJSON('/api/knowledge-build-embeddings', { method: 'POST' });
+      return await U.fetchJSON('/api/knowledge-build-embeddings', { method: 'POST' });
     } catch (e) { return { error: e.message }; }
   }
 
