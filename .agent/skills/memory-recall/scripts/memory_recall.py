@@ -275,18 +275,20 @@ def _search_drive(ws_name, query, top_k=10):
 
 
 def _search_state(ws_name, query, top_k=10):
-    """Search state files (tasks, timeline, milestones)."""
+    """Search state files (tasks, timeline, milestones, reminders, memory_notes)."""
     state_dir = os.path.join(_ws_dir(ws_name), 'state')
     results = []
 
-    for filename in ['tasks.json', 'timeline.json', 'milestones.json']:
+    for filename in ['tasks.json', 'timeline.json', 'milestones.json', 'reminders.json']:
         path = os.path.join(state_dir, filename)
         data = _load_json(path)
         if not data:
             continue
 
         entries = data if isinstance(data, list) else data.get('entries', [])
-        if isinstance(data, dict) and not isinstance(entries, list):
+        if isinstance(data, dict) and isinstance(entries, dict):
+            entries = list(entries.values())
+        elif isinstance(data, dict) and not isinstance(entries, list):
             entries = [data]
 
         for i, entry in enumerate(entries):
@@ -295,13 +297,40 @@ def _search_state(ws_name, query, top_k=10):
             if score == 0:
                 continue
 
+            # Boost score for upcoming milestones/reminders
+            date_str = entry.get('date', entry.get('trigger_date', entry.get('created', '')))
+            rec = _recency_score(date_str)
+            if filename in ('milestones.json', 'reminders.json'):
+                score = min(1.0, score * 0.7 + rec * 0.3)
+
             results.append({
                 'source': 'state',
                 'file': filename,
                 'entry_index': i,
                 'title': entry.get('name', entry.get('title', entry.get('task', '?'))),
-                'date': entry.get('date', entry.get('created', '')),
+                'date': date_str,
                 'content': entry_text[:500],
+                'score': round(score, 3),
+            })
+
+    # Also search memory_notes index for type/tag metadata
+    notes_path = os.path.join(state_dir, 'memory_notes.json')
+    notes_data = _load_json(notes_path)
+    if notes_data and isinstance(notes_data, dict):
+        for nid, entry in notes_data.get('entries', {}).items():
+            if entry.get('status') != 'active':
+                continue
+            entry_text = json.dumps(entry, ensure_ascii=False)
+            score = _keyword_score(query, entry_text)
+            if score == 0:
+                continue
+            results.append({
+                'source': 'memory_note',
+                'file': 'memory_notes.json',
+                'entry_index': nid,
+                'title': entry.get('title', '?'),
+                'date': entry.get('date', entry.get('created_wib', '')),
+                'content': entry.get('text', entry_text[:500]),
                 'score': round(score, 3),
             })
 

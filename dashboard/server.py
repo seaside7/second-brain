@@ -131,6 +131,8 @@ SAMUDERA_ALLOWED_GET = {
     '/api/drive-index', '/api/drive-projects', '/api/drive-search',
     '/api/memory-recall', '/api/memory-status', '/api/memory-last',
     '/api/knowledge-status', '/api/knowledge-entries',
+    # Memory Inbox
+    '/api/memory-notes',
     # AI task runs
     '/api/ai-task',
 }
@@ -144,7 +146,8 @@ SAMUDERA_ALLOWED_POST = {'/api/chat', '/api/approval-decision',
                          '/api/drive-index-rebuild', '/api/knowledge-build-embeddings',
                          '/api/action', '/api/toggle',
                          '/api/waiting-add', '/api/waiting-close',
-                         '/api/commitment-close', '/api/commitment-link'}
+                         '/api/commitment-close', '/api/commitment-link',
+                         '/api/memory-note', '/api/memory-note/edit'}
 
 # ── Chatbox: permanent (static) suggestion categories ──────────────────────
 # The same five categories for every workspace; the workspace-scoped context
@@ -1982,6 +1985,29 @@ def _chat_memory_context(ws_name, query):
             except Exception:
                 pass
 
+    # Memory notes search
+    notes_path = ws_dir / 'state' / 'memory_notes.json'
+    if notes_path.exists():
+        try:
+            nd = json.loads(notes_path.read_text(encoding='utf-8'))
+            for nid, entry in nd.get('entries', {}).items():
+                if entry.get('status') != 'active':
+                    continue
+                blob = (entry.get('text', '') + ' ' + entry.get('title', '') +
+                        ' ' + ' '.join(entry.get('entities', []))).lower()
+                score = sum(1 for t in terms if t in blob)
+                if score == 0:
+                    continue
+                results.append({
+                    'source': 'memory_note',
+                    'title': entry.get('title', '?'),
+                    'project': entry.get('project', ''),
+                    'content': entry.get('text', '')[:1500],
+                    'score': score / len(terms),
+                })
+        except Exception:
+            pass
+
     results.sort(key=lambda x: -x['score'])
     results = results[:5]
     if not results:
@@ -2468,6 +2494,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_get_knowledge_status()
         elif self.path.split('?')[0] == '/api/knowledge-entries':
             self._handle_get_knowledge_entries()
+        elif self.path.split('?')[0] == '/api/memory-notes':
+            self._handle_get_memory_notes()
         else:
             super().do_GET()
 
@@ -2567,6 +2595,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_post_drive_index_rebuild()
         elif self.path == '/api/knowledge-build-embeddings':
             self._handle_post_knowledge_build_embeddings()
+        elif self.path == '/api/memory-note':
+            self._handle_post_memory_note()
+        elif self.path == '/api/memory-note/edit':
+            self._handle_post_memory_note_edit()
         else:
             self.send_error(404, 'Not Found')
 
@@ -6446,6 +6478,92 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._send_json(500, json.dumps({'error': err or 'build failed', 'output': out}))
             return
         self._send_json(200, json.dumps({'ok': True, 'output': out}))
+
+    # ── Memory Inbox ────────────────────────────────────────────────────────
+
+    def _handle_get_memory_notes(self):
+        """GET /api/memory-notes?limit=N&type=TYPE — list recent memory notes."""
+        ws = self._request_ws()
+        qs = parse_qs(urlsplit(self.path).query)
+        limit = int(qs.get('limit', ['20'])[0])
+        mem_type = (qs.get('type', [''])[0]).strip() or None
+        script = str(BASE_DIR / '.agent' / 'scripts' / 'memory_inbox.py')
+        cmd = ['list', '--workspace', ws, '--limit', str(limit)]
+        if mem_type:
+            cmd.extend(['--type', mem_type])
+        code, out, err = self._run_script(script, cmd, timeout=10)
+        if code != 0:
+            self._send_json(200, json.dumps([]))
+            return
+        try:
+            notes = json.loads(out)
+        except Exception:
+            notes = []
+        self._send_json(200, json.dumps(notes, ensure_ascii=False))
+
+    def _handle_post_memory_note(self):
+        """POST /api/memory-note {text, workspace} — classify + store a memory note."""
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+        except Exception:
+            self._send_json(400, json.dumps({'error': 'invalid JSON'}))
+            return
+        text = (body.get('text') or '').strip()
+        ws = self._request_ws()
+        if not text:
+            self._send_json(400, json.dumps({'error': 'text is required'}))
+            return
+        # Classify
+        cls_script = str(BASE_DIR / '.agent' / 'scripts' / 'memory_classifier.py')
+        code, out, err = self._run_script(cls_script, ['classify', '--text', text], timeout=30)
+        if code != 0:
+            self._send_json(500, json.dumps({'error': 'classification failed', 'detail': err}))
+            return
+        try:
+            classification = json.loads(out)
+        except Exception:
+            self._send_json(500, json.dumps({'error': 'invalid classifier output'}))
+            return
+        # Store
+        inbox_script = str(BASE_DIR / '.agent' / 'scripts' / 'memory_inbox.py')
+        store_cmd = ['store', '--workspace', ws, '--classification', json.dumps(classification, ensure_ascii=False)]
+        code, out, err = self._run_script(inbox_script, store_cmd, timeout=30)
+        if code != 0:
+            self._send_json(500, json.dumps({'error': 'storage failed', 'detail': err}))
+            return
+        try:
+            result = json.loads(out)
+        except Exception:
+            self._send_json(500, json.dumps({'error': 'invalid storage output'}))
+            return
+        result['classification'] = classification
+        self._send_json(200, json.dumps(result, ensure_ascii=False))
+
+    def _handle_post_memory_note_edit(self):
+        """POST /api/memory-note/edit {id, text, workspace} — edit/supersede a note."""
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+        except Exception:
+            self._send_json(400, json.dumps({'error': 'invalid JSON'}))
+            return
+        note_id = (body.get('id') or '').strip()
+        text = (body.get('text') or '').strip()
+        ws = self._request_ws()
+        if not note_id or not text:
+            self._send_json(400, json.dumps({'error': 'id and text are required'}))
+            return
+        script = str(BASE_DIR / '.agent' / 'scripts' / 'memory_inbox.py')
+        code, out, err = self._run_script(script, ['edit', '--workspace', ws, '--id', note_id, '--text', text], timeout=30)
+        if code != 0:
+            self._send_json(500, json.dumps({'error': 'edit failed', 'detail': err}))
+            return
+        try:
+            result = json.loads(out)
+        except Exception:
+            result = {'ok': True}
+        self._send_json(200, json.dumps(result, ensure_ascii=False))
 
     def log_message(self, format, *args):
         if args and isinstance(args[0], str) and '/api/' in args[0]:

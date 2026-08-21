@@ -2,8 +2,8 @@
   "version": 1,
   "model": "text-embedding-3-small",
   "dimension": 1536,
-  "count": 1,
-  "built_wib": "2026-08-21T11:57:53+07:00",
+  "count": 3,
+  "built_wib": "2026-08-21T14:53:13+07:00",
   "entries": [
     {
       "category": "business",
@@ -14,6 +14,28 @@
       "body": "# Business Knowledge\n\n### Role and company context\n- **Date**: 2026-08-14\n- **Tags**: #samudera, #role, #dt\n- **Source**: manual\n- **Confidence**: high\n\nSaid is Head of Digital Transformation at Samudera Indonesia, a shipping/maritime logistics group in Indonesia. Mandate: digital transformation strategy, AI initiatives, business process analysis, technology roadmaps. Works in initiatives, not tickets.",
       "searchable": "Role and company context business # Business Knowledge ### Role and company context - **Date**: 2026-08-14 - **Tags**: #samudera, #role, #dt - **Source**: manual - **Confidence**: high Said is Head of Digital Transformation at Samudera Indonesia, a shipping/maritime logistics group in Indonesia. Mandate: digital transformation strategy, AI initiatives, business process analysis, technology roadmaps. Works in initiatives, not tickets.",
       "file": "business.md",
+      "block_index": 0
+    },
+    {
+      "category": "glossary",
+      "title": "PSP",
+      "date": "",
+      "tags": "",
+      "confidence": "medium",
+      "body": "# Glossary Knowledge\n\n### PSP\n- **Date**: 2026-08-21\n- **Tags**: #PSP, #Pelabuhan, #Samudera, #Palaran\n- **Source**: user_note\n- **Confidence**: high\n\nPSP = Pelabuhan Samudera Palaran",
+      "searchable": "PSP glossary # Glossary Knowledge ### PSP - **Date**: 2026-08-21 - **Tags**: #PSP, #Pelabuhan, #Samudera, #Palaran - **Source**: user_note - **Confidence**: high PSP = Pelabuhan Samudera Palaran",
+      "file": "glossary.md",
+      "block_index": 0
+    },
+    {
+      "category": "projects",
+      "title": "TSJ, PNP and PSP will not use Salesforce in CRM Phase 1 because their customers",
+      "date": "",
+      "tags": "",
+      "confidence": "medium",
+      "body": "# Projects Knowledge\n\n### TSJ, PNP and PSP will not use Salesforce in CRM Phase 1 because their customers \n- **Date**: 2026-08-21\n- **Tags**: #TSJ, #PNP, #PSP, #Salesforce, #CRM\n- **Source**: user_note\n- **Confidence**: medium\n\nTSJ, PNP and PSP will not use Salesforce in CRM Phase 1 because their customers come from the principals",
+      "searchable": "TSJ, PNP and PSP will not use Salesforce in CRM Phase 1 because their customers projects # Projects Knowledge ### TSJ, PNP and PSP will not use Salesforce in CRM Phase 1 because their customers - **Date**: 2026-08-21 - **Tags**: #TSJ, #PNP, #PSP, #Salesforce, #CRM - **Source**: user_note - **Confidence**: medium TSJ, PNP and PSP will not use Salesforce in CRM Phase 1 because their customers come from the principals",
+      "file": "projects.md",
       "block_index": 0
     }
   ]

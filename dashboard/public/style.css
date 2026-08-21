@@ -2480,6 +2480,66 @@ a.ticket-chip:hover { border-color: var(--border-active); color: var(--text-acce
 }
 .chat-sugg-btn:hover, .chat-send-btn:hover { border-color: var(--border-active); color: var(--text-primary); }
 
+/* ── Memory Notes chatbox (notes-chat.js) ── */
+.notes-box { display: flex; flex-direction: column; gap: var(--sp-3); height: 100%; }
+.notes-hint { font-size: var(--fs-xs); color: var(--text-muted); padding: 4px 0; }
+.notes-body {
+  flex: 1; min-height: 260px; max-height: 52vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: var(--sp-3);
+  padding: var(--sp-3); background: var(--bg-input);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.notes-empty { color: var(--text-muted); font-size: var(--fs-sm); padding: 12px 0; text-align: center; }
+.notes-recent-title { font-size: var(--fs-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+.notes-item {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-xs); font-size: var(--fs-sm); cursor: default;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.notes-item:hover { border-color: var(--border-active); }
+.notes-type-badge { flex: none; font-size: 11px; padding: 1px 6px; border: 1px solid var(--border); border-radius: 999px; white-space: nowrap; }
+.notes-item-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.notes-proj { font-size: 10px; padding: 1px 5px; background: hsla(var(--h-violet), 60%, 60%, 0.15); border-radius: 999px; color: var(--secondary); }
+.notes-ents { font-size: 10px; color: var(--text-muted); }
+.notes-item-time { flex: none; font-size: 10px; color: var(--text-muted); }
+.notes-msg { display: flex; }
+.notes-msg-user { justify-content: flex-end; }
+.notes-bubble {
+  max-width: 82%; padding: 8px 12px; font-size: var(--fs-sm); line-height: 1.5;
+  border-radius: var(--radius-xs); overflow-wrap: anywhere;
+  background: hsla(var(--h-violet), 70%, 60%, 0.22); border: 1px solid var(--secondary-border);
+}
+.notes-result { padding: 10px 12px; border-radius: var(--radius-xs); font-size: var(--fs-sm); line-height: 1.5; }
+.notes-ok { background: hsla(140, 60%, 50%, 0.12); border: 1px solid hsla(140, 60%, 50%, 0.3); }
+.notes-duplicate { background: hsla(40, 80%, 60%, 0.12); border: 1px solid hsla(40, 80%, 60%, 0.3); }
+.notes-error { background: hsla(0, 60%, 50%, 0.1); border: 1px solid hsla(0, 60%, 50%, 0.3); }
+.notes-result-header { font-weight: 600; margin-bottom: 4px; }
+.notes-result-type { font-size: 12px; color: var(--text-muted); margin-bottom: 2px; }
+.notes-result-title { font-weight: 500; }
+.notes-result-summary { color: var(--text-secondary); margin-top: 2px; }
+.notes-result-detail { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 4px; }
+.notes-sep { height: 1px; background: var(--border); margin: 4px 0; }
+.notes-composer-placeholder { min-height: 40px; }
+.notes-input-row { display: flex; align-items: center; gap: 8px; }
+.notes-input {
+  flex: 1; min-width: 0; padding: 9px 12px;
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: var(--radius-xs); color: var(--text-primary);
+  font-size: var(--fs-sm); outline: 0;
+}
+.notes-input:focus { border-color: var(--border-active); }
+.notes-input::placeholder { color: var(--text-muted); }
+.notes-send-btn {
+  flex: none; width: 34px; height: 34px; display: inline-flex;
+  align-items: center; justify-content: center;
+  background: var(--bg-glass); border: 1px solid var(--border);
+  border-radius: 999px; color: var(--text-secondary); cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+.notes-send-btn:hover { border-color: var(--border-active); color: var(--text-primary); }
+.notes-pending { color: var(--text-muted); font-style: italic; padding: 8px 0; }
+
 
 /* -- Agents / AI Architecture tab (tab-agents.js) -------------------- */
 .agents-flow { display: flex; flex-direction: column; gap: var(--sp-2); margin-top: var(--sp-2); }
