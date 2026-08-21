@@ -99,6 +99,14 @@ const MemoryTab = (() => {
     return `<span class="mem-project-badge" data-pt="${pt || 'project'}">${U.esc(p)}</span>`;
   }
 
+  /* ── Main load entry point (matches other tabs' pattern) ─────── */
+  async function load() {
+    const panel = document.getElementById('tab-memory');
+    if (!panel) return;
+    await _refreshAll();
+    render(panel);
+  }
+
   /* ── Main render ────────────────────────────────────────────────── */
   function render(slot) {
     slot.innerHTML = `
@@ -345,7 +353,7 @@ const MemoryTab = (() => {
     if (btn) { btn.disabled = false; btn.textContent = '🏗 Build Embeddings'; }
   }
 
-  return { load: render };
+  return { load };
 })();
 
 /* Register with the Tab system (same pattern as tab-agents.js) */
