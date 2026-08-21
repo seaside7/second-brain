@@ -57,6 +57,9 @@ meeting-recorder/scratch/
 # Agent runtime logs
 .agent/**/*.log
 
+# Agent workspace state (generated locally, never commit)
+.agent/workspaces/*/state/
+
 # Editor
 .vscode/
 .idea/
