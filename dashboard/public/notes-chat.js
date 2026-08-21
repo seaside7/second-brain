@@ -122,16 +122,18 @@
     const comp = document.getElementById('notes-composer');
     if (!comp) return;
     comp.innerHTML = `<div class="notes-input-row">`
-      + `<input id="notes-input" class="notes-input" type="text"`
+      + `<textarea id="notes-input" class="notes-input" rows="1"`
       + ` placeholder="Write a note... abbreviation, task, milestone, observation"`
-      + ` autocomplete="off" spellcheck="false" />`
+      + ` autocomplete="off" spellcheck="false"></textarea>`
       + `<button id="notes-send" class="notes-send-btn" title="Store note">➤</button>`
       + `</div>`;
     const input = comp.querySelector('#notes-input');
     const sendBtn = comp.querySelector('#notes-send');
-    const doSend = () => { const v = input.value; input.value = ''; send(v); };
+    const doSend = () => { const v = input.value; input.value = ''; autoResize(input); send(v); };
+    const autoResize = (el) => { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px'; };
+    input.addEventListener('input', () => autoResize(input));
     input.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { e.preventDefault(); doSend(); }
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); }
     });
     sendBtn.addEventListener('click', doSend);
     input.focus();
