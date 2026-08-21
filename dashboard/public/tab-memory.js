@@ -103,8 +103,8 @@ const MemoryTab = (() => {
   async function load() {
     const panel = document.getElementById('tab-memory');
     if (!panel) return;
-    await _refreshAll();
     render(panel);
+    await _refreshAll();
   }
 
   /* ── Main render ────────────────────────────────────────────────── */
