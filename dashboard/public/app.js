@@ -147,15 +147,12 @@ async function refreshOverview(manual = false) {
   if (document.hidden && !manual) return;
   const btn = $id('btn-refresh');
   btn.classList.add('is-busy');
-  const [ovRes, progRes, briefRes, aiRes, cqRes] = await Promise.allSettled([
+  const [ovRes, aiRes] = await Promise.allSettled([
     U.fetchJSON('/api/overview'),
-    U.fetchJSON('/api/progress'),
-    U.fetchJSON('/api/briefing'),
     U.fetchJSON('/api/ai-task?list=1'),
-    U.fetchJSON('/api/command-queue'),
   ]);
   if (aiRes.status === 'fulfilled') AI.adoptList(aiRes.value && aiRes.value.runs);
-  App.commandQueue = cqRes.status === 'fulfilled' ? cqRes.value : null;
+  App.commandQueue = null;
   if (ovRes.status === 'fulfilled') {
     App.overview = ovRes.value;
     App.overviewError = null;
@@ -164,8 +161,8 @@ async function refreshOverview(manual = false) {
     App.overviewError = ovRes.reason?.message || String(ovRes.reason);
     if (manual) Comp.toast(`Refresh failed: ${App.overviewError}`, false);
   }
-  App.progress = progRes.status === 'fulfilled' ? progRes.value : null;
-  App.briefing = briefRes.status === 'fulfilled' ? briefRes.value : null;
+  App.progress = null;
+  App.briefing = null;
   btn.classList.remove('is-busy');
   updateChrome();
   loadActiveTab();
