@@ -1917,6 +1917,42 @@ def _ensure_meetings_synced(ws_name, max_age_min=30):
         _MEETINGS_SYNC_LOCK.release()
 
 
+def _chat_memory_context(ws_name, query):
+    """Run memory recall for the user's query and return formatted context.
+    Includes knowledge entries + Drive file content snippets."""
+    script = str(BASE_DIR / '.agent' / 'skills' / 'memory-recall' / 'scripts' / 'memory_recall.py')
+    code, out, err = _run_script(script, ['recall', '--workspace', ws_name or 'samudera',
+                                           '--query', query, '--top', '5'], timeout=30)
+    if code != 0:
+        return '(no memory results)'
+    cache_path = BASE_DIR / '.agent' / 'workspaces' / (ws_name or 'samudera') / 'state' / 'last_recall.json'
+    if not cache_path.exists():
+        return '(no memory results)'
+    try:
+        data = json.loads(cache_path.read_text(encoding='utf-8'))
+    except Exception:
+        return '(no memory results)'
+    results = data.get('results', [])
+    if not results:
+        return '(no relevant memory found)'
+    lines = []
+    for r in results:
+        src = r.get('source', '?')
+        title = r.get('title', '?')
+        content = r.get('content', '')
+        project = r.get('project', '')
+        score = r.get('score', 0)
+        header = f'[{src}] {title}'
+        if project:
+            header += f' (project: {project})'
+        header += f' [relevance: {score}]'
+        lines.append(header)
+        if content:
+            lines.append(content[:1500])
+        lines.append('')
+    return '\n'.join(lines)
+
+
 def _chat_live_context(ws_name):
     """Compact, workspace-scoped digest of TODAY's live dashboard data, injected
     into the chat answer's system prompt so the model answers from real data
@@ -4950,16 +4986,19 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             ctx_head = _workspace_md_head(ctx.name)
             _ensure_meetings_synced(ctx.name)
             live_ctx = _chat_live_context(ctx.name)
+            memory_ctx = _chat_memory_context(ctx.name, message)
             system = (
                 f'You are the Second Brain assistant for the "{ctx.display_name}" '
                 f'workspace ({ctx.name}). {persona}\n\n'
                 f'Context from the workspace operating manual:\n{ctx_head or "(none)"}\n\n'
                 f'Live dashboard context (includes today\'s meetings and open work):\n'
                 f'{live_ctx}\n\n'
-                'Answer concisely and directly. Ground your answer in the live context '
-                'and workspace manual above; use general knowledge only when the context '
-                'does not cover the question. If asked about meetings, use the '
-                '"Meetings today" section and note past vs upcoming times. '
+                f'Relevant knowledge and documents (from memory recall):\n'
+                f'{memory_ctx}\n\n'
+                'Answer concisely and directly. Ground your answer in the context above '
+                '(memory recall, workspace manual, live context); use general knowledge '
+                'only when the context does not cover the question. If the memory recall '
+                'section contains relevant document content, use it to answer. '
                 'Never reference or reveal data from other workspaces. Keep the reply '
                 'under ~200 words unless the question asks for more.'
             )
