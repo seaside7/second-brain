@@ -181,7 +181,7 @@
       const sugg = body.querySelector('#chat-sugg');
       const sendBtn = body.querySelector('#chat-send');
 
-      const doSend = () => send(input.value);
+      const doSend = () => { const v = input.value; input.value = ''; send(v); };
       input.addEventListener('keydown', e => {
         if (e.key === 'Enter') {
           e.preventDefault();
