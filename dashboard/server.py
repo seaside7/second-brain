@@ -141,7 +141,10 @@ SAMUDERA_ALLOWED_GET = {
 # (no external effect) and is workspace-scoped.
 SAMUDERA_ALLOWED_POST = {'/api/chat', '/api/approval-decision',
                          '/api/agents-skill-save',
-                         '/api/drive-index-rebuild', '/api/knowledge-build-embeddings'}
+                         '/api/drive-index-rebuild', '/api/knowledge-build-embeddings',
+                         '/api/action', '/api/toggle',
+                         '/api/waiting-add', '/api/waiting-close',
+                         '/api/commitment-close', '/api/commitment-link'}
 
 # ── Chatbox: permanent (static) suggestion categories ──────────────────────
 # The same five categories for every workspace; the workspace-scoped context
