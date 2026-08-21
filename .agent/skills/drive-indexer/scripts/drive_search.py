@@ -38,13 +38,14 @@ def _load_index(ws):
 
 
 def _search(index, query, project=None, limit=20):
-    """Search files by name + folder_path. Optional project filter."""
+    """Search files by name + folder_path + content. Optional project filter."""
     terms = [t.lower() for t in query.split() if len(t) > 1]
     results = []
     for f in index.get('files', []):
         if project and f.get('project') != project:
             continue
-        blob = (f.get('name', '') + ' ' + f.get('folder_path', '')).lower()
+        blob = (f.get('name', '') + ' ' + f.get('folder_path', '') +
+                ' ' + f.get('project', '') + ' ' + f.get('content', '')).lower()
         score = sum(1 for t in terms if t in blob)
         if terms and score == 0:
             continue

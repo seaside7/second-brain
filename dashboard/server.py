@@ -6343,10 +6343,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self._send_json(200, json.dumps(entries, ensure_ascii=False))
 
     def _handle_post_drive_index_rebuild(self):
-        """POST /api/drive-index-rebuild — trigger a Drive index rebuild."""
+        """POST /api/drive-index-rebuild — trigger a Drive index rebuild with content extraction."""
         ws = self._request_ws()
         script = str(BASE_DIR / '.agent' / 'skills' / 'drive-indexer' / 'scripts' / 'drive_index.py')
-        code, out, err = self._run_script(script, ['scan', '--workspace', ws], timeout=120)
+        code, out, err = self._run_script(script, ['scan', '--workspace', ws, '--content'], timeout=300)
         if code != 0:
             self._send_json(500, json.dumps({'error': err or 'scan failed', 'output': out}))
             return

@@ -1,0 +1,68 @@
+{
+  "query": "ETOS gate in gate out",
+  "top_k": 5,
+  "timestamp_wib": "2026-08-21T12:40:33+07:00",
+  "result_count": 5,
+  "results": [
+    {
+      "source": "drive",
+      "title": "ETOS Ultimate User Guide (2).pdf",
+      "project": "ETOS",
+      "project_type": "project",
+      "folder_path": "ETOS/",
+      "date": "2026-08-18T13:04:53.000Z",
+      "id": "10_CANuifRYTlmtRykUSjyUpoZAh6BErW",
+      "mimeType": "application/pdf",
+      "content": "2025\nETOS ULTIMATE USER GUIDE\nPT. PRAWEDA SARANA INFORMATIKA\nVERSION 1.0\nETOS ULTIMATE USER GUIDE\nDaftar Isi\nDaftar Isi ......................................................................................................................... 1\n1. Tentang ETOS Ultimate ...............................",
+      "score": 1.0
+    },
+    {
+      "source": "drive",
+      "title": "[CRM] Timeline - Samudera x Salesforce.pdf",
+      "project": "CRM - Sales Force",
+      "project_type": "project",
+      "folder_path": "CRM - Sales Force/",
+      "date": "2026-08-20T02:37:29.000Z",
+      "id": "1NG8L-OYHjrqejDtRj5gLXkDKQ2nhuZ52",
+      "mimeType": "application/pdf",
+      "content": "Customer\nRelationship\nManagement\nSystem\nCRM Indonesia: Proposed End-to-End\nDesign vs. Current Business Reality\nSamudera x Salesforce\nCorporate Commercial - PT Samudera Indonesia Tbk\nCurrent Project Objective\nSupporting End-to-End Business Processes\nBetween Salesforce CRM and Samudera ERP System\nEND-",
+      "score": 0.86
+    },
+    {
+      "source": "drive",
+      "title": "SI - Project Kick Off Salesforce Sales Cloud v4.0.pdf",
+      "project": "CRM - Sales Force",
+      "project_type": "project",
+      "folder_path": "CRM - Sales Force/",
+      "date": "2026-08-20T02:37:31.000Z",
+      "id": "1wmOqhk79djmfhsVndXEe4-xLpoAC2aHg",
+      "mimeType": "application/pdf",
+      "content": "Project Kickoff Meeting\nCustomer Onboarding\n& Sales Execution\nwith Salesforce Sales Cloud\nfor\nPT. Samudera Indonesia, TBK\nPT. Trees Solutions | 10 Juni 2026\nAgenda\nOpening\n•\nProject Presentation\n•\nClosing\n•\n@Copyright Trees - 2026\nMessage from\nProject Director\nPak Iksan Ade Kurniawan\nPak Kadek Didik",
+      "score": 0.86
+    },
+    {
+      "source": "drive",
+      "title": "SMDR AR SR 2025 ENG.pdf",
+      "project": "Samudera Indonesia General Docs",
+      "project_type": "general",
+      "folder_path": "Samudera Indonesia General Docs/",
+      "date": "2026-08-18T09:42:26.000Z",
+      "id": "1X8YsNah1LrKNzrc4cvh1Vm7WE7L5PO1V",
+      "mimeType": "application/pdf",
+      "content": "PT SAMUDERA INDONESIA TBK\n2025 ANNUAL & SUSTAINABILITY REPORT\nRESILIENCE IN GLOBAL CURRENTS\nReflecting the Company’s ability to remain resilient and adaptive in sustaining its performance amid\nglobal dynamics and uncertainties, the Company has successfully maintained performance stability\nwhile capt",
+      "score": 0.86
+    },
+    {
+      "source": "drive",
+      "title": "Manual Guide SISI 3.1_ENG.pdf",
+      "project": "Savvy",
+      "project_type": "project",
+      "folder_path": "Savvy/",
+      "date": "2026-07-12T12:53:40.000Z",
+      "id": "12jq1iEmXv-vHey-GHQZsUrXD-SMpAnhY",
+      "mimeType": "application/pdf",
+      "content": "MANUAL\nSISI\n3.1\nBOOK\nsamudera.id\ni\nSTNETNOC\nContents i\nSISI 3.1 Application 2\nOverview 2\nLog In 3\nHome 4\nWhistleblower 5\nWhistleblower Report 6\nProperty Report 7\nForm Property Report 8\nSamudera Media 9\nServices 10\nSICU (Samudera Indonesia Corporate University) 11\nSamudera Connect 12\nContainer Tracki",
+      "score": 0.74
+    }
+  ]
+}

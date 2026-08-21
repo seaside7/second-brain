@@ -76,6 +76,53 @@ def _is_google_native(mime):
     return mime.startswith('application/vnd.google-apps.')
 
 
+def _extract_google_content(service, file_id, mime):
+    """Export Google Docs/Sheets/Slides as text."""
+    export_map = {
+        'application/vnd.google-apps.document': 'text/plain',
+        'application/vnd.google-apps.spreadsheet': 'text/csv',
+        'application/vnd.google-apps.presentation': 'text/plain',
+    }
+    export_mime = export_map.get(mime)
+    if not export_mime:
+        return ''
+    try:
+        req = service.files().export_media(fileId=file_id, mimeType=export_mime)
+        import io
+        buf = io.BytesIO()
+        downloader = __import__('googleapiclient.http', fromlist=['MediaIoBaseDownload']).MediaIoBaseDownload(buf, req)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+        return buf.getvalue().decode('utf-8', errors='replace')[:50000]
+    except Exception:
+        return ''
+
+
+def _extract_pdf_content(service, file_id):
+    """Download PDF from Drive and extract text with pdfplumber."""
+    try:
+        import pdfplumber
+        import io
+        req = service.files().get_media(fileId=file_id)
+        import googleapiclient.http
+        buf = io.BytesIO()
+        downloader = googleapiclient.http.MediaIoBaseDownload(buf, req)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+        buf.seek(0)
+        text_parts = []
+        with pdfplumber.open(buf) as pdf:
+            for page in pdf.pages[:30]:
+                t = page.extract_text()
+                if t:
+                    text_parts.append(t)
+        return '\n'.join(text_parts)[:50000]
+    except Exception:
+        return ''
+
+
 def _classify_folder(name, cfg):
     """Classify a top-level folder. Explicit overrides first, then patterns."""
     general_overrides = cfg.get('general_folders', [])
@@ -108,7 +155,8 @@ def _list_folder(service, folder_id, page_size=200):
     return items
 
 
-def _walk(service, folder_id, folder_path, cfg, depth=0, max_depth=10):
+def _walk(service, folder_id, folder_path, cfg, depth=0, max_depth=10,
+          extract_content=False):
     """Recursively walk a folder. Yields (file_info, folder_path, project, project_type)."""
     if depth > max_depth:
         return
@@ -122,10 +170,11 @@ def _walk(service, folder_id, folder_path, cfg, depth=0, max_depth=10):
         if mime == 'application/vnd.google-apps.folder':
             sub_path = folder_path + name + '/'
             for result in _walk(service, item['id'], sub_path, cfg,
-                                depth=depth + 1, max_depth=max_depth):
+                                depth=depth + 1, max_depth=max_depth,
+                                extract_content=extract_content):
                 yield result
         else:
-            yield {
+            file_info = {
                 'id': item['id'],
                 'name': name,
                 'mimeType': mime,
@@ -134,6 +183,16 @@ def _walk(service, folder_id, folder_path, cfg, depth=0, max_depth=10):
                 'size': int(item.get('size', 0) or 0),
                 'webViewLink': item.get('webViewLink', ''),
             }
+            if extract_content:
+                content = ''
+                if _is_google_native(mime):
+                    content = _extract_google_content(service, item['id'], mime)
+                elif mime == 'application/pdf':
+                    content = _extract_pdf_content(service, item['id'])
+                if content:
+                    file_info['content'] = content
+                    print('    [content] %s (%d chars)' % (name, len(content)))
+            yield file_info
 
 
 def cmd_scan(args):
@@ -141,6 +200,7 @@ def cmd_scan(args):
     ws = args.workspace or 'samudera'
     root_id = args.folder or cfg.get('root_folder_id')
     root_name = cfg.get('root_folder_name', 'Samudera Indonesia')
+    extract_content = getattr(args, 'content', False)
 
     if not root_id:
         print('Error: no root_folder_id configured and no --folder provided')
@@ -151,6 +211,8 @@ def cmd_scan(args):
     google_mimes = set(cfg.get('google_native_mimes', []))
 
     print('Scanning Drive folder: %s (id: %s)' % (root_name, root_id))
+    if extract_content:
+        print('  Content extraction: ENABLED (Google Docs + PDFs)')
 
     projects = {}
     files = []
@@ -189,7 +251,8 @@ def cmd_scan(args):
 
         print('  %s [%s]' % (name, ptype))
         for file_info in _walk(service, item['id'], name + '/', cfg,
-                               max_depth=cfg.get('max_depth', 10)):
+                               max_depth=cfg.get('max_depth', 10),
+                               extract_content=extract_content):
             if _should_index(file_info['name'], file_info['mimeType'],
                              extensions, google_mimes):
                 file_info['project'] = name
@@ -271,6 +334,8 @@ def main():
     sc = sub.add_parser('scan')
     sc.add_argument('--workspace', default='samudera')
     sc.add_argument('--folder', default=None)
+    sc.add_argument('--content', action='store_true',
+                    help='Extract text content from Google Docs and PDFs')
     st = sub.add_parser('status')
     st.add_argument('--workspace', default='samudera')
     args = p.parse_args()

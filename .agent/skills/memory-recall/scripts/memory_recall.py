@@ -244,7 +244,7 @@ def _search_drive(ws_name, query, top_k=10):
     results = []
     for f in index.get('files', []):
         blob = (f.get('name', '') + ' ' + f.get('folder_path', '') +
-                ' ' + f.get('project', '')).lower()
+                ' ' + f.get('project', '') + ' ' + f.get('content', '')).lower()
         score = sum(1 for t in terms if t in blob)
         if score == 0:
             continue
@@ -252,6 +252,7 @@ def _search_drive(ws_name, query, top_k=10):
         rec = _recency_score(f.get('modifiedTime', ''))
         combined = (score / len(terms) * 0.7 + rec * 0.3)
 
+        content_preview = f.get('content', '')[:300] if f.get('content') else ''
         results.append({
             'source': 'drive',
             'title': f.get('name', '?'),
@@ -261,7 +262,7 @@ def _search_drive(ws_name, query, top_k=10):
             'date': f.get('modifiedTime', ''),
             'id': f.get('id', ''),
             'mimeType': f.get('mimeType', ''),
-            'content': '%s (in %s / %s)' % (
+            'content': content_preview or '%s (in %s / %s)' % (
                 f.get('name', '?'),
                 f.get('project', '?'),
                 f.get('folder_path', '/'),
