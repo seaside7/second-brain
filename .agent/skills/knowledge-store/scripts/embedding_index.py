@@ -81,7 +81,9 @@ def _parse_entries(ws):
         blocks = re.split(r'\n---\n', text)
         for i, block in enumerate(blocks):
             block = block.strip()
-            if not block or block.startswith('#'):
+            if not block:
+                continue
+            if '###' not in block:
                 continue
             title_match = re.search(r'^### (.+)', block, re.M)
             title = title_match.group(1).strip() if title_match else 'untitled'

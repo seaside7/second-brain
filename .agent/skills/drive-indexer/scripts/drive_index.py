@@ -32,7 +32,7 @@ SCOPES = ['https://www.googleapis.com/auth/drive']
 
 
 def _config_path():
-    return Path(__file__).resolve().parent / 'config.json'
+    return Path(__file__).resolve().parent.parent / 'config.json'
 
 
 def _load_config():
