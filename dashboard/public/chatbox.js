@@ -25,9 +25,10 @@
   if (!btnChat) return;
 
   /* ---- state (kept in module scope so the chat survives tab switches) ---- */
+  const CHAT_STORAGE_KEY = 'psb_chat_messages';
   const Chat = {
     suggestions: null,          // {workspace, display_name, mode, permanent[], dynamic[]}
-    messages: [],               // [{role:'user'|'ai', text}]
+    messages: (() => { try { return JSON.parse(localStorage.getItem(CHAT_STORAGE_KEY)) || []; } catch(e) { return []; } })(),
     pendingText: '',            // text sent but not yet answered
     paletteOpen: false,
     filtered: [],               // currently rendered suggestion rows
@@ -35,6 +36,10 @@
     lastFetch: 0,
     answered: false,
   };
+
+  function saveChat() {
+    try { localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(Chat.messages.slice(-50))); } catch(e) {}
+  }
 
   const PALETTE_TTL_MS = 10 * 60 * 1000;   // suggestions refetched at most every 10 min
 
@@ -135,6 +140,7 @@
     Chat.pendingText = text;
     Chat.answered = false;
     closePalette();
+    saveChat();
     renderChat();
 
     try {
@@ -150,6 +156,7 @@
     }
     Chat.pendingText = '';
     Chat.answered = true;
+    saveChat();
     renderChat();
   }
 
