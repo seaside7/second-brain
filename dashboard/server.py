@@ -1939,7 +1939,15 @@ def _chat_memory_context(ws_name, query):
                 score = sum(1 for t in terms if t in blob)
                 if score == 0:
                     continue
-                content_preview = (f.get('content') or '')[:1200]
+                content = f.get('content') or ''
+                # Find best snippet: around first term match in content
+                best_pos = len(content)
+                for t in terms:
+                    pos = content.lower().find(t)
+                    if 0 <= pos < best_pos:
+                        best_pos = pos
+                start = max(0, best_pos - 200)
+                content_preview = content[start:start + 3000]
                 results.append({
                     'source': 'drive',
                     'title': f.get('name', '?'),
