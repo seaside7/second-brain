@@ -1920,13 +1920,18 @@ def _ensure_meetings_synced(ws_name, max_age_min=30):
 def _chat_memory_context(ws_name, query):
     """Run memory recall for the user's query and return formatted context.
     Includes knowledge entries + Drive file content snippets."""
+    import subprocess as _sp
     script = str(BASE_DIR / '.agent' / 'skills' / 'memory-recall' / 'scripts' / 'memory_recall.py')
-    code, out, err = _run_script(script, ['recall', '--workspace', ws_name or 'samudera',
-                                           '--query', query, '--top', '5'], timeout=30)
-    if code != 0:
-        return '(no memory results)'
-    cache_path = BASE_DIR / '.agent' / 'workspaces' / (ws_name or 'samudera') / 'state' / 'last_recall.json'
-    if not cache_path.exists():
+    ws = ws_name or 'samudera'
+    try:
+        r = _sp.run([sys.executable, script, 'recall', '--workspace', ws,
+                      '--query', query, '--top', '5'],
+                     capture_output=True, text=True, cwd=str(BASE_DIR), timeout=30)
+        code = r.returncode
+    except Exception:
+        code = -1
+    cache_path = BASE_DIR / '.agent' / 'workspaces' / ws / 'state' / 'last_recall.json'
+    if code != 0 or not cache_path.exists():
         return '(no memory results)'
     try:
         data = json.loads(cache_path.read_text(encoding='utf-8'))
