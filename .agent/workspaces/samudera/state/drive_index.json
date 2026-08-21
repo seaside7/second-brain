@@ -1,0 +1,521 @@
+{
+  "version": 1,
+  "indexed_wib": "2026-08-21T11:57:58+07:00",
+  "root_folder_id": "10PLl9Z2umQSoIVXF2LVvJdvK8sihOICH",
+  "root_folder_name": "Samudera Indonesia",
+  "projects": {
+    "CRM - Sales Force": {
+      "folder_id": "1MdZO9QGiiZms_VzazNudXhR2iT4L3Zyc",
+      "project_type": "project",
+      "folder_path": "CRM - Sales Force/",
+      "file_count": 2,
+      "last_modified": "2026-08-20T02:37:31.000Z"
+    },
+    "ETOS": {
+      "folder_id": "14qpctO9MzpevlBX-BeqM23-Xur8I_15H",
+      "project_type": "project",
+      "folder_path": "ETOS/",
+      "file_count": 2,
+      "last_modified": "2026-08-19T10:05:56.000Z"
+    },
+    "Samudera Indonesia General Docs": {
+      "folder_id": "1MQa48Lzomlg0ebRgX5eQm5RrFmtlYoOv",
+      "project_type": "general",
+      "folder_path": "Samudera Indonesia General Docs/",
+      "file_count": 1,
+      "last_modified": "2026-08-18T09:42:26.000Z"
+    },
+    "Savvy": {
+      "folder_id": "1tGDfpF-VvkWmusLWKCactJ406Hlwl48p",
+      "project_type": "project",
+      "folder_path": "Savvy/",
+      "file_count": 38,
+      "last_modified": "2026-08-20T08:39:31.000Z"
+    }
+  },
+  "files": [
+    {
+      "id": "1NG8L-OYHjrqejDtRj5gLXkDKQ2nhuZ52",
+      "name": "[CRM] Timeline - Samudera x Salesforce.pdf",
+      "mimeType": "application/pdf",
+      "folder_path": "CRM - Sales Force/",
+      "modifiedTime": "2026-08-20T02:37:29.000Z",
+      "size": 1076437,
+      "webViewLink": "https://drive.google.com/file/d/1NG8L-OYHjrqejDtRj5gLXkDKQ2nhuZ52/view?usp=drivesdk",
+      "project": "CRM - Sales Force",
+      "project_type": "project"
+    },
+    {
+      "id": "1wmOqhk79djmfhsVndXEe4-xLpoAC2aHg",
+      "name": "SI - Project Kick Off Salesforce Sales Cloud v4.0.pdf",
+      "mimeType": "application/pdf",
+      "folder_path": "CRM - Sales Force/",
+      "modifiedTime": "2026-08-20T02:37:31.000Z",
+      "size": 1124524,
+      "webViewLink": "https://drive.google.com/file/d/1wmOqhk79djmfhsVndXEe4-xLpoAC2aHg/view?usp=drivesdk",
+      "project": "CRM - Sales Force",
+      "project_type": "project"
+    },
+    {
+      "id": "10_CANuifRYTlmtRykUSjyUpoZAh6BErW",
+      "name": "ETOS Ultimate User Guide (2).pdf",
+      "mimeType": "application/pdf",
+      "folder_path": "ETOS/",
+      "modifiedTime": "2026-08-18T13:04:53.000Z",
+      "size": 7357493,
+      "webViewLink": "https://drive.google.com/file/d/10_CANuifRYTlmtRykUSjyUpoZAh6BErW/view?usp=drivesdk",
+      "project": "ETOS",
+      "project_type": "project"
+    },
+    {
+      "id": "1auF9fot72CFXAdBmHw5jKAaj4-MsVFgH",
+      "name": "Samudera Cockpit Introduction.pdf",
+      "mimeType": "application/pdf",
+      "folder_path": "ETOS/",
+      "modifiedTime": "2026-08-19T10:05:56.000Z",
+      "size": 3893810,
+      "webViewLink": "https://drive.google.com/file/d/1auF9fot72CFXAdBmHw5jKAaj4-MsVFgH/view?usp=drivesdk",
+      "project": "ETOS",
+      "project_type": "project"
+    },
+    {
+      "id": "1X8YsNah1LrKNzrc4cvh1Vm7WE7L5PO1V",
+      "name": "SMDR AR SR 2025 ENG.pdf",
+      "mimeType": "application/pdf",
+      "folder_path": "Samudera Indonesia General Docs/",
+      "modifiedTime": "2026-08-18T09:42:26.000Z",
+      "size": 182381859,
+      "webViewLink": "https://drive.google.com/file/d/1X8YsNah1LrKNzrc4cvh1Vm7WE7L5PO1V/view?usp=drivesdk",
+      "project": "Samudera Indonesia General Docs",
+      "project_type": "general"
+    },
+    {
+      "id": "1Tz0nDsEMU8KtbS07acJH0HS7adM2cK6o",
+      "name": "[DRAFT] SISI 3.0 - English ver.pptx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "folder_path": "Savvy/",
+      "modifiedTime": "2026-07-08T19:25:00.000Z",
+      "size": 13796148,
+      "webViewLink": "https://docs.google.com/presentation/d/1Tz0nDsEMU8KtbS07acJH0HS7adM2cK6o/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1LTZlmnxKKwN7YNn1Xa6E1Y1Hf-lVyqjg",
+      "name": "BRD - SISI 3.1.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/",
+      "modifiedTime": "2026-08-17T16:09:20.000Z",
+      "size": 455352,
+      "webViewLink": "https://docs.google.com/document/d/1LTZlmnxKKwN7YNn1Xa6E1Y1Hf-lVyqjg/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1mVrHUpGvwIlqaQafSnZPndNIchBgtwcY",
+      "name": "[PRD] ISTA Merch Store.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/Helpdesk/",
+      "modifiedTime": "2026-04-08T17:50:20.000Z",
+      "size": 12108,
+      "webViewLink": "https://docs.google.com/document/d/1mVrHUpGvwIlqaQafSnZPndNIchBgtwcY/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "12zXr0KRXORxk-6I9Iru-THlaG0iRV3Ww",
+      "name": "[PRD] IT HELPDESK.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/Helpdesk/",
+      "modifiedTime": "2026-02-05T15:52:32.000Z",
+      "size": 223455,
+      "webViewLink": "https://docs.google.com/document/d/12zXr0KRXORxk-6I9Iru-THlaG0iRV3Ww/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "14TJSdr6KTEAUGbJ4CubPeAAV65x1WXpJ",
+      "name": "[PRD] PROCUREMENT HELPDESK.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/Helpdesk/",
+      "modifiedTime": "2026-04-08T16:14:38.000Z",
+      "size": 219151,
+      "webViewLink": "https://docs.google.com/document/d/14TJSdr6KTEAUGbJ4CubPeAAV65x1WXpJ/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1WWYMb4dfB1HhM80q7LnBrDKE6I_Cl5sK",
+      "name": "Manual Guide SISI 3.1.pdf",
+      "mimeType": "application/pdf",
+      "folder_path": "Savvy/",
+      "modifiedTime": "2026-07-12T12:53:26.000Z",
+      "size": 26279714,
+      "webViewLink": "https://drive.google.com/file/d/1WWYMb4dfB1HhM80q7LnBrDKE6I_Cl5sK/view?usp=drivesdk",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "12jq1iEmXv-vHey-GHQZsUrXD-SMpAnhY",
+      "name": "Manual Guide SISI 3.1_ENG.pdf",
+      "mimeType": "application/pdf",
+      "folder_path": "Savvy/",
+      "modifiedTime": "2026-07-12T12:53:40.000Z",
+      "size": 35754056,
+      "webViewLink": "https://drive.google.com/file/d/12jq1iEmXv-vHey-GHQZsUrXD-SMpAnhY/view?usp=drivesdk",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1NlPPfPQjYv2GhJNJI1Ok6r942KR62uOi",
+      "name": "MOM SISI 3.0.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/",
+      "modifiedTime": "2026-01-20T19:09:58.000Z",
+      "size": 19912,
+      "webViewLink": "https://docs.google.com/document/d/1NlPPfPQjYv2GhJNJI1Ok6r942KR62uOi/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "17bRkzwdxDUAgj7mgG2PHs055Ck9jRfrO",
+      "name": " PRD SISCO.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/QHSE/",
+      "modifiedTime": "2026-04-08T16:14:52.000Z",
+      "size": 10697,
+      "webViewLink": "https://docs.google.com/document/d/17bRkzwdxDUAgj7mgG2PHs055Ck9jRfrO/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1uAToMFrdk3ei9s9RgxUr_DX4ptLBgcDy",
+      "name": "[PRD] QHSE Feature.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/QHSE/",
+      "modifiedTime": "2026-02-05T15:52:10.000Z",
+      "size": 14692,
+      "webViewLink": "https://docs.google.com/document/d/1uAToMFrdk3ei9s9RgxUr_DX4ptLBgcDy/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1ebbfj1HYg1zABpqSjBGEAXgEKxIXvgSl",
+      "name": "Checklist Pra-Operasional ISTA.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/QHSE/POC/",
+      "modifiedTime": "2025-10-06T17:31:52.000Z",
+      "size": 70461,
+      "webViewLink": "https://docs.google.com/document/d/1ebbfj1HYg1zABpqSjBGEAXgEKxIXvgSl/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1dF46FE9aLt_BB7wjxw2yzhPHCmnjPTne",
+      "name": "Checklist Pra-Operasional KJS - Inland Transport.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/QHSE/POC/",
+      "modifiedTime": "2025-10-06T17:31:52.000Z",
+      "size": 73778,
+      "webViewLink": "https://docs.google.com/document/d/1dF46FE9aLt_BB7wjxw2yzhPHCmnjPTne/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1nDVuoFXAzV78axe6IIbA39UfnNK88lO5",
+      "name": "Checklist Pra-Operasional KJS - Stuffing & Stripping.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/QHSE/POC/",
+      "modifiedTime": "2025-10-06T17:31:52.000Z",
+      "size": 72674,
+      "webViewLink": "https://docs.google.com/document/d/1nDVuoFXAzV78axe6IIbA39UfnNK88lO5/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1AT56NmhnzFqKTzYH3IUQ5MEXCpPCzOwc",
+      "name": "Checklist Pra-Operasional MTKI - Kegiatan Depo.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/QHSE/POC/",
+      "modifiedTime": "2025-10-06T17:31:52.000Z",
+      "size": 72643,
+      "webViewLink": "https://docs.google.com/document/d/1AT56NmhnzFqKTzYH3IUQ5MEXCpPCzOwc/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1eoObk8w5w6lVVX2H-NVvacObccJQ2zfr",
+      "name": "Checklist Pra-Operasional MTKI - Perawatan dan Perbaikan Alat Berat.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/QHSE/POC/",
+      "modifiedTime": "2025-10-06T17:31:52.000Z",
+      "size": 72632,
+      "webViewLink": "https://docs.google.com/document/d/1eoObk8w5w6lVVX2H-NVvacObccJQ2zfr/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1RKWKBEynLzua4axwRRLZ1fC0f4h14SPy",
+      "name": "Checklist Pra-Operasional MTKI - Repair Container.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/QHSE/POC/",
+      "modifiedTime": "2025-10-06T17:31:52.000Z",
+      "size": 72510,
+      "webViewLink": "https://docs.google.com/document/d/1RKWKBEynLzua4axwRRLZ1fC0f4h14SPy/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1IgOE7XlXwsh-gUcxfT8EbJgxQijPXm_C",
+      "name": "Checklist Pra-Operasional SAI.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/QHSE/POC/",
+      "modifiedTime": "2025-10-06T17:31:52.000Z",
+      "size": 71053,
+      "webViewLink": "https://docs.google.com/document/d/1IgOE7XlXwsh-gUcxfT8EbJgxQijPXm_C/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1dg4nu7YBZ4x3MdXxHC9px0J8HwBM6ILf",
+      "name": "Checklist Pra-Operasional SDMar.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/QHSE/POC/",
+      "modifiedTime": "2025-10-06T17:31:52.000Z",
+      "size": 72733,
+      "webViewLink": "https://docs.google.com/document/d/1dg4nu7YBZ4x3MdXxHC9px0J8HwBM6ILf/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1cPBG29vljqZERgYukPlzDEelgQ-XWZ8q",
+      "name": "Checklist Pra-Operasional Silkargo Indonesia.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/QHSE/POC/",
+      "modifiedTime": "2025-10-06T17:31:52.000Z",
+      "size": 72363,
+      "webViewLink": "https://docs.google.com/document/d/1cPBG29vljqZERgYukPlzDEelgQ-XWZ8q/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "10lRxWj2XwRMqFjc_G7ObUos2Fj1T_8n8",
+      "name": "Checklist Pra-Operasional SISM.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/QHSE/POC/",
+      "modifiedTime": "2025-10-06T17:31:52.000Z",
+      "size": 70759,
+      "webViewLink": "https://docs.google.com/document/d/10lRxWj2XwRMqFjc_G7ObUos2Fj1T_8n8/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1IuAeM1VP2DThxuQMhmBsbN3dc8kbVUAb",
+      "name": "Checklist Pra-Operasional SSTI.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/QHSE/POC/",
+      "modifiedTime": "2025-10-06T17:31:52.000Z",
+      "size": 70752,
+      "webViewLink": "https://docs.google.com/document/d/1IuAeM1VP2DThxuQMhmBsbN3dc8kbVUAb/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1eb35JEzXRGSy2Av92hJ5Rn_RRJKRFYS8",
+      "name": "Checklist PraOperasional - Logistik.pdf",
+      "mimeType": "application/pdf",
+      "folder_path": "Savvy/QHSE/POC/",
+      "modifiedTime": "2025-10-06T17:31:52.000Z",
+      "size": 277227,
+      "webViewLink": "https://drive.google.com/file/d/1eb35JEzXRGSy2Av92hJ5Rn_RRJKRFYS8/view?usp=drivesdk",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1Tl2PJOSBwey7aXy6k8oJjeTF6G-xBhUM",
+      "name": "Checklist PraOperasional - Port.pdf",
+      "mimeType": "application/pdf",
+      "folder_path": "Savvy/QHSE/POC/",
+      "modifiedTime": "2025-10-06T17:31:52.000Z",
+      "size": 230132,
+      "webViewLink": "https://drive.google.com/file/d/1Tl2PJOSBwey7aXy6k8oJjeTF6G-xBhUM/view?usp=drivesdk",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1qMNOLcmsS-aJkctnLQ-lKH_-ViPSKyql",
+      "name": "Checklist PraOperasional - Property.pdf",
+      "mimeType": "application/pdf",
+      "folder_path": "Savvy/QHSE/POC/",
+      "modifiedTime": "2025-10-06T17:31:52.000Z",
+      "size": 225434,
+      "webViewLink": "https://drive.google.com/file/d/1qMNOLcmsS-aJkctnLQ-lKH_-ViPSKyql/view?usp=drivesdk",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1maPZQF3cy7Mwn2g3egV0cZTaBvN01UEw",
+      "name": "Checklist PraOperasional - Services.pdf",
+      "mimeType": "application/pdf",
+      "folder_path": "Savvy/QHSE/POC/",
+      "modifiedTime": "2025-10-06T17:31:52.000Z",
+      "size": 228600,
+      "webViewLink": "https://drive.google.com/file/d/1maPZQF3cy7Mwn2g3egV0cZTaBvN01UEw/view?usp=drivesdk",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "13q2Agx-53DoQIe-C-uWDIXZfQrOqWsXd",
+      "name": "Checklist PraOperasional - Shipping.pdf",
+      "mimeType": "application/pdf",
+      "folder_path": "Savvy/QHSE/POC/",
+      "modifiedTime": "2025-10-06T17:31:52.000Z",
+      "size": 227319,
+      "webViewLink": "https://drive.google.com/file/d/13q2Agx-53DoQIe-C-uWDIXZfQrOqWsXd/view?usp=drivesdk",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1-XLCOupdDjjyFFk4p1vDPbA1q9ESvNb2",
+      "name": "Checklist PraOperasional - Shipyard.pdf",
+      "mimeType": "application/pdf",
+      "folder_path": "Savvy/QHSE/POC/",
+      "modifiedTime": "2025-10-06T17:31:52.000Z",
+      "size": 230362,
+      "webViewLink": "https://drive.google.com/file/d/1-XLCOupdDjjyFFk4p1vDPbA1q9ESvNb2/view?usp=drivesdk",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1EbDH3D90QzeZRQuF9Md8FEryOz3olrQO",
+      "name": "PRD MEDIKA.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/QHSE/",
+      "modifiedTime": "2026-04-08T16:14:28.000Z",
+      "size": 9511,
+      "webViewLink": "https://docs.google.com/document/d/1EbDH3D90QzeZRQuF9Md8FEryOz3olrQO/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1gaVOBIghJxKhgD37AS3xMekpHumjjbtp",
+      "name": "SAVVYMARINER PROPOSAL_SAMUDHERA v1.2.pdf",
+      "mimeType": "application/pdf",
+      "folder_path": "Savvy/",
+      "modifiedTime": "2026-08-20T08:39:31.000Z",
+      "size": 2383240,
+      "webViewLink": "https://drive.google.com/file/d/1gaVOBIghJxKhgD37AS3xMekpHumjjbtp/view?usp=drivesdk",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1Zp7GeqBpxcWhCKRuwZ-fTcAGxs4l-1g9",
+      "name": "[PRD] SISCO.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/SISCO/",
+      "modifiedTime": "2026-01-26T19:30:16.000Z",
+      "size": 222135,
+      "webViewLink": "https://docs.google.com/document/d/1Zp7GeqBpxcWhCKRuwZ-fTcAGxs4l-1g9/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1m6t4bAMACd4FPavDDB3lDEnP41Gj9pm3",
+      "name": "SISI 3.0 Report.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/",
+      "modifiedTime": "2026-03-15T19:02:52.000Z",
+      "size": 6799472,
+      "webViewLink": "https://docs.google.com/document/d/1m6t4bAMACd4FPavDDB3lDEnP41Gj9pm3/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1S43J-BdgfAAZr0h70PDTGm0U1iigvrEj",
+      "name": "SISI 3.1 Overseas Socialization.pptx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "folder_path": "Savvy/",
+      "modifiedTime": "2026-08-10T18:08:28.000Z",
+      "size": 22464153,
+      "webViewLink": "https://docs.google.com/presentation/d/1S43J-BdgfAAZr0h70PDTGm0U1iigvrEj/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1Xpzc00HA3LxBfeMCvA3k7B3VgSdFNZ8k",
+      "name": "SISI 3.1 Report.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/",
+      "modifiedTime": "2026-07-29T17:43:58.000Z",
+      "size": 384775,
+      "webViewLink": "https://docs.google.com/document/d/1Xpzc00HA3LxBfeMCvA3k7B3VgSdFNZ8k/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "13u_pA9x2GZ3Qo60mEyAS-IMA0xWDense",
+      "name": "SISM Project Report.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/",
+      "modifiedTime": "2026-03-11T18:52:02.000Z",
+      "size": 55676,
+      "webViewLink": "https://docs.google.com/document/d/13u_pA9x2GZ3Qo60mEyAS-IMA0xWDense/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1jchriWZHw5-xw-cXlWoE1Z5n6_g2xndD",
+      "name": "Training Savvy Marine (Procurement) Day 1 - 2026_08_11 10_07 WIB - Notes by Gemini.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/",
+      "modifiedTime": "2026-08-17T19:37:36.000Z",
+      "size": 3945524,
+      "webViewLink": "https://docs.google.com/document/d/1jchriWZHw5-xw-cXlWoE1Z5n6_g2xndD/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1wbEW9D6EtB5LLa6BwUrj-KQPRKSKb7iP",
+      "name": "Training Savvy Marine (Procurement) Day 2 - 2026_08_12 09_53 WIB - Notes by Gemini.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/",
+      "modifiedTime": "2026-08-17T19:37:20.000Z",
+      "size": 3514103,
+      "webViewLink": "https://docs.google.com/document/d/1wbEW9D6EtB5LLa6BwUrj-KQPRKSKb7iP/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "1qfzKN4yJH-KubLFeag2q4VQ9PFR4h1Ae",
+      "name": "Training Savvy Marine (Procurement) Day 3 - 2026_08_13 09_56 WIB - Notes by Gemini.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/",
+      "modifiedTime": "2026-08-17T19:37:02.000Z",
+      "size": 2674794,
+      "webViewLink": "https://docs.google.com/document/d/1qfzKN4yJH-KubLFeag2q4VQ9PFR4h1Ae/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    },
+    {
+      "id": "10EIRY-zdsPO8WeoT4ch3M6sWl4YGM1Fg",
+      "name": "Training Savvy Marine Procurement For Finance - 2026_08_14 09_51 WIB - Notes by Gemini.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "folder_path": "Savvy/",
+      "modifiedTime": "2026-08-17T19:36:28.000Z",
+      "size": 369112,
+      "webViewLink": "https://docs.google.com/document/d/10EIRY-zdsPO8WeoT4ch3M6sWl4YGM1Fg/edit?usp=drivesdk&ouid=112288337424874206072&rtpof=true&sd=true",
+      "project": "Savvy",
+      "project_type": "project"
+    }
+  ],
+  "stats": {
+    "total_files": 43,
+    "total_projects": 4,
+    "by_project": {
+      "CRM - Sales Force": 2,
+      "ETOS": 2,
+      "Samudera Indonesia General Docs": 1,
+      "Savvy": 38
+    }
+  }
+}

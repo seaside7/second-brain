@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "model": "text-embedding-3-small",
+  "dimension": 1536,
+  "count": 1,
+  "built_wib": "2026-08-21T11:57:53+07:00",
+  "entries": [
+    {
+      "category": "business",
+      "title": "Role and company context",
+      "date": "",
+      "tags": "",
+      "confidence": "medium",
+      "body": "# Business Knowledge\n\n### Role and company context\n- **Date**: 2026-08-14\n- **Tags**: #samudera, #role, #dt\n- **Source**: manual\n- **Confidence**: high\n\nSaid is Head of Digital Transformation at Samudera Indonesia, a shipping/maritime logistics group in Indonesia. Mandate: digital transformation strategy, AI initiatives, business process analysis, technology roadmaps. Works in initiatives, not tickets.",
+      "searchable": "Role and company context business # Business Knowledge ### Role and company context - **Date**: 2026-08-14 - **Tags**: #samudera, #role, #dt - **Source**: manual - **Confidence**: high Said is Head of Digital Transformation at Samudera Indonesia, a shipping/maritime logistics group in Indonesia. Mandate: digital transformation strategy, AI initiatives, business process analysis, technology roadmaps. Works in initiatives, not tickets.",
+      "file": "business.md",
+      "block_index": 0
+    }
+  ]
+}

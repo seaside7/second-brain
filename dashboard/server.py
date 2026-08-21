@@ -6315,7 +6315,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._send_json(200, json.dumps([]))
             return
         entries = []
-        files = [cat + '.md'] if cat and (kdir / cat + '.md').exists() else \
+        files = [cat + '.md'] if cat and (kdir / (cat + '.md')).exists() else \
                 [f.name for f in kdir.glob('*.md')]
         for fname in files:
             fp = kdir / fname
