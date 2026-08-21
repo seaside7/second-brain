@@ -5077,8 +5077,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 '(memory recall, workspace manual, live context); use general knowledge '
                 'only when the context does not cover the question. If the memory recall '
                 'section contains relevant document content, use it to answer. '
+                'IMPORTANT: When the memory recall section contains relevant information, '
+                'you MUST use it as your primary source. Do NOT say "I don\'t have access" '
+                'or "based on general knowledge" when the answer is literally in the context. '
+                'Synthesize from the provided documents, not from your training data. '
                 'Never reference or reveal data from other workspaces. Keep the reply '
-                'under ~200 words unless the question asks for more.'
+                'under ~300 words unless the question asks for more.'
             )
 
             ok, text, meta = False, '', {}
