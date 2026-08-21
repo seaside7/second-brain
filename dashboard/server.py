@@ -131,6 +131,8 @@ SAMUDERA_ALLOWED_GET = {
     '/api/drive-index', '/api/drive-projects', '/api/drive-search',
     '/api/memory-recall', '/api/memory-status', '/api/memory-last',
     '/api/knowledge-status', '/api/knowledge-entries',
+    # AI task runs
+    '/api/ai-task',
 }
 
 # POST routes the /samudera dashboard may call. Everything else in samudera
