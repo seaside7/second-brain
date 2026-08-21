@@ -345,7 +345,7 @@ const MemoryTab = (() => {
     if (btn) { btn.disabled = false; btn.textContent = '🏗 Build Embeddings'; }
   }
 
-  return { render };
+  return { load: render };
 })();
 
 /* Register with the Tab system (same pattern as tab-agents.js) */
