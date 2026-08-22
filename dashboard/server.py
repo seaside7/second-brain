@@ -121,7 +121,7 @@ EXECUTIVE_ORCHESTRATOR_CLI = '.agent/skills/executive-orchestrator/scripts/execu
 # /api/* while in samudera mode is denied by default (404 + scope:'samudera')
 # so combined/personal/Catalyze data can never cross into the office-safe view.
 SAMUDERA_ALLOWED_GET = {
-    '/api/calendar', '/api/news', '/api/tracker', '/api/overview',
+    '/api/calendar', '/api/news', '/api/intelligence', '/api/tracker', '/api/overview',
     '/api/decisions', '/api/commitments', '/api/waiting-on', '/api/followups',
     '/api/inbox', '/api/ledger-find', '/api/chat-suggestions',
     '/api/approval-queue',
@@ -2475,6 +2475,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_get_briefing()
         elif self.path.split('?')[0] == '/api/news':
             self._handle_get_news()
+        elif self.path.split('?')[0] == '/api/intelligence':
+            self._handle_get_intelligence()
         elif self.path == '/api/progress':
             self._handle_get_progress()
         # ── Drive Index / Memory Recall routes ──
@@ -6142,6 +6144,40 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 return json.load(f)
         except Exception:
             return None
+
+    def _handle_get_intelligence(self):
+        """GET /api/intelligence — Daily Intelligence Feed with 3 categories:
+        Global Economic Update, AI & Technology Update, Crypto Update.
+        Reads from journal/news_briefings/YYYY-MM-DD_intelligence.json."""
+        try:
+            from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+            _wib = _tz(_td(hours=7))
+            now = _dt.now(_wib)
+
+            # Try today first, then go back 7 days
+            data = None
+            for offset in range(7):
+                d = (now - _td(days=offset)).strftime('%Y-%m-%d')
+                path = NEWS_BRIEFINGS_DIR / ('%s_intelligence.json' % d)
+                if path.exists():
+                    try:
+                        with open(path, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                        break
+                    except Exception:
+                        continue
+
+            if not data:
+                self._send_json(200, json.dumps({
+                    'generated_wib': now.isoformat(timespec='seconds'),
+                    'categories': {},
+                    'empty': True,
+                }))
+                return
+
+            self._send_json(200, json.dumps(data))
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': 'Failed to load intelligence feed', 'details': str(e)}))
 
     def _handle_get_briefing(self):
         """GET /api/briefing — newest Pagi + Malam sections from Dashboard.md (file is
