@@ -21,9 +21,9 @@
     "catalyze": {
       "name": "Catalyze",
       "amount": 18000000,
-      "confidence": "uncertain",
+      "confidence": "variable",
       "pay_day": 10,
-      "note": "AT RISK Aug 2026: layoff under negotiation, client can no longer pay salary. Treat as non-guaranteed until decided."
+      "note": "Active and stable. Variable, depends on hours worked."
     }
   },
   "critical_obligations": [
@@ -34,17 +34,17 @@
   ],
   "scenarios": {
     "conservative": {
-      "description": "Samudera only - Catalyze layoff goes through",
+      "description": "Samudera only - no side income while Manuva settles",
       "catalyze_factor": 0.0,
       "include_manuva": false
     },
     "expected": {
-      "description": "Samudera + Catalyze (current state, until decision)",
+      "description": "Samudera + Catalyze (current state)",
       "catalyze_factor": 1.0,
       "include_manuva": false
     },
     "optimistic": {
-      "description": "Samudera + Catalyze retained at full hours",
+      "description": "Samudera + Catalyze at full hours (+ Manuva if resolved)",
       "catalyze_factor": 1.2,
       "include_manuva": false
     }
