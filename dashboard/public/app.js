@@ -922,9 +922,10 @@ function renderMeetingsSlot() {
 }
 
 /* ── boot ── */
-/* The /samudera office-safe view hides every personal-data surface:
-   reminders, finance, memory. Only Today + News ship to the office. */
-const SAMUDERA_HIDDEN_TABS = ['reminders', 'finance', 'memory'];
+/* The /samudera office-safe view hides personal-finance surfaces:
+   reminders + finance. Memory stays visible — it is workspace-scoped
+   (samudera notes live in the samudera workspace, never personal ones). */
+const SAMUDERA_HIDDEN_TABS = ['reminders', 'finance'];
 
 function applySamuderaMode() {
   const hidden = new Set(SAMUDERA_HIDDEN_TABS);
