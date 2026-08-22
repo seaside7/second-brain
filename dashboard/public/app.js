@@ -237,7 +237,7 @@ function topTicketsCard(h) {
   const remRow = r => `
     <div class="home-row">
       <span class="home-row-text">${U.esc(r.text)}</span>
-      <span class="home-when${r.bucket === 'overdue' ? ' is-late' : ''}">${r.bucket === 'overdue' ? 'overdue' : 'today'} · ${homeWhen(r.due)}</span>
+      <span class="home-when${r.bucket === 'overdue' ? ' is-late' : ''}">${r.bucket === 'overdue' ? 'overdue · ' : ''}${homeWhen(r.due)}</span>
     </div>`;
   const dlRow = d => `
     <div class="home-row">

@@ -6300,12 +6300,18 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._send_json(200, json.dumps(payload))
             return
 
-        # ── reminders (today + overdue, most urgent first) ──
-        code, out, err = self._run_script(REMINDER_ENGINE, ['list', '--scope', 'today'], timeout=20)
+        # ── reminders: what needs attention next ──
+        # overdue first, then soonest due — NOT just today's, so upcoming
+        # note-reminders ("submit tax report on 30 aug") always surface.
+        code, out, err = self._run_script(REMINDER_ENGINE, ['list', '--scope', 'all'], timeout=20)
         if code == 0:
             try:
                 items = json.loads(out).get('reminders', [])
-                payload['reminders'] = items[:3]
+                live = [r for r in items if not r.get('done')]
+                prio = {'overdue': 0, 'today': 1}
+                live.sort(key=lambda r: (prio.get(r.get('bucket'), 2),
+                                         r.get('due') or '9999'))
+                payload['reminders'] = live[:3]
             except Exception:
                 pass
 
