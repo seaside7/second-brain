@@ -170,26 +170,22 @@ def _store_to_milestones(cls, ws_name):
 
 
 def _store_to_reminders(cls, ws_name):
-    state_dir = os.path.join(_ws_dir(ws_name), 'state')
-    path = os.path.join(state_dir, 'reminders.json')
-    data = _load_json(path) or {'next_seq': 1, 'entries': {}}
-
-    seq = data.get('next_seq', 1)
-    rid = 'REM-%04d' % seq
-    data['next_seq'] = seq + 1
-
-    entry = {
-        'id': rid,
-        'title': cls.get('title', ''),
-        'content': cls.get('content', ''),
-        'trigger_date': cls.get('date', ''),
-        'status': 'active',
-        'source': 'user_note',
-        'created_wib': _now_wib(),
-    }
-    data['entries'][rid] = entry
-    _save_json(path, data)
-    return {'ok': True, 'reminder_id': rid}
+    """Delegate to reminder_engine — the single reminders store (personal
+    brain, real date parsing, served via /api/reminders). Ignores ws_name:
+    reminders are always personal, never office-scoped."""
+    try:
+        import reminder_engine
+        text = (cls.get('content') or cls.get('title') or '').strip()
+        due = cls.get('due_date')
+        if not due:
+            try:
+                due = reminder_engine.parse_due(text)
+            except Exception:
+                due = None
+        entry = reminder_engine.add(text, due=due, source='note')
+        return {'ok': True, 'reminder_id': entry['id']}
+    except Exception as e:
+        return {'ok': False, 'output': str(e)}
 
 
 def _rebuild_faiss(ws_name):

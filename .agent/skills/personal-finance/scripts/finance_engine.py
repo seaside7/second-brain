@@ -14,8 +14,10 @@ Usage:
     finance_engine.py record --type income --amount 18000000 --source catalyze
 """
 import argparse
+import calendar
 import json
 import os
+import re
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -142,17 +144,59 @@ def analyze_cash(data, config):
 
 
 def analyze_obligations(data, config):
-    """Parse debt obligations with due dates and amounts."""
+    """Parse debt obligations with due dates and amounts.
+
+    Sheet columns: Obligation | Type | Normal Payment | Arrears/Outstanding |
+    Due Date | Priority | Status. Due Date is a MONTHLY RECURRING day-of-month
+    ('18' = every 18th); it is resolved to the current month's occurrence and
+    flagged overdue against today (WIB). 'TBD'/blank -> no due date.
+    """
+    today = datetime.now(WIB).date()
+
+    def _num(v):
+        try:
+            return int(float(str(v).replace(",", "").strip()))
+        except (ValueError, TypeError):
+            return 0
+
     obligations = []
     for row in data.get("debt_obligations", [])[1:]:
         if not row or len(row) < 2:
             continue
+
+        due_day = None
+        if len(row) > 4:
+            m = re.search(r"\d{1,2}", str(row[4]))
+            if m and 1 <= int(m.group()) <= 31:
+                due_day = int(m.group())
+
+        due_date, overdue, days_overdue = "", False, 0
+        if due_day is not None:
+            last_day = calendar.monthrange(today.year, today.month)[1]
+            try:
+                due_dt = today.replace(day=min(due_day, last_day))
+            except ValueError:
+                due_dt = today.replace(day=last_day)
+            days_overdue = (today - due_dt).days
+            overdue = days_overdue > 0
+            due_date = due_dt.isoformat()
+
+        normal = _num(row[2]) if len(row) > 2 else 0
+        outstanding = _num(row[3]) if len(row) > 3 else 0
         obligations.append({
-            "name": row[0] if row else "",
-            "amount": _parse_amount(row[1]) if len(row) > 1 else 0,
-            "due": row[2] if len(row) > 2 else "",
-            "status": row[3] if len(row) > 3 else "",
-            "priority": row[4] if len(row) > 4 else "",
+            "name": str(row[0]).strip() if row[0] else "",
+            "type": str(row[1]).strip() if len(row) > 1 else "",
+            "normal_payment": normal,
+            "outstanding": outstanding,
+            # amount keeps the old key alive for CLI consumers:
+            # what actually needs paying now (arrears first)
+            "amount": outstanding if outstanding > 0 else normal,
+            "due_day": due_day,
+            "due_date": due_date,
+            "overdue": overdue,
+            "days_overdue": days_overdue,
+            "priority": str(row[5]).strip() if len(row) > 5 else "",
+            "status": str(row[6]).strip() if len(row) > 6 else "",
         })
     return obligations
 
@@ -226,7 +270,14 @@ def cmd_analyze(args):
     if obligations:
         print(f"\n  Obligations ({len(obligations)}):")
         for ob in obligations:
-            print(f"    {ob['name']:<25} {_fmt(ob['amount'])} due: {ob.get('due', '-')}")
+            if ob.get("due_day"):
+                due_txt = f"every month on the {ob['due_day']}th (this month: {ob['due_date']})" \
+                    if not ob.get("overdue") else \
+                    f"was due {ob['due_date']}  ** OVERDUE {ob['days_overdue']}d **"
+            else:
+                due_txt = "no due date"
+            out_txt = f" | arrears {_fmt(ob['outstanding'])}" if ob["outstanding"] else ""
+            print(f"    {ob['name']:<25} {_fmt(ob['normal_payment'])}/mo{out_txt}  [{due_txt}]")
 
     if friend_debts:
         print(f"\n  Friend Debts:")
@@ -289,11 +340,13 @@ def cmd_briefing(args):
     print(f"    Cash: {_fmt(cash)} | Risk: {risk}")
 
     # Next 7 days critical
-    critical = [ob for ob in obligations if ob.get("priority") in ("critical", "")]
+    critical = [ob for ob in obligations
+                if ob.get("priority", "").lower() in ("critical", "")]
     if critical:
         print(f"    Critical obligations:")
         for ob in critical[:3]:
-            print(f"      {ob['name']}: {_fmt(ob['amount'])}")
+            late = f" OVERDUE {ob['days_overdue']}d" if ob.get("overdue") else ""
+            print(f"      {ob['name']}: {_fmt(ob['amount'])}{late}")
 
 
 def cmd_ask(args):
@@ -310,9 +363,15 @@ def cmd_ask(args):
 
     obligations = analyze_obligations(data, config)
     if obligations:
-        context += f"\nObligations:\n"
+        context += f"\nObligations (monthly recurring, due day vs today {datetime.now(WIB).date()}):\n"
         for ob in obligations[:10]:
-            context += f"  {ob['name']}: {_fmt(ob['amount'])} due {ob.get('due', '-')}\n"
+            if ob.get("due_day"):
+                state = f"OVERDUE by {ob['days_overdue']}d" if ob.get("overdue") else "upcoming this month"
+                due_txt = f"due on day {ob['due_day']} ({state})"
+            else:
+                due_txt = "no due date"
+            context += f"  {ob['name']}: normal {_fmt(ob['normal_payment'])}/mo" \
+                       f", arrears {_fmt(ob['outstanding'])}, {due_txt}\n"
 
     friend_debts = analyze_friend_debts(data, config)
     if friend_debts:

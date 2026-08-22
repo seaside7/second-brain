@@ -21,6 +21,15 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.parse import urlencode, unquote, urlsplit, parse_qs
 
+# Startup banner + logs carry emoji/unicode — force UTF-8 so redirected or
+# non-console runs (files, services, some VPS shells) never die on cp1252.
+for _stream in (sys.stdout, sys.stderr):
+    if _stream is not None and hasattr(_stream, 'reconfigure'):
+        try:
+            _stream.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
+
 PORT = int(os.environ.get('DASHBOARD_PORT', '3737'))
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -92,6 +101,9 @@ NEWS_BRIEFING_LOG = BASE_DIR / 'journal' / 'state' / 'news_briefing_log.json'
 SLACK_CLI = '.agent/skills/slack-connector/scripts/slack_client.py'
 WORKSPACES_JSON = BASE_DIR / '.agent' / 'workspaces' / 'workspaces.json'
 PERSONAL_FINANCE_PATH = BASE_DIR / '.agent' / 'workspaces' / 'personal' / 'finance.json'
+REMINDER_ENGINE = str(BASE_DIR / '.agent' / 'scripts' / 'reminder_engine.py')
+FINANCE_API = str(BASE_DIR / '.agent' / 'skills' / 'personal-finance' / 'scripts' / 'finance_engine.py')
+WIB_TZ = timezone(timedelta(hours=7))
 
 # ── Samudera office-safe dashboard data sources ─────────────────────────────
 # The /samudera page serves a Samudera-ONLY view: every data source resolves to
@@ -2499,6 +2511,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_get_knowledge_entries()
         elif self.path.split('?')[0] == '/api/memory-notes':
             self._handle_get_memory_notes()
+        elif self.path.split('?')[0] == '/api/reminders':
+            self._handle_get_reminders()
+        elif self.path.split('?')[0] == '/api/finance':
+            self._handle_get_finance()
         else:
             super().do_GET()
 
@@ -2604,6 +2620,14 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_post_memory_note_edit()
         elif self.path == '/api/intelligence/generate':
             self._handle_post_intelligence_generate()
+        elif self.path == '/api/reminders/add':
+            self._handle_post_reminders('add')
+        elif self.path == '/api/reminders/close':
+            self._handle_post_reminders('close')
+        elif self.path == '/api/reminders/reopen':
+            self._handle_post_reminders('reopen')
+        elif self.path == '/api/reminders/delete':
+            self._handle_post_reminders('delete')
         else:
             self.send_error(404, 'Not Found')
 
@@ -6205,6 +6229,105 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         t.start()
         self._send_json(200, json.dumps({'status': 'generating'}))
 
+    def _handle_get_reminders(self):
+        """GET /api/reminders?scope=today|upcoming|overdue|done|all.
+        Personal-workspace reminders; never exposed to the office-safe view."""
+        try:
+            qs = parse_qs(urlsplit(self.path).query)
+            scope = (qs.get('scope', ['all'])[0] or 'all').strip()
+            code, out, err = self._run_script(REMINDER_ENGINE, ['list', '--scope', scope], timeout=20)
+            if code != 0:
+                self._send_json(500, json.dumps({'error': 'reminder list failed', 'details': err[:300]}))
+                return
+            self._send_json(200, out)
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': 'reminders failed', 'details': str(e)}))
+
+    def _handle_post_reminders(self, action):
+        """POST /api/reminders/{add|close|reopen|delete}. add: {text, due?};
+            others: {id}."""
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+        except Exception:
+            self._send_json(400, json.dumps({'error': 'invalid JSON'}))
+            return
+        cmd = [action]
+        if action == 'add':
+            text = (body.get('text') or '').strip()
+            if not text:
+                self._send_json(400, json.dumps({'error': 'text is required'}))
+                return
+            cmd += ['--text', text]
+            due = (body.get('due') or '').strip()
+            if due:
+                cmd += ['--due', due]
+        else:
+            rid = (body.get('id') or '').strip()
+            if not rid:
+                self._send_json(400, json.dumps({'error': 'id is required'}))
+                return
+            cmd += ['--id', rid]
+        code, out, err = self._run_script(REMINDER_ENGINE, cmd, timeout=20)
+        if code != 0:
+            self._send_json(400, json.dumps({'error': action + ' failed', 'details': (err or out)[:300]}))
+            return
+        self._send_json(200, out)
+
+    _finance_cache = {'at': 0.0, 'data': None}
+
+    def _handle_get_finance(self):
+        """GET /api/finance — personal financial snapshot built from
+        finance_engine functions (reads the Finance Google Sheet).
+        Cached in-memory for 10 min (Sheets quota + latency)."""
+        import time as _time
+
+        def _build():
+            sys.path.insert(0, str(BASE_DIR / '.agent' / 'skills' / 'personal-finance' / 'scripts'))
+            for stale in [m for m in list(sys.modules)
+                          if m.startswith(('finance_engine', 'workspace_resolver'))]:
+                del sys.modules[stale]
+            import finance_engine as fe
+            config, _ctx = fe._load_finance_config()
+            data = fe.read_all_tabs(config)
+            cash = fe.analyze_cash(data, config)
+            obligations = fe.analyze_obligations(data, config)
+            friend_debts = fe.analyze_friend_debts(data, config)
+            scenarios = {}
+            for name in ('conservative', 'expected', 'optimistic'):
+                scenarios[name] = fe.forecast_scenario(cash, config, name)
+            income_sources = [
+                {'key': k, 'name': s.get('name', k), 'amount': s.get('amount', 0),
+                 'confidence': s.get('confidence', '?')}
+                for k, s in (config.get('income_sources') or {}).items()
+            ]
+            return {
+                'cash': cash,
+                'income_sources': income_sources,
+                'obligations': obligations,
+                'friend_debts': friend_debts,
+                'friend_debts_total': sum(d.get('remaining', d.get('total', 0))
+                                          for d in friend_debts),
+                'scenarios': scenarios,
+                'generated_wib': datetime.now(WIB_TZ).strftime('%Y-%m-%dT%H:%M:%S%z'),
+            }
+
+        now = _time.time()
+        if now - type(self)._finance_cache['at'] < 600 and type(self)._finance_cache['data']:
+            self._send_json(200, json.dumps(type(self)._finance_cache['data']))
+            return
+        try:
+            data = _build()
+        except SystemExit:
+            self._send_json(500, json.dumps({'error': 'finance config missing'}))
+            return
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': 'finance read failed',
+                                             'details': str(e)[:300]}))
+            return
+        type(self)._finance_cache.update(at=now, data=data)
+        self._send_json(200, json.dumps(data))
+
     def _handle_get_briefing(self):
         """GET /api/briefing — newest Pagi + Malam sections from Dashboard.md (file is
         reverse-chron, so first matching header of each kind = newest). latest = the one
@@ -6614,9 +6737,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         except Exception:
             self._send_json(500, json.dumps({'error': 'invalid classifier output'}))
             return
-        # Store
+        # Store — combined dashboard has no workspace header, so notes land in
+        # the personal brain; /samudera explicitly scopes its own.
         inbox_script = str(BASE_DIR / '.agent' / 'scripts' / 'memory_inbox.py')
-        store_cmd = ['store', '--workspace', ws, '--classification', json.dumps(classification, ensure_ascii=False)]
+        store_cmd = ['store', '--workspace', ws or 'personal', '--classification', json.dumps(classification, ensure_ascii=False)]
         code, out, err = self._run_script(inbox_script, store_cmd, timeout=30)
         if code != 0:
             self._send_json(500, json.dumps({'error': 'storage failed', 'detail': err}))
@@ -6627,6 +6751,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._send_json(500, json.dumps({'error': 'invalid storage output'}))
             return
         result['classification'] = classification
+
+        # NOTE: reminder-type notes are registered by memory_inbox itself
+        # (_store_to_reminders delegates to reminder_engine), so the result
+        # already carries the structured reminder — no second registration here.
         self._send_json(200, json.dumps(result, ensure_ascii=False))
 
     def _handle_post_memory_note_edit(self):

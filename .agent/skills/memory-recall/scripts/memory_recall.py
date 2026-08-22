@@ -285,7 +285,7 @@ def _search_state(ws_name, query, top_k=10):
         if not data:
             continue
 
-        entries = data if isinstance(data, list) else data.get('entries', [])
+        entries = data if isinstance(data, list) else data.get('entries', data.get('reminders', []))
         if isinstance(data, dict) and isinstance(entries, dict):
             entries = list(entries.values())
         elif isinstance(data, dict) and not isinstance(entries, list):

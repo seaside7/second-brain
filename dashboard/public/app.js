@@ -90,8 +90,8 @@ function canRender(container) {
   return !(a && container && container.contains(a) && a.matches('input, textarea, select'));
 }
 
-/* ── Router: #today (default) | #inbox | #work[/filter] | #meetings | #system ── */
-const TAB_NAMES = ['today', 'inbox', 'approvals', 'agents', 'work', 'meetings', 'hours', 'news', 'system', 'memory'];
+/* ── Router: #today (default) | #reminders | #news | #finance | #memory ── */
+const TAB_NAMES = ['today', 'reminders', 'news', 'finance', 'memory'];
 
 function parseHash() {
   const h = (location.hash || '#today').replace(/^#/, '');
@@ -165,7 +165,11 @@ async function refreshOverview(manual = false) {
   App.briefing = null;
   btn.classList.remove('is-busy');
   updateChrome();
-  loadActiveTab();
+  /* Background polls must never clobber a tab the user is reading (e.g.
+     mid-story in News: a full reload collapses content height -> scroll
+     jumps to top). Today is designed for live refresh; every other tab
+     reloads only on explicit navigation or a manual Refresh click. */
+  if (manual || App.activeTab === 'today') loadActiveTab();
 }
 
 /* header date/updated-at + System tab red dot.
@@ -229,6 +233,7 @@ function renderToday() {
     heroTiles(ov),
     momentumBand(),
     briefingCard(),
+    `<div id="today-reminders"></div>`,
     escalationStrip(ov),
     `<div id="today-approvals">${approvalsCard()}${failuresCard()}</div>`,
     actionItemsCard(ov),
@@ -243,6 +248,23 @@ function renderToday() {
   ].join('\n');
   paintActivitySpark();     // reinsert cached spark into the header slot (no-op first render)
   ensureActivitySpark();    // kicks off the one-time fetch; no-op once already fetched
+  ensureReminders();        // fills #today-reminders with today's items (async)
+}
+
+/* ⏰ Today's reminders slot — fetched separately from overview so a slow
+   reminder read never blocks first paint. Renders absent on failure. */
+let _remindersAt = 0;
+function ensureReminders(force = false) {
+  if (!force && Date.now() - _remindersAt < 60000) return;
+  const slot = $id('today-reminders');
+  if (!slot) return;
+  _remindersAt = Date.now();
+  U.fetchJSON('/api/reminders?scope=today')
+    .then(data => {
+      const el = $id('today-reminders');
+      if (el && window.Reminders) el.innerHTML = Reminders.todayCard(data.reminders || []);
+    })
+    .catch(() => { /* silent: reminders are additive chrome */ });
 }
 
 /* WIB hour (0-23) from a server-generated ISO timestamp (e.g. overview's
@@ -900,17 +922,11 @@ function renderMeetingsSlot() {
 }
 
 /* ── boot ── */
-const SAMUDERA_HIDDEN_TABS = ['meetings', 'hours', 'system'];
-
-/* Tabs that exist ONLY in the /samudera view (the combined dashboard hides
-   them so personal/Catalyze chrome never mixes with Samudera). The Agents
-   panel is Samudera-primary: its endpoints are read-mostly + a prompt editor
-   that writes .agent/skills/<skill>/ markdown, so it only ships to the
-   office-safe view. */
-const SAMUDERA_ONLY_TABS = ['agents', 'memory'];
+/* The /samudera office-safe view hides every personal-data surface:
+   reminders, finance, memory. Only Today + News ship to the office. */
+const SAMUDERA_HIDDEN_TABS = ['reminders', 'finance', 'memory'];
 
 function applySamuderaMode() {
-  /* hide personal-harness tabs and force a safe tab if the hash targets one */
   const hidden = new Set(SAMUDERA_HIDDEN_TABS);
   document.querySelectorAll('.tab-btn').forEach(b => {
     if (hidden.has(b.dataset.tab)) b.style.display = 'none';
@@ -926,19 +942,7 @@ function applySamuderaMode() {
 }
 
 function applyCombinedMode() {
-  /* hide the samudera-only tabs on the combined dashboard */
-  const only = new Set(SAMUDERA_ONLY_TABS);
-  document.querySelectorAll('.tab-btn').forEach(b => {
-    if (only.has(b.dataset.tab)) b.style.display = 'none';
-  });
-  document.querySelectorAll('.tab-panel').forEach(p => {
-    if (only.has(p.id.replace('tab-', ''))) p.style.display = 'none';
-  });
-  const { tab } = parseHash();
-  if (only.has(tab)) {
-    location.hash = '#today';   // parseHash/applyRoute re-run via hashchange
-    applyRoute();
-  }
+  /* combined view ships everything — no tabs to hide */
 }
 
 function boot() {
@@ -955,6 +959,7 @@ function boot() {
 
   $id('btn-refresh').addEventListener('click', () => {
     App.calendarAt = 0;                       // force calendar refetch too
+    _remindersAt = 0;                         // force reminder slot refetch
     refreshOverview(true);
     if (App.activeTab === 'today') ensureCalendar();
   });

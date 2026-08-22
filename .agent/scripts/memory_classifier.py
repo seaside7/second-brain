@@ -22,6 +22,11 @@ if sys.stderr.encoding != 'utf-8':
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(BASE_DIR / '.agent' / 'scripts'))
 
+try:
+    from reminder_engine import parse_due as _parse_due_datetime
+except ImportError:            # engine missing -> reminders just carry no date
+    _parse_due_datetime = None
+
 # ── Memory types ──────────────────────────────────────────────────────────
 MEMORY_TYPES = (
     'definition', 'fact', 'project_knowledge', 'decision',
@@ -269,6 +274,19 @@ If uncertain, use confidence: "medium"."""
     return None
 
 
+def _extract_due(text, mem_type):
+    """Full datetime (ISO YYYY-MM-DDTHH:MM) for reminder-type notes.
+    Falls back to the plain date extractor's YYYY-MM-DD result."""
+    if _parse_due_datetime is not None:
+        try:
+            iso = _parse_due_datetime(text)
+            if iso:
+                return iso
+        except Exception:
+            pass
+    return _extract_date(text)
+
+
 def classify(text):
     """Classify a note. Returns dict with type, title, content, entities, etc."""
     text = (text or '').strip()
@@ -279,6 +297,7 @@ def classify(text):
 
     # Rule-based fast path
     rule_type, rule_conf = _rule_classify(text)
+    due_date = _extract_due(text, rule_type) if rule_type == 'reminder' else None
 
     if rule_type and rule_conf >= 0.8:
         # High-confidence rule match — use rules, no LLM needed
@@ -292,6 +311,8 @@ def classify(text):
             'confidence': 'high',
             'summary': text[:200],
         }
+        if due_date:
+            result['due_date'] = due_date
         if rule_type == 'definition':
             result['category'] = 'glossary'
         elif rule_type in TYPE_TO_KNOWLEDGE_CATEGORY:
@@ -304,6 +325,8 @@ def classify(text):
         llm_result.setdefault('entities', _extract_entities(text) or llm_result.get('entities', []))
         llm_result.setdefault('project', _extract_project(text) or llm_result.get('project'))
         llm_result.setdefault('date', _extract_date(text) or llm_result.get('date'))
+        if due_date:
+            llm_result['due_date'] = due_date
         if llm_result.get('type') in TYPE_TO_KNOWLEDGE_CATEGORY:
             llm_result['category'] = TYPE_TO_KNOWLEDGE_CATEGORY[llm_result['type']]
         return llm_result

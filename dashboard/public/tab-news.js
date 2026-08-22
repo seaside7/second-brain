@@ -27,6 +27,9 @@ window.Tabs = window.Tabs || {};
     const tab = document.getElementById('tab-news');
     if (!tab) return;
 
+    // Preserve reading position: replacing innerHTML collapses height and
+    // yanks the scroll to top. Snapshot + restore around the swap.
+    const scrollY = window.scrollY;
     tab.innerHTML = '<div class="load-note">Loading intelligence feed...</div>';
 
     try {
@@ -39,6 +42,7 @@ window.Tabs = window.Tabs || {};
     }
 
     render();
+    window.scrollTo(0, scrollY);
   }
 
   async function generate() {
@@ -157,7 +161,13 @@ window.Tabs = window.Tabs || {};
     if (verdict) topline.push(verdict);
     if (story.importance) topline.push(dotRating(story.importance));
 
-    return '<details class="intel-story" data-key="intel:' + U.esc(cardKey(story)) + '">' +
+    // Expansion memory: the app records every <details data-key> toggle in
+    // UI.openKeys (sessionStorage). Consult it so a re-render never collapses
+    // a briefing the user opened.
+    const key = 'intel:' + cardKey(story);
+    const isOpen = (window.UI && typeof UI.isOpen === 'function') ? UI.isOpen(key, false) : false;
+
+    return '<details class="intel-story" data-key="' + U.esc(key) + '"' + (isOpen ? ' open' : '') + '>' +
       '<summary>' +
         '<div class="intel-row">' +
           '<div class="intel-num">' + num + '</div>' +
