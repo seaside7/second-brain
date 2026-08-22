@@ -6284,11 +6284,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         return entries if isinstance(entries, list) else []
 
     def _handle_get_home(self):
-        """GET /api/home — Home tab aggregation.
-        Personal view : reminders due + project deadlines + active work
-                        (from the personal workspace state files) + top news.
-        Samudera view : top news ONLY (no personal data crosses over)."""
-        ws = self._request_ws()
+        """GET /api/home — Home tab aggregation: reminders due + project
+        deadlines + active work + top news. Served identically to BOTH views:
+        tickets are task data, not confidential — finance is what stays out
+        of /samudera."""
         payload = {
             'generated_wib': datetime.now(WIB_TZ).isoformat(timespec='seconds'),
             'reminders': [],
@@ -6296,9 +6295,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             'working_on': [],
             'news': self._home_news(),
         }
-        if ws == 'samudera':
-            self._send_json(200, json.dumps(payload))
-            return
 
         # ── reminders: what needs attention next ──
         # overdue first, then soonest due — NOT just today's, so upcoming
