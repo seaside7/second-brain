@@ -6190,9 +6190,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         def _run_generate():
             try:
                 import subprocess
+                import sys as _sys
                 script = REPO_ROOT / '.agent' / 'skills' / 'news-intelligence' / 'scripts' / 'intelligence_feed.py'
                 subprocess.run(
-                    ['python3', str(script), 'generate'],
+                    [_sys.executable, str(script), 'generate'],
                     cwd=str(REPO_ROOT),
                     timeout=180,
                     capture_output=True,

@@ -1,10 +1,8 @@
 /* ═══════════════════════════════════════════════════════════════════
-   tab-news.js — Daily Intelligence Feed tab.
-   Loads from /api/intelligence with 3 categories:
-   - Global Economic Update (Bloomberg-style)
-   - AI & Technology Update
-   - Crypto Update
-   Uses ONLY Comp, U (per components.js) + CSS classes.
+   tab-news.js — Daily Intelligence Feed tab. Owns #tab-news only.
+   Editorial briefing design: numbered story cards, teaser on collapse,
+   colored section accents, tinted MY TAKE quote block.
+   Loads from /api/intelligence. Uses ONLY Comp, U + .intel-* classes.
    ═══════════════════════════════════════════════════════════════════ */
 'use strict';
 
@@ -17,12 +15,6 @@ window.Tabs = window.Tabs || {};
     { key: 'crypto', icon: '\u20BF', label: 'Crypto' },
   ];
 
-  const VERDICT_COLORS = {
-    'TRY NOW': 'good',
-    'MONITOR': 'warn',
-    'IGNORE': 'muted',
-  };
-
   const state = {
     activeCat: 'global_economy',
     data: null,
@@ -31,7 +23,7 @@ window.Tabs = window.Tabs || {};
   };
 
   async function load(cat) {
-    state.activeCat = cat || 'global_economy';
+    if (cat) state.activeCat = cat;
     const tab = document.getElementById('tab-news');
     if (!tab) return;
 
@@ -47,6 +39,32 @@ window.Tabs = window.Tabs || {};
     }
 
     render();
+  }
+
+  async function generate() {
+    state.generating = true;
+    render();
+    try {
+      await U.fetchJSON('/api/intelligence/generate', { method: 'POST' });
+    } catch (err) { /* endpoint already fires the job; keep polling */ }
+    // Poll until a fresh feed shows up (generation takes ~1-2 min)
+    const started = Date.now();
+    const before = JSON.stringify(stamp(state.data));
+    const poll = setInterval(async () => {
+      try {
+        const fresh = await U.fetchJSON('/api/intelligence');
+        if (JSON.stringify(stamp(fresh)) !== before || Date.now() - started > 180000) {
+          clearInterval(poll);
+          state.data = fresh;
+          state.generating = false;
+          render();
+        }
+      } catch (e) { /* keep polling */ }
+    }, 10000);
+  }
+
+  function stamp(d) {
+    return d && d.generated_wib ? d.generated_wib : null;
   }
 
   function render() {
@@ -66,157 +84,164 @@ window.Tabs = window.Tabs || {};
 
     const parts = [];
 
-    // Header with refresh button
-    parts.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--sp-4)">');
+    // ── Header ──
+    parts.push('<div class="intel-head">');
     parts.push('<div>');
-    parts.push('<h2 style="margin:0 0 var(--sp-1) 0;font-size:var(--fs-lg);font-weight:600">Daily Intelligence</h2>');
-    if (data.generated_wib) {
-      parts.push('<div class="text-muted" style="font-size:var(--fs-sm)">Updated: ' + U.esc(data.generated_wib) + '</div>');
-    }
+    parts.push('<h2>Daily Intelligence</h2>');
+    const when = data.generated_wib ? data.generated_wib.replace('T', ' · ').slice(0, 22) : '';
+    parts.push('<div class="intel-updated">' + (when ? 'Updated ' + U.esc(when) + ' WIB' : '&nbsp;') + '</div>');
     parts.push('</div>');
-    if (state.generating) {
-      parts.push('<button class="chip chip--active" disabled style="cursor:wait">⏳ Generating...</button>');
-    } else {
-      parts.push('<button id="intel-refresh" class="chip" onclick="window.Tabs.news.generate()">🔄 Refresh</button>');
-    }
+    parts.push(refreshBtn());
     parts.push('</div>');
 
-    // Category tabs
-    parts.push('<div class="chip-row" style="margin-bottom:var(--sp-4)">');
+    // ── Segmented category control ──
+    parts.push('<nav class="intel-seg">');
     for (const c of CATS) {
       const active = state.activeCat === c.key;
-      const href = '#news/' + c.key;
-      parts.push('<a href="' + href + '" class="' + (active ? 'chip chip--active' : 'chip') + '">' + c.icon + ' ' + U.esc(c.label) + '</a>');
+      parts.push('<a href="#news/' + c.key + '" class="' + (active ? 'is-active' : '') + '">' +
+        '<span>' + c.icon + '</span><span>' + U.esc(c.label) + '</span></a>');
     }
-    parts.push('</div>');
+    parts.push('</nav>');
 
-    // Content
+    // ── Content ──
     if (data.empty || !data.categories) {
-      parts.push('<div style="text-align:center;padding:var(--sp-8) 0">');
-      parts.push('<div style="font-size:2rem;margin-bottom:var(--sp-2)">\uD83D\uDCF0</div>');
-      parts.push('<div style="font-weight:600;margin-bottom:var(--sp-2)">No intelligence feed yet</div>');
-      if (state.generating) {
-        parts.push('<div class="text-muted">Generating feed... This may take 1-2 minutes.</div>');
-      } else {
-        parts.push('<button id="intel-refresh" class="chip chip--active" onclick="window.Tabs.news.generate()" style="margin-top:var(--sp-2)">🔄 Generate Now</button>');
-      }
-      parts.push('</div>');
+      parts.push(emptyBlock());
     } else {
       const catData = data.categories[state.activeCat];
-      if (!catData || !catData.stories || catData.stories.length === 0) {
-        parts.push(Comp.emptyState({
-          icon: '\uD83D\uDCED',
-          title: 'No stories in this category',
-          hint: 'Check back later or run the feed generator.',
-        }));
+      const stories = catData && catData.stories ? catData.stories : [];
+      if (stories.length === 0) {
+        parts.push('<div class="intel-empty"><div class="intel-empty-icon">\uD83D\uDCED</div>' +
+          '<div class="intel-empty-title">No stories in this category yet</div>' +
+          '<div class="intel-empty-hint">Hit Refresh to pull the latest briefing.</div></div>');
       } else {
-        // Stats row
-        parts.push('<div class="hero-row" style="margin-bottom:var(--sp-4)">');
-        parts.push(Comp.statTile({
-          key: 'int-stories',
-          icon: catData.icon || '\uD83D\uDCF0',
-          label: catData.label || state.activeCat,
-          value: catData.stories_count,
-          sub: 'stories today',
-          status: catData.stories_count > 0 ? 'good' : null,
-        }));
-        parts.push(Comp.statTile({
-          key: 'int-fetched',
-          icon: '\uD83D\uDD0D',
-          label: 'Fetched',
-          value: catData.fetched_items || 0,
-          sub: 'RSS items scanned',
-        }));
-        parts.push('</div>');
-
-        // Story cards
-        for (const story of catData.stories) {
-          parts.push(storyCard(story, state.activeCat));
+        for (let i = 0; i < stories.length; i++) {
+          parts.push(storyCard(stories[i], i));
         }
+        parts.push('<div class="intel-updated" style="margin-top:var(--sp-4);text-align:center">' +
+          U.esc(catData.label || '') + ' \u00B7 ' + catData.fetched_items + ' RSS items scanned \u00B7 GPT-4o-mini analysis</div>');
       }
     }
-
-    // Source hint
-    parts.push('<div class="text-muted" style="margin-top:var(--sp-4);font-size:var(--fs-sm)">Powered by RSS feeds + GPT-4o-mini analysis</div>');
 
     tab.innerHTML = parts.join('');
   }
 
-  function storyCard(story, catKey) {
-    const rows = [];
-
-    // Main content sections based on category
-    if (catKey === 'global_economy') {
-      if (story.news) rows.push(section('NEWS', story.news));
-      if (story.why_it_matters) rows.push(section('WHY IT MATTERS', story.why_it_matters));
-      if (story.impact_on_indonesia) rows.push(section('IMPACT ON INDONESIA', story.impact_on_indonesia));
-      if (story.what_to_watch) rows.push(section('WHAT TO WATCH', story.what_to_watch));
-      if (story.my_take) rows.push(section('MY TAKE', story.my_take));
-    } else if (catKey === 'ai_tech') {
-      if (story.news) rows.push(section('NEWS', story.news));
-      if (story.why_it_matters) rows.push(section('WHY IT MATTERS', story.why_it_matters));
-      if (story.how_it_supports_work) rows.push(section('HOW IT CAN SUPPORT MY WORK', story.how_it_supports_work));
-      if (story.what_to_watch) rows.push(section('WHAT TO WATCH', story.what_to_watch));
-      if (story.my_take) rows.push(section('MY TAKE', story.my_take));
-    } else if (catKey === 'crypto') {
-      if (story.market_data) rows.push(section('MARKET', story.market_data));
-      if (story.news) rows.push(section('NEWS', story.news));
-      if (story.why_it_matters) rows.push(section('WHY IT MATTERS', story.why_it_matters));
-      if (story.what_to_watch) rows.push(section('WHAT TO WATCH', story.what_to_watch));
-      if (story.my_take) rows.push(section('MY TAKE', story.my_take));
+  function refreshBtn() {
+    if (state.generating) {
+      return '<button class="intel-refresh" disabled><span class="intel-refresh-spin">\u27F3</span> Generating\u2026</button>';
     }
-
-    // Badges
-    const badges = [];
-    if (story.importance) {
-      const impKind = story.importance >= 8 ? 'good' : story.importance >= 6 ? 'warn' : 'muted';
-      badges.push(Comp.badge(impKind, 'Imp ' + story.importance + '/10'));
-    }
-    if (story.verdict) {
-      const vKind = VERDICT_COLORS[story.verdict] || 'muted';
-      badges.push(Comp.badge(vKind, story.verdict));
-    }
-
-    // Source link
-    const rightHtml = story.url
-      ? '<a href="' + U.esc(story.url) + '" target="_blank" rel="noopener" class="chip">\uD83D\uDD17 Source</a>'
-      : '';
-
-    const metaParts = [];
-    if (story.source) metaParts.push(U.esc(story.source));
-
-    return '<div class="rows">' + Comp.listRow({
-      key: 'intel-' + (story.url ? story.url.slice(-8) : Math.random().toString(36).slice(2, 8)),
-      icon: CATS.find(c => c.key === catKey)?.icon || '\uD83D\uDCF0',
-      title: story.headline || 'Untitled',
-      badges: badges,
-      meta: metaParts.join(' \u00B7 '),
-      right: rightHtml,
-      expandBody: rows.join(''),
-    }) + '</div>';
+    return '<button class="intel-refresh" onclick="window.Tabs.news.generate()">\uD83D\uDD04 Refresh feed</button>';
   }
 
-  function section(label, text) {
-    return '<div style="margin-bottom:var(--sp-2)"><span class="text-muted" style="font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:0.05em">' + U.esc(label) + '</span><div style="margin-top:2px">' + U.esc(text) + '</div></div>';
+  function emptyBlock() {
+    let inner;
+    if (state.generating) {
+      inner = '<div class="intel-empty-title">Cooking up your first briefing\u2026</div>' +
+        '<div class="intel-empty-hint">Fetching RSS feeds and analysing with AI. This takes 1-2 minutes.</div>';
+    } else {
+      inner = '<div class="intel-empty-title">No intelligence feed yet</div>' +
+        '<div class="intel-empty-hint">Generate your first daily briefing now.</div>' +
+        '<div style="margin-top:var(--sp-4)"><button class="intel-refresh" onclick="window.Tabs.news.generate()">\u2728 Generate Now</button></div>';
+    }
+    return '<div class="intel-empty"><div class="intel-empty-icon">\uD83D\uDCF0</div>' + inner + '</div>';
   }
 
-  async function generate() {
-    state.generating = true;
-    render();
-    try {
-      await U.fetchJSON('/api/intelligence/generate', { method: 'POST' });
-      // Poll for new feed after 30 seconds
-      setTimeout(async () => {
-        try {
-          state.data = await U.fetchJSON('/api/intelligence');
-        } catch (e) { /* ignore */ }
-        state.generating = false;
-        render();
-      }, 30000);
-    } catch (err) {
-      state.generating = false;
-      render();
+  /* ── Editorial story card ─────────────────────────────────────── */
+
+  function storyCard(story, idx) {
+    const num = String(idx + 1).padStart(2, '0');
+    const teaser = firstSentence(story.news || story.market_data || '');
+    const verdict = verdictPill(story.verdict);
+
+    const topline = [];
+    if (story.source) topline.push('<span class="intel-source">' + U.esc(story.source) + '</span>');
+    if (verdict) topline.push(verdict);
+    if (story.importance) topline.push(dotRating(story.importance));
+
+    return '<details class="intel-story" data-key="intel:' + U.esc(cardKey(story)) + '">' +
+      '<summary>' +
+        '<div class="intel-row">' +
+          '<div class="intel-num">' + num + '</div>' +
+          '<div class="intel-main">' +
+            (topline.length ? '<div class="intel-topline">' + topline.join('') + '</div>' : '') +
+            '<h3 class="intel-headline">' + U.esc(story.headline || 'Untitled') + '</h3>' +
+            (teaser ? '<p class="intel-teaser">' + U.esc(teaser) + '</p>' : '') +
+            '<div class="intel-baseline"><span>Read briefing</span></div>' +
+          '</div>' +
+          '<span class="intel-chev">\u25B8</span>' +
+        '</div>' +
+      '</summary>' +
+      '<div class="intel-body">' +
+        sectionsFor(story) +
+        sourceLink(story.url) +
+      '</div>' +
+    '</details>';
+  }
+
+  function cardKey(story) {
+    return (story.url ? story.url.slice(-24) : (story.headline || '').slice(0, 24)).replace(/[^\w-]/g, '');
+  }
+
+  function sectionsFor(story) {
+    const secs = [];
+
+    // MARKET first for crypto
+    if (story.market_data) {
+      secs.push(sec('market', 'Market', story.market_data));
     }
+    if (story.news) {
+      secs.push(sec('news', 'News', story.news));
+    }
+    if (story.why_it_matters) {
+      secs.push(sec('why', 'Why it matters', story.why_it_matters));
+    }
+    if (story.impact_on_indonesia) {
+      secs.push(sec('impact', 'Impact on Indonesia', story.impact_on_indonesia));
+    }
+    if (story.how_it_supports_work) {
+      secs.push(sec('impact', 'How it can support my work', story.how_it_supports_work));
+    }
+    if (story.what_to_watch) {
+      secs.push(sec('watch', 'What to watch next', story.what_to_watch));
+    }
+    if (story.my_take) {
+      secs.push('<div class="intel-take"><span class="intel-label">\uD83D\uDCA1 My take</span>' +
+        '<div class="intel-text">' + U.esc(story.my_take) + '</div></div>');
+    }
+    return secs.join('');
+  }
+
+  function sec(kind, label, text) {
+    return '<div class="intel-sec intel-sec--' + kind + '">' +
+      '<span class="intel-label">' + U.esc(label) + '</span>' +
+      '<div class="intel-text">' + U.esc(text) + '</div>' +
+    '</div>';
+  }
+
+  function dotRating(n) {
+    let dots = '';
+    for (let i = 1; i <= 5; i++) {
+      dots += '<span class="intel-dot' + (i <= Math.round(n / 2) ? ' on' : '') + '"></span>';
+    }
+    return '<span class="intel-dots" title="Importance ' + n + '/10">' + dots + '</span>';
+  }
+
+  function verdictPill(v) {
+    if (!v) return '';
+    const cls = v === 'TRY NOW' ? 'try-now' : v === 'MONITOR' ? 'monitor' : 'ignore';
+    return '<span class="intel-verdict intel-verdict--' + cls + '">' + U.esc(v) + '</span>';
+  }
+
+  function sourceLink(url) {
+    if (!url) return '';
+    return '<div class="intel-foot"><a class="intel-src-link" href="' + U.esc(url) +
+      '" target="_blank" rel="noopener">\uD83D\uDD17 Read source \u2197</a></div>';
+  }
+
+  function firstSentence(text) {
+    const t = String(text || '').trim();
+    if (!t) return '';
+    const m = t.match(/^(.+?[.!?:])\s/);
+    return m ? m[1] : t.slice(0, 160);
   }
 
   Tabs.news = { load: load, generate: generate };
