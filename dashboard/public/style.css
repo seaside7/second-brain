@@ -2922,3 +2922,34 @@ a.ticket-chip:hover { border-color: var(--border-active); color: var(--text-acce
   font-size: var(--fs-xs); font-weight: 650; white-space: nowrap;
 }
 .fin-arr { margin-left: 6px; color: var(--st-warn); }
+
+/* ═══════════════════════════════════════════
+   Home tab — Top Tickets + Current news rows
+   ═══════════════════════════════════════════ */
+.home-section { padding: var(--sp-1) 0; }
+.home-section + .home-section { border-top: 1px dashed var(--border); margin-top: var(--sp-2); padding-top: var(--sp-2); }
+.home-section-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: var(--fs-xs); font-weight: 650; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--text-muted); margin-bottom: 4px;
+}
+.home-row {
+  display: flex; align-items: baseline; gap: var(--sp-2);
+  padding: 5px 0; font-size: var(--fs-sm);
+}
+.home-row-text {
+  flex: 1; min-width: 0; color: var(--text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+a.home-row-text { text-decoration: none; }
+a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
+.home-when {
+  flex: none; font-size: var(--fs-xs); color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.home-when.is-late { color: var(--st-serious); font-weight: 650; }
+.home-news-cat {
+  flex: none; min-width: 150px; font-size: var(--fs-xs);
+  color: var(--text-muted); white-space: nowrap;
+}
+.home-empty { font-size: var(--fs-xs); color: var(--text-muted); opacity: .7; padding: 2px 0; }

@@ -147,6 +147,8 @@ SAMUDERA_ALLOWED_GET = {
     '/api/memory-notes',
     # AI task runs
     '/api/ai-task',
+    # Home aggregation (samudera-scoped payload = news only)
+    '/api/home',
 }
 
 # POST routes the /samudera dashboard may call. Everything else in samudera
@@ -2513,6 +2515,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_get_memory_notes()
         elif self.path.split('?')[0] == '/api/reminders':
             self._handle_get_reminders()
+        elif self.path.split('?')[0] == '/api/home':
+            self._handle_get_home()
         elif self.path.split('?')[0] == '/api/finance':
             self._handle_get_finance()
         else:
@@ -6228,6 +6232,134 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         t = threading.Thread(target=_run_generate, daemon=True)
         t.start()
         self._send_json(200, json.dumps({'status': 'generating'}))
+
+    def _home_news(self, cap=3):
+        """Top stories from the newest intelligence feed — one best per
+        category, sorted by importance. Shared by both dashboard views."""
+        try:
+            feeds = sorted(NEWS_BRIEFINGS_DIR.glob('*_intelligence.json'))
+            if not feeds:
+                return []
+            feed = json.loads(feeds[-1].read_text(encoding='utf-8'))
+
+            def _imp(v):
+                try:
+                    return int(float(str(v).split('/')[0].strip()))
+                except Exception:
+                    return 0
+
+            picks = []
+            for key, cat in (feed.get('categories') or {}).items():
+                stories = cat.get('stories') or []
+                if not stories:
+                    continue
+                s = max(stories, key=_imp)
+                picks.append({
+                    'category': key,
+                    'label': cat.get('label', key),
+                    'icon': cat.get('icon', '📰'),
+                    'headline': s.get('headline', ''),
+                    'source': s.get('source', ''),
+                    'url': s.get('url', ''),
+                    'importance': _imp(s.get('importance')),
+                    'date': feed.get('date', ''),
+                })
+            picks.sort(key=lambda x: -x['importance'])
+            return picks[:cap]
+        except Exception:
+            return []
+
+    @staticmethod
+    def _home_state_entries(path):
+        """Defensive reader for state stores shaped {entries:{..}} or [..]."""
+        try:
+            data = json.loads(Path(path).read_text(encoding='utf-8'))
+        except Exception:
+            return []
+        if isinstance(data, list):
+            return [e for e in data if isinstance(e, dict)]
+        entries = data.get('entries', data)
+        if isinstance(entries, dict):
+            return [e for e in entries.values() if isinstance(e, dict)]
+        return entries if isinstance(entries, list) else []
+
+    def _handle_get_home(self):
+        """GET /api/home — Home tab aggregation.
+        Personal view : reminders due + project deadlines + active work
+                        (from the personal workspace state files) + top news.
+        Samudera view : top news ONLY (no personal data crosses over)."""
+        ws = self._request_ws()
+        payload = {
+            'generated_wib': datetime.now(WIB_TZ).isoformat(timespec='seconds'),
+            'reminders': [],
+            'deadlines': [],
+            'working_on': [],
+            'news': self._home_news(),
+        }
+        if ws == 'samudera':
+            self._send_json(200, json.dumps(payload))
+            return
+
+        # ── reminders (today + overdue, most urgent first) ──
+        code, out, err = self._run_script(REMINDER_ENGINE, ['list', '--scope', 'today'], timeout=20)
+        if code == 0:
+            try:
+                items = json.loads(out).get('reminders', [])
+                payload['reminders'] = items[:3]
+            except Exception:
+                pass
+
+        pers_state = BASE_DIR / '.agent' / 'workspaces' / 'personal' / 'state'
+
+        # ── deadlines: milestone/task notes carrying a date ──
+        notes = self._home_state_entries(pers_state / 'memory_notes.json')
+        deadlines = []
+        for e in notes:
+            if e.get('status') == 'inactive':
+                continue
+            if e.get('type') in ('milestone', 'task') and e.get('date'):
+                deadlines.append({
+                    'id': e.get('id'),
+                    'text': e.get('text') or e.get('title') or '',
+                    'date': e.get('date'),
+                    'kind': 'deadline',
+                })
+        deadlines.sort(key=lambda x: x.get('date') or '9999')
+        payload['deadlines'] = deadlines[:3]
+
+        # ── working on: open tasks across task store + memory notes ──
+        working = []
+        for t in self._home_state_entries(pers_state / 'tasks.json'):
+            st = str(t.get('status', '')).lower()
+            if st in ('done', 'cancelled', 'completed'):
+                continue
+            working.append({
+                'id': t.get('id'),
+                'text': t.get('task') or t.get('title') or t.get('text') or '',
+                'status': t.get('status', ''),
+                'due': t.get('due') or t.get('due_date') or '',
+                'kind': 'task',
+            })
+        for e in notes:
+            if e.get('type') == 'task' and e.get('status') != 'inactive':
+                working.append({
+                    'id': e.get('id'),
+                    'text': e.get('text') or e.get('title') or '',
+                    'status': 'active',
+                    'due': e.get('date') or '',
+                    'kind': 'note-task',
+                })
+        seen_ids = set()
+        deduped = []
+        for w in working:
+            key = (w.get('text') or '').strip().lower()
+            if not w.get('text') or key in seen_ids:
+                continue
+            seen_ids.add(key)
+            deduped.append(w)
+        payload['working_on'] = deduped[:3]
+
+        self._send_json(200, json.dumps(payload))
 
     def _handle_get_reminders(self):
         """GET /api/reminders?scope=today|upcoming|overdue|done|all.
