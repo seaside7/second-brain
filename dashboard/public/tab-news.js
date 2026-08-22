@@ -27,6 +27,7 @@ window.Tabs = window.Tabs || {};
     activeCat: 'global_economy',
     data: null,
     dataError: null,
+    generating: false,
   };
 
   async function load(cat) {
@@ -65,11 +66,18 @@ window.Tabs = window.Tabs || {};
 
     const parts = [];
 
-    // Header
-    parts.push('<div style="margin-bottom:var(--sp-4)">');
+    // Header with refresh button
+    parts.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--sp-4)">');
+    parts.push('<div>');
     parts.push('<h2 style="margin:0 0 var(--sp-1) 0;font-size:var(--fs-lg);font-weight:600">Daily Intelligence</h2>');
     if (data.generated_wib) {
       parts.push('<div class="text-muted" style="font-size:var(--fs-sm)">Updated: ' + U.esc(data.generated_wib) + '</div>');
+    }
+    parts.push('</div>');
+    if (state.generating) {
+      parts.push('<button class="chip chip--active" disabled style="cursor:wait">⏳ Generating...</button>');
+    } else {
+      parts.push('<button id="intel-refresh" class="chip" onclick="window.Tabs.news.generate()">🔄 Refresh</button>');
     }
     parts.push('</div>');
 
@@ -84,11 +92,15 @@ window.Tabs = window.Tabs || {};
 
     // Content
     if (data.empty || !data.categories) {
-      parts.push(Comp.emptyState({
-        icon: '\uD83D\uDCF0',
-        title: 'No intelligence feed yet',
-        hint: 'Run `python .agent/skills/news-intelligence/scripts/intelligence_feed.py generate` to create one.',
-      }));
+      parts.push('<div style="text-align:center;padding:var(--sp-8) 0">');
+      parts.push('<div style="font-size:2rem;margin-bottom:var(--sp-2)">\uD83D\uDCF0</div>');
+      parts.push('<div style="font-weight:600;margin-bottom:var(--sp-2)">No intelligence feed yet</div>');
+      if (state.generating) {
+        parts.push('<div class="text-muted">Generating feed... This may take 1-2 minutes.</div>');
+      } else {
+        parts.push('<button id="intel-refresh" class="chip chip--active" onclick="window.Tabs.news.generate()" style="margin-top:var(--sp-2)">🔄 Generate Now</button>');
+      }
+      parts.push('</div>');
     } else {
       const catData = data.categories[state.activeCat];
       if (!catData || !catData.stories || catData.stories.length === 0) {
@@ -188,5 +200,24 @@ window.Tabs = window.Tabs || {};
     return '<div style="margin-bottom:var(--sp-2)"><span class="text-muted" style="font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:0.05em">' + U.esc(label) + '</span><div style="margin-top:2px">' + U.esc(text) + '</div></div>';
   }
 
-  Tabs.news = { load: load };
+  async function generate() {
+    state.generating = true;
+    render();
+    try {
+      await U.fetchJSON('/api/intelligence/generate', { method: 'POST' });
+      // Poll for new feed after 30 seconds
+      setTimeout(async () => {
+        try {
+          state.data = await U.fetchJSON('/api/intelligence');
+        } catch (e) { /* ignore */ }
+        state.generating = false;
+        render();
+      }, 30000);
+    } catch (err) {
+      state.generating = false;
+      render();
+    }
+  }
+
+  Tabs.news = { load: load, generate: generate };
 })();

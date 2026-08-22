@@ -147,7 +147,8 @@ SAMUDERA_ALLOWED_POST = {'/api/chat', '/api/approval-decision',
                          '/api/action', '/api/toggle',
                          '/api/waiting-add', '/api/waiting-close',
                          '/api/commitment-close', '/api/commitment-link',
-                         '/api/memory-note', '/api/memory-note/edit'}
+                         '/api/memory-note', '/api/memory-note/edit',
+                         '/api/intelligence/generate'}
 
 # ── Chatbox: permanent (static) suggestion categories ──────────────────────
 # The same five categories for every workspace; the workspace-scoped context
@@ -2601,6 +2602,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_post_memory_note()
         elif self.path == '/api/memory-note/edit':
             self._handle_post_memory_note_edit()
+        elif self.path == '/api/intelligence/generate':
+            self._handle_post_intelligence_generate()
         else:
             self.send_error(404, 'Not Found')
 
@@ -6178,6 +6181,28 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._send_json(200, json.dumps(data))
         except Exception as e:
             self._send_json(500, json.dumps({'error': 'Failed to load intelligence feed', 'details': str(e)}))
+
+    def _handle_post_intelligence_generate(self):
+        """POST /api/intelligence/generate — Trigger intelligence feed generation
+        in a background thread. Returns immediately."""
+        import threading
+
+        def _run_generate():
+            try:
+                import subprocess
+                script = REPO_ROOT / '.agent' / 'skills' / 'news-intelligence' / 'scripts' / 'intelligence_feed.py'
+                subprocess.run(
+                    ['python3', str(script), 'generate'],
+                    cwd=str(REPO_ROOT),
+                    timeout=180,
+                    capture_output=True,
+                )
+            except Exception:
+                pass
+
+        t = threading.Thread(target=_run_generate, daemon=True)
+        t.start()
+        self._send_json(200, json.dumps({'status': 'generating'}))
 
     def _handle_get_briefing(self):
         """GET /api/briefing — newest Pagi + Malam sections from Dashboard.md (file is
