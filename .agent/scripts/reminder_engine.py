@@ -214,6 +214,16 @@ def _save(data):
 
 def add(text, due=None, source=''):
     data = _load()
+    norm = (text or '').strip().lower()
+
+    # Idempotent: re-adding the same reminder returns the existing entry
+    # (note-store dedupe must not silently drop its reminder registration).
+    for r in data['reminders']:
+        if r.get('done'):
+            continue
+        if (r.get('text') or '').strip().lower() == norm:
+            return dict(r, duplicate=True)
+
     rid = 'r-' + format(int(time.time() * 1000), 'x')
     entry = {
         'id': rid,

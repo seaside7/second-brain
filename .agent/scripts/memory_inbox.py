@@ -212,8 +212,17 @@ def store_note(ws_name, classification):
     hash_val = _content_hash(text)
     for existing in notes_data.get('entries', {}).values():
         if existing.get('hash') == hash_val and existing.get('status') == 'active':
-            return {'ok': True, 'duplicate': True, 'note_id': existing['id'],
-                    'message': 'This note already exists'}
+            result = {'ok': True, 'duplicate': True, 'note_id': existing['id'],
+                      'message': 'This note already exists'}
+            # A duplicate note must still guarantee its reminder exists —
+            # older notes may predate the reminder engine entirely.
+            if mem_type == 'reminder':
+                backend = _store_to_reminders(classification, ws_name)
+                result['stored_to'] = 'reminder'
+                result['stored_id'] = backend.get('reminder_id', '')
+                if backend.get('reminder_id'):
+                    result['message'] = 'Reminder already active'
+            return result
 
     stored_to = None
     stored_id = None
