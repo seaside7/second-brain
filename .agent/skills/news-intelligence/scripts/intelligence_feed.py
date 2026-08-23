@@ -240,6 +240,57 @@ def _fetch_category(category, max_items=20):
     return all_items[:max_items]
 
 
+def _yahoo_quote(symbol):
+    """Fetch a real quote from Yahoo Finance (free, no API key). Returns dict or None."""
+    url = 'https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=1d&range=5d' % symbol
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'ai-second-brain/1.0'})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+        result = data.get('chart', {}).get('result', [])
+        if not result:
+            return None
+        meta = result[0].get('meta', {})
+        current = meta.get('regularMarketPrice')
+        prev = meta.get('previousClose') or meta.get('chartPreviousClose')
+        if current is None:
+            return None
+        change = (current - prev) if prev else 0.0
+        change_pct = (change / prev * 100) if prev else 0.0
+        return {'symbol': symbol, 'price': current, 'change': round(change, 2),
+                'change_pct': round(change_pct, 2), 'currency': meta.get('currency', 'USD')}
+    except Exception as e:
+        print('  [WARN] Yahoo quote failed for %s: %s' % (symbol, e), file=sys.stderr)
+        return None
+
+
+def fetch_crypto_prices():
+    """Real BTC/ETH prices. Returns {'btc': {...}, 'eth': {...}} (may be empty)."""
+    prices = {}
+    for sym in ('BTC-USD', 'ETH-USD'):
+        q = _yahoo_quote(sym)
+        if q:
+            prices[sym.replace('-USD', '').lower()] = q
+    return prices
+
+
+def format_market_data(prices):
+    """Build a live market_data string, e.g. 'BTC: $62,000 (+2.1%); ETH: $3,200 (-0.5%)'."""
+    if not prices:
+        return ''
+    parts = []
+    for key in ('btc', 'eth'):
+        q = prices.get(key)
+        if not q:
+            continue
+        price_str = format(int(round(q['price'])), ',')
+        sign = '+' if q['change_pct'] >= 0 else ''
+        parts.append('%s: $%s (%s%.1f%%)' % (key.upper(), price_str, sign, q['change_pct']))
+    if not parts:
+        return ''
+    return '; '.join(parts) + ' | Live prices (Yahoo Finance)'
+
+
 def _openai_key():
     env = REPO_ROOT / '.env'
     if env.exists():
@@ -360,7 +411,7 @@ SYSTEM_PROMPTS = {
 }
 
 
-def _generate_category(category, items):
+def _generate_category(category, items, market_data=None):
     meta = CATEGORY_META[category]
     system = SYSTEM_PROMPTS[category]
 
@@ -378,6 +429,10 @@ def _generate_category(category, items):
               'Generate the briefing in the specified JSON format. '
               'Pick only the 3-5 most important stories. '
               'Quality over quantity.') % (meta['label'], '\n'.join(headlines))
+
+    if market_data:
+        prompt += ('\n\nAUTHORITATIVE LIVE MARKET DATA - use these exact prices '
+                   'in every market_data field, do NOT invent prices:\n%s' % market_data)
 
     raw = _llm_call(prompt, system=system)
     if not raw:
@@ -408,6 +463,12 @@ def generate():
         'categories': {},
     }
 
+    # Real market prices so the briefing never shows hallucinated figures.
+    crypto_prices = fetch_crypto_prices()
+    market_str = format_market_data(crypto_prices)
+    if market_str:
+        print('  Live market: %s' % market_str)
+
     for cat in ('global_economy', 'ai_tech', 'crypto'):
         meta = CATEGORY_META[cat]
         print('  Fetching %s...' % meta['label'])
@@ -416,7 +477,12 @@ def generate():
 
         if items:
             print('  Generating %s briefing...' % meta['label'])
-            stories = _generate_category(cat, items)
+            stories = _generate_category(
+                cat, items,
+                market_data=(market_str if cat == 'crypto' else None))
+            if cat == 'crypto' and market_str:
+                for s in stories:
+                    s['market_data'] = market_str
             print('    %d stories selected' % len(stories))
         else:
             stories = []
@@ -451,6 +517,11 @@ def generate():
     store = _load_store()
     added = _merge_into_store(store, result)
     removed = _prune_store(store)
+    # Refresh stored crypto prices so old accumulated stories show real numbers too.
+    if market_str:
+        for s in store['stories']:
+            if s.get('category') == 'crypto':
+                s['market_data'] = market_str
     store['last_updated'] = now_wib
     _save_store(store)
     print('  Store: +%d new, -%d pruned, %d total' % (added, removed, len(store['stories'])))

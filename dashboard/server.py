@@ -427,6 +427,56 @@ def _build_allowed_ips():
 
 ALLOWED_IPS = _build_allowed_ips()
 
+# Live crypto prices for the News tab (cached; refreshed at most every 10 min
+# so the dashboard never shows a stale/hallucinated BTC or ETH figure).
+_CRYPTO_PRICE_CACHE = {'ts': 0.0, 'data': None}
+_CRYPTO_PRICE_TTL_S = 600
+
+
+def _live_crypto_prices():
+    now_ts = time.time()
+    if now_ts - _CRYPTO_PRICE_CACHE['ts'] < _CRYPTO_PRICE_TTL_S:
+        return _CRYPTO_PRICE_CACHE['data']
+    prices = {}
+    try:
+        for sym in ('BTC-USD', 'ETH-USD'):
+            url = 'https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=1d&range=5d' % sym
+            req = Request(url, headers={'User-Agent': 'ai-second-brain/1.0'})
+            with urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+            result = (data.get('chart') or {}).get('result') or []
+            if not result:
+                continue
+            meta = result[0].get('meta') or {}
+            cur = meta.get('regularMarketPrice')
+            prev = meta.get('previousClose') or meta.get('chartPreviousClose')
+            if cur is None:
+                continue
+            chg = (cur - prev) if prev else 0.0
+            pct = (chg / prev * 100) if prev else 0.0
+            prices[sym.replace('-USD', '').lower()] = {'price': cur, 'change_pct': pct}
+    except Exception:
+        pass
+    _CRYPTO_PRICE_CACHE['ts'] = now_ts
+    _CRYPTO_PRICE_CACHE['data'] = prices
+    return prices
+
+
+def _format_live_market(prices):
+    if not prices:
+        return ''
+    parts = []
+    for key in ('btc', 'eth'):
+        q = prices.get(key)
+        if not q:
+            continue
+        price_str = format(int(round(q['price'])), ',')
+        sign = '+' if q['change_pct'] >= 0 else ''
+        parts.append('%s: $%s (%s%.1f%%)' % (key.upper(), price_str, sign, q['change_pct']))
+    if not parts:
+        return ''
+    return '; '.join(parts) + ' | Live prices (Yahoo Finance)'
+
 # POST /api/run-job whitelist: job -> argv (relative to BASE_DIR) + its crontab flock
 # lockfile (same paths as `crontab -l`, so a manual click can never race the real cron
 # firing the same job). mention-ledger is deliberately excluded (sweeps every 3-4min
@@ -6212,6 +6262,13 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 for cat, stories in grouped.items():
                     stories.sort(key=lambda s: (s.get('stored_on') or '',
                                                 s.get('importance') or 0), reverse=True)
+
+                # Overlay live BTC/ETH prices on crypto stories so the menu never
+                # shows a stale or hallucinated figure, whatever the story age.
+                live_market = _format_live_market(_live_crypto_prices())
+                if live_market:
+                    for story in grouped.get('crypto', []):
+                        story['market_data'] = live_market
 
                 generated = store.get('last_updated') or now.isoformat(timespec='seconds')
                 self._send_json(200, json.dumps({
