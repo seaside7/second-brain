@@ -438,25 +438,67 @@ def _live_crypto_prices():
     if now_ts - _CRYPTO_PRICE_CACHE['ts'] < _CRYPTO_PRICE_TTL_S:
         return _CRYPTO_PRICE_CACHE['data']
     prices = {}
+
+    def _ok():
+        return len(prices) == 2
+
+    # 1. CoinGecko (free, no key, works from datacenter IPs)
     try:
-        for sym in ('BTC-USD', 'ETH-USD'):
-            url = 'https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=1d&range=5d' % sym
-            req = Request(url, headers={'User-Agent': 'ai-second-brain/1.0'})
-            with urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read().decode('utf-8'))
-            result = (data.get('chart') or {}).get('result') or []
-            if not result:
-                continue
-            meta = result[0].get('meta') or {}
-            cur = meta.get('regularMarketPrice')
-            prev = meta.get('previousClose') or meta.get('chartPreviousClose')
-            if cur is None:
-                continue
-            chg = (cur - prev) if prev else 0.0
-            pct = (chg / prev * 100) if prev else 0.0
-            prices[sym.replace('-USD', '').lower()] = {'price': cur, 'change_pct': pct}
+        url = ('https://api.coingecko.com/api/v3/simple/price'
+               '?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true')
+        req = Request(url, headers={'User-Agent': 'ai-second-brain/1.0'})
+        with urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+        for key, cg_id in (('btc', 'bitcoin'), ('eth', 'ethereum')):
+            item = data.get(cg_id) or {}
+            if item.get('usd'):
+                prices[key] = {'price': item['usd'],
+                               'change_pct': item.get('usd_24h_change') or 0.0}
     except Exception:
         pass
+    # 2. Yahoo (may be rate-limited from datacenter IPs)
+    if not _ok():
+        prices = {}
+        try:
+            for sym, key in (('BTC-USD', 'btc'), ('ETH-USD', 'eth')):
+                url = ('https://query1.finance.yahoo.com/v8/finance/chart/'
+                       '%s?interval=1d&range=5d' % sym)
+                req = Request(url, headers={'User-Agent': 'ai-second-brain/1.0'})
+                with urlopen(req, timeout=8) as resp:
+                    data = json.loads(resp.read().decode('utf-8'))
+                result = (data.get('chart') or {}).get('result') or []
+                if not result:
+                    continue
+                meta = result[0].get('meta') or {}
+                cur = meta.get('regularMarketPrice')
+                prev = meta.get('previousClose') or meta.get('chartPreviousClose')
+                if cur is None:
+                    continue
+                chg = (cur - prev) if prev else 0.0
+                pct = (chg / prev * 100) if prev else 0.0
+                prices[key] = {'price': cur, 'change_pct': pct}
+        except Exception:
+            pass
+    # 3. Kraken (free, no key)
+    if not _ok():
+        prices = {}
+        try:
+            url = 'https://api.kraken.com/0/public/Ticker?pair=XBTUSD,ETHUSD'
+            req = Request(url, headers={'User-Agent': 'ai-second-brain/1.0'})
+            with urlopen(req, timeout=8) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+            result = data.get('result') or {}
+            for key, pair in (('btc', 'XBTUSD'), ('eth', 'ETHUSD')):
+                t = result.get(pair) or {}
+                c = t.get('c')
+                if c and len(c) > 0:
+                    price = float(c[0])
+                    o = t.get('o')
+                    open_price = float(o[0]) if isinstance(o, list) and o else 0.0
+                    pct = (price - open_price) / open_price * 100 if open_price else 0.0
+                    prices[key] = {'price': price, 'change_pct': pct}
+        except Exception:
+            pass
     _CRYPTO_PRICE_CACHE['ts'] = now_ts
     _CRYPTO_PRICE_CACHE['data'] = prices
     return prices
@@ -475,7 +517,7 @@ def _format_live_market(prices):
         parts.append('%s: $%s (%s%.1f%%)' % (key.upper(), price_str, sign, q['change_pct']))
     if not parts:
         return ''
-    return '; '.join(parts) + ' | Live prices (Yahoo Finance)'
+    return '; '.join(parts) + ' | Live prices'
 
 # POST /api/run-job whitelist: job -> argv (relative to BASE_DIR) + its crontab flock
 # lockfile (same paths as `crontab -l`, so a manual click can never race the real cron

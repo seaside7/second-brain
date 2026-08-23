@@ -240,38 +240,84 @@ def _fetch_category(category, max_items=20):
     return all_items[:max_items]
 
 
-def _yahoo_quote(symbol):
-    """Fetch a real quote from Yahoo Finance (free, no API key). Returns dict or None."""
-    url = 'https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=1d&range=5d' % symbol
+def _coingecko_prices():
+    """BTC/ETH via CoinGecko (free, no key, works from datacenter IPs)."""
+    url = ('https://api.coingecko.com/api/v3/simple/price'
+           '?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true')
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'ai-second-brain/1.0'})
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=12) as resp:
             data = json.loads(resp.read().decode('utf-8'))
-        result = data.get('chart', {}).get('result', [])
-        if not result:
-            return None
-        meta = result[0].get('meta', {})
-        current = meta.get('regularMarketPrice')
-        prev = meta.get('previousClose') or meta.get('chartPreviousClose')
-        if current is None:
-            return None
-        change = (current - prev) if prev else 0.0
-        change_pct = (change / prev * 100) if prev else 0.0
-        return {'symbol': symbol, 'price': current, 'change': round(change, 2),
-                'change_pct': round(change_pct, 2), 'currency': meta.get('currency', 'USD')}
+        prices = {}
+        for key, cg_id in (('btc', 'bitcoin'), ('eth', 'ethereum')):
+            item = data.get(cg_id) or {}
+            if item.get('usd'):
+                prices[key] = {'price': item['usd'],
+                               'change_pct': item.get('usd_24h_change') or 0.0}
+        return prices if len(prices) == 2 else {}
     except Exception as e:
-        print('  [WARN] Yahoo quote failed for %s: %s' % (symbol, e), file=sys.stderr)
-        return None
+        print('  [WARN] CoinGecko failed: %s' % e, file=sys.stderr)
+        return {}
+
+
+def _yahoo_prices():
+    """BTC/ETH via Yahoo Finance (may be rate-limited from datacenter IPs)."""
+    prices = {}
+    for sym, key in (('BTC-USD', 'btc'), ('ETH-USD', 'eth')):
+        url = 'https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=1d&range=5d' % sym
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'ai-second-brain/1.0'})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+            result = data.get('chart', {}).get('result', [])
+            if not result:
+                continue
+            meta = result[0].get('meta', {})
+            cur = meta.get('regularMarketPrice')
+            prev = meta.get('previousClose') or meta.get('chartPreviousClose')
+            if cur is None:
+                continue
+            chg = (cur - prev) if prev else 0.0
+            pct = (chg / prev * 100) if prev else 0.0
+            prices[key] = {'price': cur, 'change_pct': pct}
+        except Exception as e:
+            print('  [WARN] Yahoo quote failed for %s: %s' % (sym, e), file=sys.stderr)
+    return prices if len(prices) == 2 else {}
+
+
+def _kraken_prices():
+    """BTC/ETH via Kraken (free, no key)."""
+    try:
+        req = urllib.request.Request(
+            'https://api.kraken.com/0/public/Ticker?pair=XBTUSD,ETHUSD',
+            headers={'User-Agent': 'ai-second-brain/1.0'})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+        result = data.get('result') or {}
+        prices = {}
+        for key, pair in (('btc', 'XBTUSD'), ('eth', 'ETHUSD')):
+            t = result.get(pair) or {}
+            c = t.get('c')
+            if c and len(c) > 0:
+                price = float(c[0])
+                o = t.get('o')
+                open_price = float(o[0]) if isinstance(o, list) and o else 0.0
+                pct = (price - open_price) / open_price * 100 if open_price else 0.0
+                prices[key] = {'price': price, 'change_pct': pct}
+        return prices if len(prices) == 2 else {}
+    except Exception as e:
+        print('  [WARN] Kraken failed: %s' % e, file=sys.stderr)
+        return {}
 
 
 def fetch_crypto_prices():
-    """Real BTC/ETH prices. Returns {'btc': {...}, 'eth': {...}} (may be empty)."""
-    prices = {}
-    for sym in ('BTC-USD', 'ETH-USD'):
-        q = _yahoo_quote(sym)
-        if q:
-            prices[sym.replace('-USD', '').lower()] = q
-    return prices
+    """Real BTC/ETH prices with a source fallback chain:
+    CoinGecko -> Yahoo -> Kraken. Returns {'btc': {...}, 'eth': {...}} or {}."""
+    for fetcher in (_coingecko_prices, _yahoo_prices, _kraken_prices):
+        prices = fetcher()
+        if len(prices) == 2:
+            return prices
+    return {}
 
 
 def format_market_data(prices):
@@ -288,7 +334,7 @@ def format_market_data(prices):
         parts.append('%s: $%s (%s%.1f%%)' % (key.upper(), price_str, sign, q['change_pct']))
     if not parts:
         return ''
-    return '; '.join(parts) + ' | Live prices (Yahoo Finance)'
+    return '; '.join(parts) + ' | Live prices'
 
 
 def _openai_key():
