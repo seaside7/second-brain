@@ -63,3 +63,7 @@ meeting-recorder/scratch/
 # Editor
 .vscode/
 .idea/
+
+# One-brain migration backups (never commit)
+.agent/workspaces/*/knowledge.pre-brain.bak/
+*.pre-brain.bak

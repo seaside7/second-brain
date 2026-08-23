@@ -40,21 +40,27 @@ EMBEDDING_DIM = 1536
 BATCH_SIZE = 50
 
 
-def _knowledge_dir(ws):
-    return BASE_DIR / '.agent' / 'workspaces' / ws / 'knowledge'
+# ONE canonical brain: a single knowledge dir + a single index, regardless
+# of which workspace triggered the build. The ws argument is kept for CLI
+# compatibility and ignored.
+BRAIN_DIR = BASE_DIR / '.agent' / 'brain'
 
 
-def _index_dir(ws):
-    d = BASE_DIR / '.agent' / 'workspaces' / ws / 'state'
+def _knowledge_dir(ws=None):
+    return BRAIN_DIR / 'knowledge'
+
+
+def _index_dir(ws=None):
+    d = BRAIN_DIR / 'state'
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def _faiss_path(ws):
+def _faiss_path(ws=None):
     return _index_dir(ws) / 'knowledge_embeddings.faiss'
 
 
-def _meta_path(ws):
+def _meta_path(ws=None):
     return _index_dir(ws) / 'knowledge_embeddings_meta.json'
 
 

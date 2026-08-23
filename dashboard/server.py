@@ -2028,27 +2028,41 @@ def _ensure_meetings_synced(ws_name, max_age_min=30):
 
 
 def _chat_memory_context(ws_name, query):
-    """Inline keyword search across Drive index + knowledge store for chat.
-    No subprocess, no OpenAI call — just fast JSON search."""
+    """Inline keyword search across the ONE brain (knowledge + notes) and
+    every workspace's Drive index for chat. No subprocess, no LLM call —
+    just fast JSON search. Private memories are hidden from the samudera
+    view; everything else is recallable from anywhere."""
     ws = ws_name or 'samudera'
-    ws_dir = BASE_DIR / '.agent' / 'workspaces' / ws
-    terms = [t.lower() for t in query.split() if len(t) > 2]
+    brain_dir = BASE_DIR / '.agent' / 'brain'
+    workspaces_dir = BASE_DIR / '.agent' / 'workspaces'
+    # strip punctuation so "PSP?" matches "PSP"
+    terms = [re.sub(r'\W+', '', t).lower() for t in query.split()]
+    terms = [t for t in terms if len(t) > 2]
     if not terms:
         return '(no relevant memory found)'
 
     results = []
 
-    # Drive index search
-    drive_path = ws_dir / 'state' / 'drive_index.json'
-    if drive_path.exists():
+    # Drive index search — scan EVERY workspace's index (one document universe)
+    seen_drive_ids = set()
+    for ws_dir in sorted(workspaces_dir.iterdir()):
+        if not ws_dir.is_dir() or ws_dir.name.startswith('__'):
+            continue
+        drive_path = ws_dir / 'state' / 'drive_index.json'
+        if not drive_path.exists():
+            continue
         try:
             idx = json.loads(drive_path.read_text(encoding='utf-8'))
             for f in idx.get('files', []):
+                fid = f.get('id') or (f.get('name', '') + f.get('folder_path', ''))
+                if fid in seen_drive_ids:
+                    continue
                 blob = (f.get('name', '') + ' ' + f.get('folder_path', '') +
                         ' ' + f.get('project', '') + ' ' + f.get('content', '')).lower()
                 score = sum(1 for t in terms if t in blob)
                 if score == 0:
                     continue
+                seen_drive_ids.add(fid)
                 content = f.get('content') or ''
                 # Find best snippet: around first term match in content
                 best_pos = len(content)
@@ -2068,8 +2082,8 @@ def _chat_memory_context(ws_name, query):
         except Exception:
             pass
 
-    # Knowledge store search
-    kb_dir = ws_dir / 'knowledge'
+    # Knowledge store search — the canonical brain knowledge dir
+    kb_dir = brain_dir / 'knowledge'
     if kb_dir.exists():
         for md_file in kb_dir.glob('*.md'):
             try:
@@ -2092,25 +2106,29 @@ def _chat_memory_context(ws_name, query):
             except Exception:
                 pass
 
-    # Memory notes search
-    notes_path = ws_dir / 'state' / 'memory_notes.json'
+    # Memory notes search — the ONE brain; private entries stay personal-only
+    notes_path = brain_dir / 'memory_notes.json'
     if notes_path.exists():
         try:
             nd = json.loads(notes_path.read_text(encoding='utf-8'))
             for nid, entry in nd.get('entries', {}).items():
                 if entry.get('status') != 'active':
                     continue
+                if ws == 'samudera' and entry.get('scope') == 'private':
+                    continue
                 blob = (entry.get('text', '') + ' ' + entry.get('title', '') +
                         ' ' + ' '.join(entry.get('entities', []))).lower()
                 score = sum(1 for t in terms if t in blob)
                 if score == 0:
                     continue
+                # context boost: memory from the active view ranks higher
+                boost = 0.05 if entry.get('source_ws') == ws else 0.0
                 results.append({
                     'source': 'memory_note',
                     'title': entry.get('title', '?'),
                     'project': entry.get('project', ''),
                     'content': entry.get('text', '')[:1500],
-                    'score': score / len(terms),
+                    'score': min(1.0, score / len(terms) + boost),
                 })
         except Exception:
             pass
@@ -5161,7 +5179,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             length = int(self.headers.get('Content-Length', 0))
             body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
             message = (body.get('message') or '').strip()
-            ws_name = (body.get('workspace') or '').strip()
+            # Workspace resolution order: explicit body field > view header
+            # (X-PSB-Workspace) > active workspace default.
+            ws_name = ((body.get('workspace') or '').strip()
+                       or (self.headers.get('X-PSB-Workspace') or '').strip())
             if not message:
                 self._send_json(400, json.dumps({'error': 'message is required'}))
                 return
@@ -6439,11 +6460,13 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         pers_state = BASE_DIR / '.agent' / 'workspaces' / 'personal' / 'state'
 
         # ── deadlines: milestone/task notes carrying a date ──
-        notes = self._home_state_entries(pers_state / 'memory_notes.json')
+        # notes live in the ONE brain now
+        notes = self._home_state_entries(BASE_DIR / '.agent' / 'brain' / 'memory_notes.json')
+        notes = [e for e in notes
+                 if e.get('status') != 'inactive'
+                 and not (ws == 'samudera' and e.get('scope') == 'private')]
         deadlines = []
         for e in notes:
-            if e.get('status') == 'inactive':
-                continue
             if e.get('type') in ('milestone', 'task') and e.get('date'):
                 deadlines.append({
                     'id': e.get('id'),
@@ -6960,7 +6983,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         limit = int(qs.get('limit', ['20'])[0])
         mem_type = (qs.get('type', [''])[0]).strip() or None
         script = str(BASE_DIR / '.agent' / 'scripts' / 'memory_inbox.py')
-        cmd = ['list', '--workspace', ws, '--limit', str(limit)]
+        # '' would make argparse eat the next flag — always pass a real name
+        cmd = ['list', '--workspace', ws or 'personal', '--limit', str(limit)]
         if mem_type:
             cmd.extend(['--type', mem_type])
         code, out, err = self._run_script(script, cmd, timeout=10)
@@ -7032,7 +7056,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._send_json(400, json.dumps({'error': 'id and text are required'}))
             return
         script = str(BASE_DIR / '.agent' / 'scripts' / 'memory_inbox.py')
-        code, out, err = self._run_script(script, ['edit', '--workspace', ws, '--id', note_id, '--text', text], timeout=30)
+        code, out, err = self._run_script(script, ['edit', '--workspace', ws or 'personal', '--id', note_id, '--text', text], timeout=30)
         if code != 0:
             self._send_json(500, json.dumps({'error': 'edit failed', 'detail': err}))
             return

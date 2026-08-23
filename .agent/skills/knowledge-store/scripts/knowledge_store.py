@@ -44,10 +44,14 @@ except Exception:
 
 # ---------- helpers ----------
 
-def _knowledge_dir(workspace_name):
-    """Return the knowledge folder path for a workspace."""
-    ctx = ws.get(workspace_name)
-    return os.path.join(ctx.dir, 'knowledge')
+# ONE canonical knowledge universe. The workspace argument survives in the
+# API for provenance/ranking only — it no longer selects a storage location.
+BRAIN_DIR = os.path.join(REPO_ROOT, '.agent', 'brain')
+
+
+def _knowledge_dir(workspace_name=None):
+    """Return the canonical brain knowledge folder (workspace-independent)."""
+    return os.path.join(BRAIN_DIR, 'knowledge')
 
 
 def _category_file(workspace_name, category):
@@ -148,6 +152,9 @@ def add_knowledge(content, category, workspace_name=None, tags=None, title=None,
     entry_lines = []
     entry_lines.append(f'### {title}')
     entry_lines.append(f'- **Date**: {date_str}')
+    # Provenance: which view/context produced this knowledge. Storage stays
+    # canonical; this line is metadata only.
+    entry_lines.append(f'- **Workspace**: {workspace_name}')
     if tags_str:
         entry_lines.append(f'- **Tags**: {tags_str}')
     entry_lines.append(f'- **Source**: {source}')
@@ -434,7 +441,8 @@ def semantic_search_knowledge(query, workspace_name=None, top_k=5):
     ctx = ws.get(workspace_name)
     workspace_name = ctx.name
 
-    state_dir = os.path.join(ctx.dir, 'state')
+    # ONE brain index — workspace only influences ranking downstream
+    state_dir = os.path.join(BRAIN_DIR, 'state')
     faiss_path = os.path.join(state_dir, 'knowledge_embeddings.faiss')
     meta_path = os.path.join(state_dir, 'knowledge_embeddings_meta.json')
 

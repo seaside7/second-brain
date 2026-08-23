@@ -47,6 +47,11 @@ def _ws_dir(ws_name):
     return str(BASE_DIR / '.agent' / 'workspaces' / ws_name)
 
 
+# ONE canonical brain — recall searches it from every view. The workspace
+# argument only influences ranking (context boost), never the search scope.
+BRAIN_DIR = os.path.join(BASE_DIR, '.agent', 'brain')
+
+
 def _load_json(path):
     if not os.path.exists(path):
         return None
@@ -68,8 +73,9 @@ def _read_file(path):
 
 
 def _keyword_score(query, text):
-    """Simple keyword overlap score."""
-    terms = [t.lower() for t in query.split() if len(t) > 1]
+    """Simple keyword overlap score (punctuation-insensitive)."""
+    terms = [re.sub(r'\W+', '', t).lower() for t in query.split()]
+    terms = [t for t in terms if len(t) > 1]
     if not terms:
         return 0
     text_lower = text.lower()
@@ -103,8 +109,8 @@ def _today_score():
 
 
 def _search_knowledge(ws_name, query, top_k=10):
-    """Search knowledge store via FAISS semantic, fallback to substring."""
-    state_dir = os.path.join(_ws_dir(ws_name), 'state')
+    """Search the canonical brain via FAISS semantic, fallback to substring."""
+    state_dir = os.path.join(BRAIN_DIR, 'state')
     faiss_path = os.path.join(state_dir, 'knowledge_embeddings.faiss')
     meta_path = os.path.join(state_dir, 'knowledge_embeddings_meta.json')
 
@@ -114,7 +120,7 @@ def _search_knowledge(ws_name, query, top_k=10):
         results = _semantic_knowledge_search(meta_path, faiss_path, query, top_k)
         return results
 
-    kdir = os.path.join(_ws_dir(ws_name), 'knowledge')
+    kdir = os.path.join(BRAIN_DIR, 'knowledge')
     if not os.path.exists(kdir):
         return []
 
@@ -231,61 +237,75 @@ def _semantic_knowledge_search(meta_path, faiss_path, query, top_k):
 
 
 def _search_drive(ws_name, query, top_k=10):
-    """Search the local Drive index."""
-    index_path = os.path.join(_ws_dir(ws_name), 'state', 'drive_index.json')
-    index = _load_json(index_path)
-    if not index:
-        return []
-
+    """Search Drive indexes. One brain: scan EVERY workspace's index and tag
+    provenance; the active view only boosts ranking later."""
     terms = [t.lower() for t in query.split() if len(t) > 1]
     if not terms:
         return []
 
     results = []
-    for f in index.get('files', []):
-        blob = (f.get('name', '') + ' ' + f.get('folder_path', '') +
-                ' ' + f.get('project', '') + ' ' + f.get('content', '')).lower()
-        score = sum(1 for t in terms if t in blob)
-        if score == 0:
+    seen_ids = set()
+    for ws_dir in sorted((BASE_DIR / '.agent' / 'workspaces').iterdir()):
+        if not ws_dir.is_dir() or ws_dir.name.startswith('__'):
+            continue
+        index_path = ws_dir / 'state' / 'drive_index.json'
+        index = _load_json(str(index_path))
+        if not index:
             continue
 
-        rec = _recency_score(f.get('modifiedTime', ''))
-        combined = (score / len(terms) * 0.7 + rec * 0.3)
+        for f in index.get('files', []):
+            fid = f.get('id') or (f.get('name', '') + f.get('folder_path', ''))
+            if fid in seen_ids:
+                continue
+            blob = (f.get('name', '') + ' ' + f.get('folder_path', '') +
+                    ' ' + f.get('project', '') + ' ' + f.get('content', '')).lower()
+            score = sum(1 for t in terms if t in blob)
+            if score == 0:
+                continue
+            seen_ids.add(fid)
 
-        content_preview = f.get('content', '')[:300] if f.get('content') else ''
-        results.append({
-            'source': 'drive',
-            'title': f.get('name', '?'),
-            'project': f.get('project', '?'),
-            'project_type': f.get('project_type', '?'),
-            'folder_path': f.get('folder_path', ''),
-            'date': f.get('modifiedTime', ''),
-            'id': f.get('id', ''),
-            'mimeType': f.get('mimeType', ''),
-            'content': content_preview or '%s (in %s / %s)' % (
-                f.get('name', '?'),
-                f.get('project', '?'),
-                f.get('folder_path', '/'),
-            ),
-            'score': round(combined, 3),
-        })
+            rec = _recency_score(f.get('modifiedTime', ''))
+            combined = (score / len(terms) * 0.7 + rec * 0.3)
+
+            content_preview = f.get('content', '')[:300] if f.get('content') else ''
+            results.append({
+                'source': 'drive',
+                'title': f.get('name', '?'),
+                'project': f.get('project', '?'),
+                'project_type': f.get('project_type', '?'),
+                'folder_path': f.get('folder_path', ''),
+                'date': f.get('modifiedTime', ''),
+                'id': f.get('id', ''),
+                'mimeType': f.get('mimeType', ''),
+                'source_ws': ws_dir.name,
+                'content': content_preview or '%s (in %s / %s)' % (
+                    f.get('name', '?'),
+                    f.get('project', '?'),
+                    f.get('folder_path', '/'),
+                ),
+                'score': round(combined, 3),
+            })
 
     results.sort(key=lambda x: -x['score'])
     return results[:top_k]
 
 
 def _search_state(ws_name, query, top_k=10):
-    """Search state files (tasks, timeline, milestones, reminders, memory_notes)."""
+    """Search operational state + the canonical brain notes.
+
+    - tasks/timeline/milestones: stay workspace-local (operational trackers)
+    - reminders: unified store (personal brain) — searched for every view
+    - memory notes: ONE brain index, private entries hidden from samudera"""
     state_dir = os.path.join(_ws_dir(ws_name), 'state')
     results = []
 
-    for filename in ['tasks.json', 'timeline.json', 'milestones.json', 'reminders.json']:
+    for filename in ['tasks.json', 'timeline.json', 'milestones.json']:
         path = os.path.join(state_dir, filename)
         data = _load_json(path)
         if not data:
             continue
 
-        entries = data if isinstance(data, list) else data.get('entries', data.get('reminders', []))
+        entries = data if isinstance(data, list) else data.get('entries', {})
         if isinstance(data, dict) and isinstance(entries, dict):
             entries = list(entries.values())
         elif isinstance(data, dict) and not isinstance(entries, list):
@@ -297,10 +317,9 @@ def _search_state(ws_name, query, top_k=10):
             if score == 0:
                 continue
 
-            # Boost score for upcoming milestones/reminders
             date_str = entry.get('date', entry.get('trigger_date', entry.get('created', '')))
             rec = _recency_score(date_str)
-            if filename in ('milestones.json', 'reminders.json'):
+            if filename == 'milestones.json':
                 score = min(1.0, score * 0.7 + rec * 0.3)
 
             results.append({
@@ -313,25 +332,55 @@ def _search_state(ws_name, query, top_k=10):
                 'score': round(score, 3),
             })
 
-    # Also search memory_notes index for type/tag metadata
-    notes_path = os.path.join(state_dir, 'memory_notes.json')
-    notes_data = _load_json(notes_path)
-    if notes_data and isinstance(notes_data, dict):
-        for nid, entry in notes_data.get('entries', {}).items():
-            if entry.get('status') != 'active':
+    # Unified reminders (single store in the personal workspace)
+    rem_path = os.path.join(BASE_DIR, '.agent', 'workspaces', 'personal',
+                            'state', 'reminders.json')
+    rem_data = _load_json(rem_path)
+    if rem_data:
+        for i, entry in enumerate(rem_data.get('reminders', [])):
+            if entry.get('done'):
                 continue
             entry_text = json.dumps(entry, ensure_ascii=False)
             score = _keyword_score(query, entry_text)
             if score == 0:
                 continue
+            rec = _recency_score(entry.get('due', ''))
+            score = min(1.0, score * 0.7 + rec * 0.3)
+            results.append({
+                'source': 'state',
+                'file': 'reminders.json',
+                'entry_index': i,
+                'title': entry.get('text', '?')[:60],
+                'date': entry.get('due', ''),
+                'content': entry_text[:500],
+                'score': round(score, 3),
+            })
+
+    # ONE brain: memory notes index (private hidden from samudera view)
+    notes_path = os.path.join(BRAIN_DIR, 'memory_notes.json')
+    notes_data = _load_json(notes_path)
+    if notes_data and isinstance(notes_data, dict):
+        for nid, entry in notes_data.get('entries', {}).items():
+            if entry.get('status') != 'active':
+                continue
+            if ws_name == 'samudera' and entry.get('scope') == 'private':
+                continue
+            entry_text = json.dumps(entry, ensure_ascii=False)
+            score = _keyword_score(query, entry_text)
+            if score == 0:
+                continue
+            # context boost: memory originating from the active view ranks higher
+            boost = 0.05 if entry.get('source_ws') == ws_name else 0.0
             results.append({
                 'source': 'memory_note',
-                'file': 'memory_notes.json',
+                'file': 'brain/memory_notes.json',
                 'entry_index': nid,
                 'title': entry.get('title', '?'),
                 'date': entry.get('date', entry.get('created_wib', '')),
+                'source_ws': entry.get('source_ws', ''),
+                'scope': entry.get('scope', 'global'),
                 'content': entry.get('text', entry_text[:500]),
-                'score': round(score, 3),
+                'score': round(min(1.0, score + boost), 3),
             })
 
     results.sort(key=lambda x: -x['score'])

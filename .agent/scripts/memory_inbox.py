@@ -39,6 +39,8 @@ try:
 except ImportError:
     ws = None
 
+import brain_store
+
 WIB = timezone(timedelta(hours=7))
 MEMORY_NOTES_FILE = 'memory_notes.json'
 
@@ -48,10 +50,6 @@ def _ws_dir(ws_name):
         ctx = ws.get(ws_name)
         return ctx.dir
     return str(BASE_DIR / '.agent' / 'workspaces' / ws_name)
-
-
-def _notes_path(ws_name):
-    return os.path.join(_ws_dir(ws_name), 'state', MEMORY_NOTES_FILE)
 
 
 def _load_json(path):
@@ -204,25 +202,26 @@ def _rebuild_faiss(ws_name):
 
 
 def store_note(ws_name, classification):
+    """Store into the ONE canonical brain. ws_name is provenance only —
+    it stamps source_ws and routes work trackers; it never splits storage."""
     mem_type = classification.get('type', 'fact')
     text = classification.get('content', '')
 
-    notes_path = _notes_path(ws_name)
-    notes_data = _load_json(notes_path) or {'next_seq': 1, 'entries': {}}
-    hash_val = _content_hash(text)
-    for existing in notes_data.get('entries', {}).values():
-        if existing.get('hash') == hash_val and existing.get('status') == 'active':
-            result = {'ok': True, 'duplicate': True, 'note_id': existing['id'],
-                      'message': 'This note already exists'}
-            # A duplicate note must still guarantee its reminder exists —
-            # older notes may predate the reminder engine entirely.
-            if mem_type == 'reminder':
-                backend = _store_to_reminders(classification, ws_name)
-                result['stored_to'] = 'reminder'
-                result['stored_id'] = backend.get('reminder_id', '')
-                if backend.get('reminder_id'):
-                    result['message'] = 'Reminder already active'
-            return result
+    notes_data = brain_store.load_notes()
+    hash_val = brain_store.content_hash(text)
+    existing = brain_store.find_by_hash(notes_data, hash_val)
+    if existing:
+        result = {'ok': True, 'duplicate': True, 'note_id': existing['id'],
+                  'message': 'This note already exists'}
+        # A duplicate note must still guarantee its reminder exists —
+        # older notes may predate the reminder engine entirely.
+        if mem_type == 'reminder':
+            backend = _store_to_reminders(classification, ws_name)
+            result['stored_to'] = 'reminder'
+            result['stored_id'] = backend.get('reminder_id', '')
+            if backend.get('reminder_id'):
+                result['message'] = 'Reminder already active'
+        return result
 
     stored_to = None
     stored_id = None
@@ -258,7 +257,7 @@ def store_note(ws_name, classification):
         stored_id = 'misc'
         _rebuild_faiss(ws_name)
 
-    note_id = _next_id(notes_data)
+    note_id = brain_store.next_id(notes_data)
     note_entry = {
         'id': note_id,
         'text': classification.get('content', text),
@@ -268,6 +267,8 @@ def store_note(ws_name, classification):
         'project': classification.get('project'),
         'category': classification.get('category'),
         'date': classification.get('date'),
+        'source_ws': ws_name or 'personal',
+        'scope': brain_store.scope_for(text, ws_name),
         'stored_to': stored_to,
         'stored_id': stored_id,
         'status': 'active',
@@ -276,7 +277,7 @@ def store_note(ws_name, classification):
         'updated_wib': None,
     }
     notes_data['entries'][note_id] = note_entry
-    _save_json(notes_path, notes_data)
+    brain_store.save_notes(notes_data)
 
     return {
         'ok': True,
@@ -294,22 +295,13 @@ def store_note(ws_name, classification):
 
 
 def list_notes(ws_name, limit=20, mem_type=None, status='active'):
-    notes_path = _notes_path(ws_name)
-    notes_data = _load_json(notes_path) or {'next_seq': 1, 'entries': {}}
-
-    entries = list(notes_data.get('entries', {}).values())
-    if status:
-        entries = [e for e in entries if e.get('status') == status]
-    if mem_type:
-        entries = [e for e in entries if e.get('type') == mem_type]
-
-    entries.sort(key=lambda x: x.get('created_wib', ''), reverse=True)
-    return entries[:limit]
+    """List from the ONE brain. ws_name only filters private scope."""
+    return brain_store.list_notes(limit=limit, mem_type=mem_type,
+                                  status=status, view=ws_name)
 
 
 def edit_note(ws_name, note_id, new_text):
-    notes_path = _notes_path(ws_name)
-    notes_data = _load_json(notes_path) or {'next_seq': 1, 'entries': {}}
+    notes_data = brain_store.load_notes()
 
     entry = notes_data.get('entries', {}).get(note_id)
     if not entry:
@@ -317,7 +309,7 @@ def edit_note(ws_name, note_id, new_text):
 
     entry['status'] = 'superseded'
     entry['updated_wib'] = _now_wib()
-    _save_json(notes_path, notes_data)
+    brain_store.save_notes(notes_data)
 
     sys.path.insert(0, str(BASE_DIR / '.agent' / 'scripts'))
     from memory_classifier import classify
@@ -326,8 +318,7 @@ def edit_note(ws_name, note_id, new_text):
 
 
 def deactivate_note(ws_name, note_id):
-    notes_path = _notes_path(ws_name)
-    notes_data = _load_json(notes_path) or {'next_seq': 1, 'entries': {}}
+    notes_data = brain_store.load_notes()
 
     entry = notes_data.get('entries', {}).get(note_id)
     if not entry:
@@ -335,22 +326,12 @@ def deactivate_note(ws_name, note_id):
 
     entry['status'] = 'inactive'
     entry['updated_wib'] = _now_wib()
-    _save_json(notes_path, notes_data)
+    brain_store.save_notes(notes_data)
     return {'ok': True, 'note_id': note_id}
 
 
 def get_stats(ws_name):
-    notes_path = _notes_path(ws_name)
-    notes_data = _load_json(notes_path) or {'next_seq': 1, 'entries': {}}
-
-    by_type = {}
-    active = 0
-    for e in notes_data.get('entries', {}).values():
-        if e.get('status') == 'active':
-            active += 1
-            t = e.get('type', 'unknown')
-            by_type[t] = by_type.get(t, 0) + 1
-    return {'active': active, 'by_type': by_type}
+    return brain_store.get_stats(view=ws_name)
 
 
 def cmd_store(args):
