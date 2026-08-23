@@ -268,7 +268,7 @@ def store_note(ws_name, classification):
         'category': classification.get('category'),
         'date': classification.get('date'),
         'source_ws': ws_name or 'personal',
-        'scope': brain_store.scope_for(text, ws_name),
+        'scope': classification.get('scope') or brain_store.scope_for(text, ws_name),
         'stored_to': stored_to,
         'stored_id': stored_id,
         'status': 'active',

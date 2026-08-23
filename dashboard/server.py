@@ -7011,6 +7011,28 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if not text:
             self._send_json(400, json.dumps({'error': 'text is required'}))
             return
+
+        # ── explicit intent prefixes beat the LLM classifier ────────────
+        # The classifier guesses; these commands decide. /memory|/note ->
+        # fact, /task|/todo -> task, /reminder -> reminder,
+        # /deadline|/milestone -> milestone. A trailing #private forces
+        # personal-only visibility regardless of the heuristic.
+        FORCED_TYPES = {
+            '/memory': 'fact', '/note': 'fact',
+            '/task': 'task', '/todo': 'task',
+            '/reminder': 'reminder',
+            '/deadline': 'milestone', '/milestone': 'milestone',
+        }
+        forced_type = None
+        scope_override = None
+        parts = text.split(' ', 1)
+        if len(parts) > 1 and parts[1].strip() and parts[0].lower() in FORCED_TYPES:
+            forced_type = FORCED_TYPES[parts[0].lower()]
+            text = parts[1].strip()
+        if '#private' in text.lower():
+            scope_override = 'private'
+            text = re.sub(r'#private', '', text, flags=re.IGNORECASE).strip(' \t-–—:,.')
+
         # Classify
         cls_script = str(BASE_DIR / '.agent' / 'scripts' / 'memory_classifier.py')
         code, out, err = self._run_script(cls_script, ['classify', '--text', text], timeout=30)
@@ -7022,6 +7044,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         except Exception:
             self._send_json(500, json.dumps({'error': 'invalid classifier output'}))
             return
+        if forced_type:
+            classification['type'] = forced_type
+        if scope_override:
+            classification['scope'] = scope_override
         # Store — combined dashboard has no workspace header, so notes land in
         # the personal brain; /samudera explicitly scopes its own.
         inbox_script = str(BASE_DIR / '.agent' / 'scripts' / 'memory_inbox.py')

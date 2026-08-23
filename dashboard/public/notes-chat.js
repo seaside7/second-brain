@@ -123,7 +123,7 @@
     if (!comp) return;
     comp.innerHTML = `<div class="notes-input-row">`
       + `<textarea id="notes-input" class="notes-input" rows="1"`
-      + ` placeholder="Write a note... abbreviation, task, milestone, observation"`
+      + ` placeholder="Write a note... /task /reminder /deadline /memory · #private = personal only"`
       + ` autocomplete="off" spellcheck="false"></textarea>`
       + `<button id="notes-send" class="notes-send-btn" title="Store note">➤</button>`
       + `</div>`;
