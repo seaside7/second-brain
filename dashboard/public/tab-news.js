@@ -122,7 +122,7 @@ window.Tabs = window.Tabs || {};
           parts.push(storyCard(stories[i], i));
         }
         parts.push('<div class="intel-updated" style="margin-top:var(--sp-4);text-align:center">' +
-          U.esc(catData.label || '') + ' \u00B7 ' + catData.fetched_items + ' RSS items scanned \u00B7 GPT-4o-mini analysis</div>');
+          U.esc(catData.label || '') + ' \u00B7 ' + catData.fetched_items + ' stories \u00B7 kept 7 days</div>');
       }
     }
 
@@ -158,6 +158,7 @@ window.Tabs = window.Tabs || {};
 
     const topline = [];
     if (story.source) topline.push('<span class="intel-source">' + U.esc(story.source) + '</span>');
+    if (story.stored_on) topline.push('<span class="intel-date">' + U.esc(story.stored_on) + '</span>');
     if (verdict) topline.push(verdict);
     if (story.importance) topline.push(dotRating(story.importance));
 

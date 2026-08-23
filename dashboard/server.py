@@ -6177,36 +6177,62 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             return None
 
     def _handle_get_intelligence(self):
-        """GET /api/intelligence — Daily Intelligence Feed with 3 categories:
-        Global Economic Update, AI & Technology Update, Crypto Update.
-        Reads from journal/news_briefings/YYYY-MM-DD_intelligence.json."""
+        """GET /api/intelligence — accumulated Daily Intelligence Feed (3 categories).
+        Reads the persistent 7-day news store (journal/news_briefings/news_store.json),
+        grouped by category, newest first. Stories older than 7 days are dropped."""
         try:
             from datetime import datetime as _dt, timedelta as _td, timezone as _tz
             _wib = _tz(_td(hours=7))
             now = _dt.now(_wib)
 
-            # Try today first, then go back 7 days
-            data = None
-            for offset in range(7):
-                d = (now - _td(days=offset)).strftime('%Y-%m-%d')
-                path = NEWS_BRIEFINGS_DIR / ('%s_intelligence.json' % d)
-                if path.exists():
-                    try:
-                        with open(path, 'r', encoding='utf-8') as f:
-                            data = json.load(f)
-                        break
-                    except Exception:
-                        continue
+            meta = {
+                'global_economy': {'icon': '\U0001f30e', 'label': 'Global Economic Update'},
+                'ai_tech': {'icon': '\U0001f916', 'label': 'AI & Technology Update'},
+                'crypto': {'icon': '\u20bf', 'label': 'Crypto Update'},
+            }
 
-            if not data:
+            store_path = NEWS_BRIEFINGS_DIR / 'news_store.json'
+            store = None
+            if store_path.exists():
+                try:
+                    with open(store_path, 'r', encoding='utf-8') as f:
+                        store = json.load(f)
+                except Exception:
+                    store = None
+
+            if isinstance(store, dict) and isinstance(store.get('stories'), list):
+                cutoff = (now - _td(days=7 - 1)).strftime('%Y-%m-%d')
+                grouped = {c: [] for c in meta}
+                for story in store['stories']:
+                    sd = story.get('stored_on') or ''
+                    cat = story.get('category') or ''
+                    if sd < cutoff or cat not in grouped:
+                        continue
+                    grouped[cat].append(story)
+                for cat, stories in grouped.items():
+                    stories.sort(key=lambda s: (s.get('stored_on') or '',
+                                                s.get('importance') or 0), reverse=True)
+
+                generated = store.get('last_updated') or now.isoformat(timespec='seconds')
                 self._send_json(200, json.dumps({
-                    'generated_wib': now.isoformat(timespec='seconds'),
-                    'categories': {},
-                    'empty': True,
+                    'generated_wib': generated,
+                    'categories': {
+                        c: {
+                            'label': meta[c]['label'],
+                            'icon': meta[c]['icon'],
+                            'stories': grouped[c],
+                            'stories_count': len(grouped[c]),
+                            'fetched_items': len(grouped[c]),
+                        } for c in meta
+                    },
                 }))
                 return
 
-            self._send_json(200, json.dumps(data))
+            self._send_json(200, json.dumps({
+                'generated_wib': '',
+                'categories': {},
+                'empty': True,
+            }))
         except Exception as e:
             self._send_json(500, json.dumps({'error': 'Failed to load intelligence feed', 'details': str(e)}))
 
@@ -6920,13 +6946,109 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if args and isinstance(args[0], str) and '/api/' in args[0]:
             print(f"  API  {args[0]}")
 
+REPO_ROOT = BASE_DIR  # repo root; was referenced by the generate endpoint but never defined
+INTEL_SCRIPT = REPO_ROOT / '.agent' / 'skills' / 'news-intelligence' / 'scripts' / 'intelligence_feed.py'
+# Feed slots per day (WIB), mirroring the VPS cron: morning + early afternoon.
+INTEL_SLOTS = ((7, 0), (13, 0))
+INTEL_CHECK_INTERVAL_S = 300          # poll every 5 min; generation itself is rare
+INTEL_RETENTION_DAYS = 7              # rolling window: day 8's feed is pruned
+
+
+def _intel_feed_freshness():
+    """(date_str, generated_iso) of the newest intelligence feed, or (None, None)."""
+    try:
+        feeds = sorted(NEWS_BRIEFINGS_DIR.glob('*_intelligence.json'))
+        if not feeds:
+            return None, None
+        data = json.loads(feeds[-1].read_text(encoding='utf-8'))
+        return data.get('date'), data.get('generated_wib')
+    except Exception:
+        return None, None
+
+
+def _intel_generate_once(reason):
+    """Run the feed generator synchronously in the scheduler thread."""
+    def _run():
+        try:
+            print(f"  [Intel] generating feed ({reason})…")
+            subprocess.run([sys.executable, str(INTEL_SCRIPT), 'generate'],
+                           cwd=str(REPO_ROOT), timeout=180, capture_output=True)
+            d, g = _intel_feed_freshness()
+            print(f"  [Intel] done -> date={d} generated={g}")
+        except Exception as e:
+            print(f"  [Intel] generation failed: {e}")
+    threading.Thread(target=_run, daemon=True).start()
+
+
+def _intel_prune():
+    """Rolling retention: keep only the last INTEL_RETENTION_DAYS days of
+    intelligence feeds (day 8 and older are deleted). Only touches files
+    named YYYY-MM-DD_intelligence.json; anything else in the folder is left
+    alone. Returns the list of removed filenames."""
+    cutoff = (datetime.now(WIB_TZ) - timedelta(days=INTEL_RETENTION_DAYS - 1)).date()
+    removed = []
+    for f in NEWS_BRIEFINGS_DIR.glob('*_intelligence.json'):
+        m = re.match(r'^(\d{4}-\d{2}-\d{2})_intelligence\.json$', f.name)
+        if not m:
+            continue
+        try:
+            d = datetime.strptime(m.group(1), '%Y-%m-%d').date()
+        except ValueError:
+            continue
+        if d < cutoff:
+            try:
+                f.unlink()
+                removed.append(f.name)
+                print(f"  [Intel] pruned {f.name} (older than {cutoff.isoformat()})")
+            except OSError as e:
+                print(f"  [Intel] could not prune {f.name}: {e}")
+    return removed
+
+
+def _intel_scheduler():
+    """Catch-up + slot-based intelligence feed generation for LOCAL runs.
+
+    The VPS has a real cron (07:00/14:00 WIB); this machine doesn't, so the
+    dashboard server does it itself: on boot, if today's feed is missing but
+    a slot already passed, generate immediately; then before each slot ends,
+    regenerate when that slot's edition isn't on disk yet. State lives in
+    the feed files themselves (date + generated_wib) — nothing extra.
+    """
+    while True:
+        _intel_prune()
+        now_wib = datetime.now(WIB_TZ)
+        feed_date, feed_gen = _intel_feed_freshness()
+        today = now_wib.strftime('%Y-%m-%d')
+        due_slot = None
+        for h, m in INTEL_SLOTS:
+            if (now_wib.hour, now_wib.minute) >= (h, m):
+                due_slot = (h, m)
+        if due_slot and feed_date == today and feed_gen:
+            # same-day edition exists; refresh only when it predates the slot
+            try:
+                gen_dt = datetime.fromisoformat(feed_gen)
+                gen_naive = gen_dt.replace(tzinfo=None)
+                if gen_naive >= datetime(now_wib.year, now_wib.month, now_wib.day,
+                                         due_slot[0], due_slot[1]):
+                    time.sleep(INTEL_CHECK_INTERVAL_S)
+                    continue
+            except Exception:
+                pass
+            _intel_generate_once(f'slot {due_slot[0]:02d}:{due_slot[1]:02d} refresh')
+        elif due_slot:
+            _intel_generate_once(f"catch-up (slot {due_slot[0]:02d}:{due_slot[1]:02d} missed)")
+        time.sleep(INTEL_CHECK_INTERVAL_S)
+
+
 def main():
     # ThreadingHTTPServer: each request/connection gets its own thread, so one slow or
     # keep-alive browser connection can't freeze the whole dashboard (the old single-threaded
     # HTTPServer hung all tabs when one connection blocked).
     server = ThreadingHTTPServer(('0.0.0.0', PORT), DashboardHandler)
     server.daemon_threads = True
+    threading.Thread(target=_intel_scheduler, daemon=True).start()
     print(f"\n  [Dashboard] running at http://localhost:{PORT}\n")
+    print(f"  Intel feed:  auto 07:00 + 13:00 WIB")
     print(f"  Reading from: {DASHBOARD_PATH}")
     print(f"  Calendar:     {'✅ token found' if TOKEN_FILE.exists() else '❌ no token'}")
     print(f"  Projects:     {CLIENTS_DIR}")

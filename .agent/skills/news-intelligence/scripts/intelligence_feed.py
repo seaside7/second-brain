@@ -14,6 +14,7 @@ Usage:
   python3 intelligence_feed.py latest
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -35,6 +36,11 @@ FEEDS_DIR = REPO_ROOT / 'journal' / 'news_briefings'
 FEEDS_DIR.mkdir(parents=True, exist_ok=True)
 STATE_PATH = REPO_ROOT / 'journal' / 'state' / 'intelligence_feed_log.json'
 STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+# Persistent 7-day news menu: every new story is accumulated here (deduped by
+# url/headline), and stories older than the retention window are pruned so the
+# News tab never loses yesterday's items just because today came back empty.
+STORE_PATH = FEEDS_DIR / 'news_store.json'
+RETENTION_DAYS = 7
 
 WIB = timezone(timedelta(hours=7))
 
@@ -93,6 +99,104 @@ def _save_json(path, data):
     with open(tmp, 'w', encoding='utf-8') as fh:
         json.dump(data, fh, ensure_ascii=False, indent=2)
     os.replace(tmp, str(path))
+
+
+def _story_id(category, story):
+    """Stable identity for a story, used to dedupe across days and slots."""
+    key = (story.get('url') or '').strip().lower()
+    if not key:
+        key = (story.get('headline') or story.get('news') or '').strip().lower()
+    return hashlib.md5(('%s|%s' % (category, key)).encode('utf-8')).hexdigest()
+
+
+def _load_store():
+    data = _load_json(STORE_PATH)
+    if not isinstance(data, dict) or not isinstance(data.get('stories'), list):
+        return {'version': 1, 'stories': []}
+    data.setdefault('version', 1)
+    data.setdefault('stories', [])
+    return data
+
+
+def _save_store(store):
+    _save_json(STORE_PATH, store)
+
+
+def _retention_cutoff(today=None):
+    """Oldest stored_on date we still keep (7-day rolling window; day 8 pruned)."""
+    today = today or datetime.now(WIB).strftime('%Y-%m-%d')
+    cutoff_dt = datetime.strptime(today, '%Y-%m-%d').date() - timedelta(days=RETENTION_DAYS - 1)
+    return cutoff_dt.isoformat()
+
+
+def _prune_store(store, today=None):
+    """Drop stories older than the retention window. Returns count removed."""
+    cutoff = _retention_cutoff(today)
+    before = len(store.get('stories', []))
+    store['stories'] = [s for s in store.get('stories', [])
+                        if (s.get('stored_on') or '') >= cutoff]
+    return before - len(store['stories'])
+
+
+def _merge_into_store(store, result, today=None):
+    """Add new stories from a generated result into the store (deduped by id)."""
+    today = today or datetime.now(WIB).strftime('%Y-%m-%d')
+    existing = {s.get('id') for s in store.get('stories', []) if s.get('id')}
+    added = 0
+    for cat, data in (result.get('categories') or {}).items():
+        for story in (data.get('stories') or []):
+            sid = _story_id(cat, story)
+            if sid in existing:
+                continue
+            entry = dict(story)
+            entry['id'] = sid
+            entry['category'] = cat
+            entry['stored_on'] = today
+            store['stories'].append(entry)
+            existing.add(sid)
+            added += 1
+    return added
+
+
+def _backfill_store():
+    """Seed the store from existing daily edition files (one-time migration)."""
+    store = _load_store()
+    files = sorted(FEEDS_DIR.glob('*_intelligence.json'))
+    total_added = 0
+    last_updated = store.get('last_updated')
+    for f in files:
+        m = re.match(r'^(\d{4}-\d{2}-\d{2})_intelligence\.json$', f.name)
+        if not m:
+            continue
+        data = _load_json(f)
+        if not isinstance(data, dict):
+            continue
+        total_added += _merge_into_store(store, data, today=m.group(1))
+        gen = data.get('generated_wib')
+        if gen and (not last_updated or gen > last_updated):
+            last_updated = gen
+    removed = _prune_store(store)
+    store['last_updated'] = last_updated or datetime.now(WIB).isoformat(timespec='seconds')
+    _save_store(store)
+    return total_added, removed, len(store['stories'])
+
+
+def get_store_grouped():
+    """Persistent 7-day news menu grouped by category, newest first."""
+    store = _load_store()
+    cutoff = _retention_cutoff()
+    grouped = {}
+    for story in store.get('stories', []):
+        if (story.get('stored_on') or '') < cutoff:
+            continue
+        cat = story.get('category', '')
+        if not cat:
+            continue
+        grouped.setdefault(cat, []).append(story)
+    for cat, stories in grouped.items():
+        stories.sort(key=lambda s: (s.get('stored_on') or '', s.get('importance') or 0),
+                     reverse=True)
+    return grouped
 
 
 def _fetch_rss(url, timeout=15):
@@ -342,6 +446,15 @@ def generate():
     state['feeds'] = state['feeds'][-30:]
     _save_json(STATE_PATH, state)
 
+    # Persist into the rolling 7-day news store: accumulate new stories and
+    # prune anything past the retention window so the News tab keeps history.
+    store = _load_store()
+    added = _merge_into_store(store, result)
+    removed = _prune_store(store)
+    store['last_updated'] = now_wib
+    _save_store(store)
+    print('  Store: +%d new, -%d pruned, %d total' % (added, removed, len(store['stories'])))
+
     return result
 
 
@@ -377,17 +490,47 @@ def cmd_latest(args):
     print(json.dumps(data, ensure_ascii=False, indent=2))
 
 
+def cmd_backfill(args):
+    added, removed, total = _backfill_store()
+    print('Backfilled store: +%d added, -%d pruned, %d total stories.' % (added, removed, total))
+
+
+def cmd_prune(args):
+    store = _load_store()
+    removed = _prune_store(store)
+    _save_store(store)
+    print('Pruned %d stories; %d remain.' % (removed, len(store['stories'])))
+
+
+def cmd_store(args):
+    grouped = get_store_grouped()
+    out = {
+        'categories': {cat: {'stories': stories, 'stories_count': len(stories)}
+                       for cat, stories in grouped.items()},
+    }
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+
+
 def main():
     p = argparse.ArgumentParser(description='Daily Intelligence Feed')
     sub = p.add_subparsers(dest='cmd')
     gen = sub.add_parser('generate')
     gen.add_argument('--dry-run', action='store_true')
     sub.add_parser('latest')
+    sub.add_parser('backfill', help='Seed the 7-day store from existing daily edition files')
+    sub.add_parser('prune', help='Prune stories older than 7 days from the store')
+    sub.add_parser('store', help='Dump the persistent 7-day news store')
     args = p.parse_args()
     if args.cmd == 'generate':
         cmd_generate(args)
     elif args.cmd == 'latest':
         cmd_latest(args)
+    elif args.cmd == 'backfill':
+        cmd_backfill(args)
+    elif args.cmd == 'prune':
+        cmd_prune(args)
+    elif args.cmd == 'store':
+        cmd_store(args)
     else:
         p.print_help()
 
