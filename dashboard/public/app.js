@@ -75,7 +75,6 @@ const App = {
   overviewError: null,
   lastFetched: null,
   progress: null,          // /api/progress — momentum band; null = absent (fetch failed or not yet loaded)
-  briefing: null,          // /api/briefing — briefing card; null = absent
   calendar: null,
   calendarState: 'idle',   // idle | loading | ready | error
   calendarError: null,
@@ -135,26 +134,25 @@ function loadActiveTab() {
   }
 }
 
-/* ── Refresh loop: briefing + AI runs + active tab, every 60s, paused when
-   hidden. The old /api/dashboard (overview) and /api/progress calls are
-   gone — the hero tiles, momentum band and work cards they fed no longer
-   exist on Home. The ai-task list seeds AI.adoptList so rows built with
-   Comp.aiButton show the done pill for a completed run after a reload. */
+/* ── Refresh loop: AI runs + active tab, every 60s, paused when
+   hidden. The old /api/dashboard (overview), /api/progress and
+   /api/briefing calls are gone — the hero tiles, momentum band, work
+   cards and Pagi/Malam briefing card they fed no longer exist on Home.
+   The ai-task list seeds AI.adoptList so rows built with Comp.aiButton
+   show the done pill for a completed run after a reload. */
 async function refreshOverview(manual = false) {
   if (document.hidden && !manual) return;
   const btn = $id('btn-refresh');
   btn.classList.add('is-busy');
-  const [bRes, aiRes] = await Promise.allSettled([
-    U.fetchJSON('/api/briefing'),
+  const [aiRes] = await Promise.allSettled([
     U.fetchJSON('/api/ai-task?list=1'),
   ]);
   if (aiRes.status === 'fulfilled') AI.adoptList(aiRes.value && aiRes.value.runs);
   App.commandQueue = null;
-  if (bRes.status === 'fulfilled') {
-    App.briefing = bRes.value;
+  if (aiRes.status === 'fulfilled') {
     App.lastFetched = new Date();
   } else if (manual) {
-    Comp.toast(`Refresh failed: ${bRes.reason?.message || bRes.reason}`, false);
+    Comp.toast(`Refresh failed: ${aiRes.reason?.message || aiRes.reason}`, false);
   }
   btn.classList.remove('is-busy');
   updateChrome();
@@ -211,7 +209,6 @@ function renderHome() {
       App.home = h;
       if (!canRender(el)) return;
       el.innerHTML = [
-        briefingCard(),
         topTicketsCard(h),
         topNewsCard(h),
       ].join('\n');
@@ -290,54 +287,10 @@ function topNewsCard(h) {
   });
 }
 
-function wibHourFromIso(iso) {
-  if (!iso) return null;
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? null : (d.getUTCHours() + 7) % 24;
-}
-
-/* 🗞️ Briefing card — newest Pagi/Malam section from /api/briefing. Collapsed
-   by default, EXCEPT a still-fresh morning briefing before 15:00 WIB (opened
-   so the owner sees it without an extra click). "Lihat yang sebelumnya" opens
-   `other` (the other kind's most recent section) in the Drawer. Empty/failed
-   fetch -> card absent. */
-function briefingCard() {
-  const b = App.briefing;
-  if (!b || !b.latest) return '';
-  const kindEmoji = b.latest.kind === 'pagi' ? '🌅' : '🌙';
-  const rawTitle = b.latest.title || '';
-  /* the raw Dashboard.md header USUALLY already carries its own 🌅/🌙 (kind
-     was detected off it) — only prefix ours when it's genuinely missing, so
-     the kind indicator never doubles up */
-  const count = /[🌅🌙]/.test(rawTitle) ? rawTitle : `${kindEmoji} ${rawTitle}`.trim();
-  const hour = wibHourFromIso(App.home?.generated_wib);
-  const defaultOpen = b.latest.kind === 'pagi' && hour != null && hour < 15;
-  const otherBtn = b.other
-    ? `<button class="prep-link briefing-other-btn">Lihat yang sebelumnya</button>` : '';
-  const body = `<div class="md">${U.mdToHtml(b.latest.markdown || '')}</div>` +
-    (otherBtn ? `<p class="row-note">${otherBtn}</p>` : '');
-  return Comp.card({
-    key: 'briefing', icon: '🗞️', title: 'Briefing (Pagi/Malam)',
-    count, body, open: defaultOpen,
-  });
-}
-
-/* "Lihat yang sebelumnya" -> open the OTHER briefing section in the Drawer
-   (rendered markdown) — not a repo file, so Drawer.openHtml not Drawer.open */
-document.addEventListener('click', e => {
-  const btn = e.target.closest('.briefing-other-btn');
-  if (!btn) return;
-  e.preventDefault();
-  const other = App.briefing?.other;
-  if (!other) return;
-  const emoji = other.kind === 'pagi' ? '🌅' : '🌙';
-  Drawer.openHtml(`${emoji} ${other.title || 'Briefing'}`, `<div class="md">${U.mdToHtml(other.markdown || '')}</div>`);
-});
-
 /* ── boot ── */
 /* The /samudera office-safe view hides personal-finance surfaces:
-   reminders + finance. Memory stays visible — it is workspace-scoped
-   (samudera notes live in the samudera workspace, never personal ones). */
+   reminders + finance. Memory stays visible on both views — ONE shared
+   brain; only scope=private entries stay personal-only. */
 const SAMUDERA_HIDDEN_TABS = ['reminders', 'finance'];
 
 function applySamuderaMode() {

@@ -141,6 +141,21 @@ def get_stats(view=''):
     return {'active': active, 'by_type': by_type}
 
 
+def set_scope(note_id, scope):
+    """Change a memory's retrieval scope. Returns (ok, message)."""
+    if scope not in VALID_SCOPES:
+        return False, f'invalid scope {scope!r}; use one of {VALID_SCOPES}'
+    data = load_notes()
+    entry = data.get('entries', {}).get(note_id)
+    if not entry:
+        return False, f'note {note_id} not found'
+    old = entry.get('scope', 'global')
+    entry['scope'] = scope
+    entry['updated_wib'] = now_wib()
+    save_notes(data)
+    return True, f'{note_id}: {old} -> {scope}'
+
+
 # ── knowledge dir ────────────────────────────────────────────────────────────
 
 def category_file(category):
@@ -163,6 +178,10 @@ if __name__ == '__main__':
     stats = sub.add_parser('stats')
     stats.add_argument('--view', default='')
 
+    sc = sub.add_parser('set-scope')
+    sc.add_argument('--id', required=True)
+    sc.add_argument('--scope', required=True)
+
     args = p.parse_args()
     if args.cmd == 'list':
         print(json.dumps(list_notes(view=args.view, limit=args.limit),
@@ -170,5 +189,9 @@ if __name__ == '__main__':
     elif args.cmd == 'stats':
         print(json.dumps(get_stats(getattr(args, 'view', '')),
                          ensure_ascii=False, indent=2))
+    elif args.cmd == 'set-scope':
+        ok, msg = set_scope(args.id, args.scope)
+        print(msg)
+        sys.exit(0 if ok else 1)
     else:
         p.print_help()
