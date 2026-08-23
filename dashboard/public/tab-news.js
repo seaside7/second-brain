@@ -153,7 +153,7 @@ window.Tabs = window.Tabs || {};
 
   function storyCard(story, idx) {
     const num = String(idx + 1).padStart(2, '0');
-    const teaser = firstSentence(story.news || story.market_data || '');
+    const teaser = makeTeaser(story.news || story.market_data || '');
     const verdict = verdictPill(story.verdict);
 
     const topline = [];
@@ -253,6 +253,17 @@ window.Tabs = window.Tabs || {};
     if (!t) return '';
     const m = t.match(/^(.+?[.!?:])\s/);
     return m ? m[1] : t.slice(0, 160);
+  }
+
+  /* Collapsed teaser: first two sentences (or ~300 chars) so the summary
+     carries real substance - what actually happened, not a headline echo. */
+  function makeTeaser(text) {
+    const t = String(text || '').trim();
+    if (!t) return '';
+    const sentences = t.match(/[^.!?]+[.!?]+["')\]]?\s*/g) || [t];
+    const picked = sentences.slice(0, 2).join('').trim();
+    const out = picked || t;
+    return out.length > 300 ? out.slice(0, 297).replace(/\s+\S*$/, '') + '…' : out;
   }
 
   Tabs.news = { load: load, generate: generate };

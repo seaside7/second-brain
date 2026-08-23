@@ -141,20 +141,34 @@ def _prune_store(store, today=None):
 def _merge_into_store(store, result, today=None):
     """Add new stories from a generated result into the store (deduped by id)."""
     today = today or datetime.now(WIB).strftime('%Y-%m-%d')
-    existing = {s.get('id') for s in store.get('stories', []) if s.get('id')}
+    existing = {s.get('id'): s for s in store.get('stories', []) if s.get('id')}
+    # Fields refreshed when a known story reappears with newer analysis
+    # (e.g. after a prompt upgrade) - identity fields stay untouched.
+    REFRESH_FIELDS = ('headline', 'news', 'why_it_matters',
+                      'impact_on_indonesia', 'how_it_supports_work',
+                      'what_to_watch', 'my_take', 'verdict', 'importance',
+                      'market_data', 'source')
     added = 0
+    updated = 0
     for cat, data in (result.get('categories') or {}).items():
         for story in (data.get('stories') or []):
             sid = _story_id(cat, story)
             if sid in existing:
+                tgt = existing[sid]
+                for f in REFRESH_FIELDS:
+                    if story.get(f):
+                        tgt[f] = story[f]
+                updated += 1
                 continue
             entry = dict(story)
             entry['id'] = sid
             entry['category'] = cat
             entry['stored_on'] = today
             store['stories'].append(entry)
-            existing.add(sid)
+            existing[sid] = entry
             added += 1
+    if updated:
+        print('  Store merge: %d new, %d refreshed' % (added, updated))
     return added
 
 
@@ -347,7 +361,7 @@ def _openai_key():
     return os.environ.get('OPENAI_API_KEY')
 
 
-def _llm_call(prompt, system='', max_tokens=3000):
+def _llm_call(prompt, system='', max_tokens=4500):
     api_key = _openai_key()
     if not api_key:
         return None
@@ -395,7 +409,11 @@ SYSTEM_PROMPTS = {
         '- Target read time: 2-3 minutes\n\n'
         'FORMAT (for each story):\n'
         '**[Headline]**\n'
-        'NEWS: What happened (1-2 sentences)\n'
+        'NEWS: What happened, with the concrete substance: name the exact product, '
+        'policy, number or event; explain HOW it works or WHAT changed; add key '
+        'figures, dates and named actors. 3-5 sentences. Never just paraphrase '
+        'the headline - if the headline says "new way", the NEWS field must say '
+        'what that way actually is.\n'
         'WHY IT MATTERS: The significance\n'
         'IMPACT ON INDONESIA: How it affects Indonesia/business\n'
         'WHAT TO WATCH NEXT: Key developments to monitor\n'
@@ -419,7 +437,11 @@ SYSTEM_PROMPTS = {
         '- Target read time: 2-3 minutes\n\n'
         'FORMAT (for each story):\n'
         '**[Headline]**\n'
-        'NEWS: What happened (1-2 sentences)\n'
+        'NEWS: What happened, with the concrete substance: name the exact product, '
+        'feature or event; explain HOW it works or WHAT changed; add key figures, '
+        'dates and named actors. 3-5 sentences. Never just paraphrase the headline '
+        '- if the headline says "new data", the NEWS field must say what the data '
+        'actually shows.\n'
         'WHY IT MATTERS: The significance for business/tech\n'
         'HOW IT CAN SUPPORT MY WORK: Practical application\n'
         'WHAT TO WATCH NEXT: Key developments to monitor\n'
@@ -444,7 +466,10 @@ SYSTEM_PROMPTS = {
         'FORMAT (for each story):\n'
         '**[Headline]**\n'
         'MARKET: Price/sentiment data\n'
-        'NEWS: What happened (1-2 sentences)\n'
+        'NEWS: What happened, with the concrete substance: name the exact asset, '
+        'regulation, company or event; explain HOW it works or WHAT changed; add '
+        'key figures, dates and named actors. 3-5 sentences. Never just paraphrase '
+        'the headline.\n'
         'WHY IT MATTERS: The significance\n'
         'WHAT TO WATCH NEXT: Key developments to monitor\n'
         'MY TAKE: Brief analyst perspective\n\n'
@@ -465,7 +490,8 @@ def _generate_category(category, items, market_data=None):
     for i, item in enumerate(items[:15], 1):
         h = '%d. %s' % (i, item['title'])
         if item.get('summary'):
-            h += '\n   Summary: %s' % item['summary'][:200]
+            # Generous context: the analyst can only be as specific as its sources
+            h += '\n   Summary: %s' % item['summary'][:800]
         if item.get('url'):
             h += '\n   URL: %s' % item['url']
         headlines.append(h)
@@ -474,7 +500,12 @@ def _generate_category(category, items, market_data=None):
               '%s\n\n'
               'Generate the briefing in the specified JSON format. '
               'Pick only the 3-5 most important stories. '
-              'Quality over quantity.') % (meta['label'], '\n'.join(headlines))
+              'Quality over quantity.\n'
+              'IMPORTANT SPECIFICITY RULE: base every NEWS field on what the '
+              'summaries actually say - name the concrete product, number, date '
+              'or mechanism they mention. If a summary lacks specifics, report '
+              'exactly what is known and note what is not yet announced; never '
+              'invent features or details.') % (meta['label'], '\n'.join(headlines))
 
     if market_data:
         prompt += ('\n\nAUTHORITATIVE LIVE MARKET DATA - use these exact prices '
