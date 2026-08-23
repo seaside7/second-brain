@@ -6461,6 +6461,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
         # ── deadlines: milestone/task notes carrying a date ──
         # notes live in the ONE brain now
+        ws = self._request_ws()
         notes = self._home_state_entries(BASE_DIR / '.agent' / 'brain' / 'memory_notes.json')
         notes = [e for e in notes
                  if e.get('status') != 'inactive'
