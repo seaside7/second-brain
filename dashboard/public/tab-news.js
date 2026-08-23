@@ -33,7 +33,7 @@ window.Tabs = window.Tabs || {};
     tab.innerHTML = '<div class="load-note">Loading intelligence feed...</div>';
 
     try {
-      const data = await U.fetchJSON('/api/intelligence');
+      const data = await U.fetchJSON('/api/intelligence?_=' + Date.now());
       state.data = data;
       state.dataError = null;
     } catch (err) {
