@@ -46,8 +46,11 @@ WIB = timezone(timedelta(hours=7))
 
 RSS_FEEDS = {
     'global_economy': [
-        'https://feeds.reuters.com/reuters/businessNews',
-        'https://feeds.reuters.com/reuters/topNews',
+        # feeds.reuters.com was shut down (DNS dead since ~2026-08) - replaced
+        # with BBC/Guardian/MarketWatch which serve reliably from the VPS.
+        'https://feeds.bbci.co.uk/news/business/rss.xml',
+        'https://www.theguardian.com/uk/business/rss',
+        'https://feeds.marketwatch.com/marketwatch/topstories/',
         'https://www.cnbc.com/id/100003114/device/rss/rss.html',
         'https://www.cnbc.com/id/10001147/device/rss/rss.html',
         'https://www.aljazeera.com/xml/rss/all.xml',
@@ -239,6 +242,10 @@ def _fetch_rss(url, timeout=15):
 
 
 def _fetch_category(category, max_items=20):
+    """Fetch RSS items for a category. Stories already living in the rolling
+    store are dropped BEFORE the analyst prompt — otherwise the LLM keeps
+    re-picking the same big headlines while they sit in RSS, and URL-dedup
+    silently turns every run into a refresh instead of new coverage."""
     feeds = RSS_FEEDS.get(category, [])
     all_items = []
     seen = set()
@@ -250,8 +257,13 @@ def _fetch_category(category, max_items=20):
                 seen.add(key)
                 all_items.append(item)
         time.sleep(0.3)
-    all_items.sort(key=lambda x: x.get('published', ''), reverse=True)
-    return all_items[:max_items]
+    known = {s.get('id') for s in _load_store().get('stories', []) if s.get('id')}
+    fresh = [it for it in all_items if _story_id(category, it) not in known]
+    dropped = len(all_items) - len(fresh)
+    if dropped:
+        print('    %d already-covered stories filtered out' % dropped)
+    fresh.sort(key=lambda x: x.get('published', ''), reverse=True)
+    return fresh[:max_items]
 
 
 def _coingecko_prices():
