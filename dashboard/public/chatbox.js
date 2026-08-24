@@ -173,6 +173,7 @@
            <div class="chat-composer">
              <div id="chat-palette" class="chat-palette"></div>
              <div class="chat-input-row">
+               <button id="chat-new" class="chat-sugg-btn" title="New conversation - clears history so old wrong claims stop anchoring answers">🧹</button>
                <button id="chat-sugg" class="chat-sugg-btn" title="Suggested questions">💡</button>
                <input id="chat-input" class="chat-input" type="text"
                       placeholder='Ask anything… type "/" for suggestions'
@@ -230,6 +231,13 @@
       sugg.addEventListener('click', () => {
         if (Chat.paletteOpen) closePalette();
         else openPalette(currentFilter(input));
+      });
+      const newBtn = body.querySelector('#chat-new');
+      newBtn.addEventListener('click', () => {
+        Chat.messages = [];
+        saveChat();
+        renderChat();
+        Comp.toast('New conversation started', true);
       });
       sendBtn.addEventListener('click', doSend);
       input.focus();
