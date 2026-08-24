@@ -2054,6 +2054,13 @@ def _chat_memory_context(ws_name, query):
         # giant drive blobs outrank curated memories
         return 1 if re.search(r'\b' + re.escape(term) + r'\w*', blob) else 0
 
+    def _score(hits_count, blob_len):
+        # query coverage damped by document size: a 40k-char manual hits every
+        # term by sheer volume; without damping it always outranks precise,
+        # small memory blocks (classic TF-IDF length-normalization problem)
+        base = hits_count / len(terms)
+        return base * (1.0 / (1.0 + blob_len / 12000.0))
+
     # strip punctuation so "PSP?" matches "PSP"
     terms = [re.sub(r'\W+', '', t).lower() for t in query.split()]
     terms = [t for t in terms if len(t) > 2]
@@ -2090,13 +2097,13 @@ def _chat_memory_context(ws_name, query):
                     if 0 <= pos < best_pos:
                         best_pos = pos
                 start = max(0, best_pos - 200)
-                content_preview = content[start:start + 3000]
+                content_preview = content[start:start + 900]
                 results.append({
                     'source': 'drive',
                     'title': f.get('name', '?'),
                     'project': f.get('project', ''),
                     'content': content_preview,
-                    'score': score / len(terms),
+                    'score': _score(score, len(blob)),
                 })
         except Exception:
             pass
@@ -2128,7 +2135,7 @@ def _chat_memory_context(ws_name, query):
                     'source': 'knowledge',
                     'title': title,
                     'content': blk[start:start + 1400],
-                    'score': score / len(terms),
+                    'score': _score(score, len(blk)),
                 })
 
     # Memory notes search — the ONE brain; private entries stay personal-only
@@ -2154,13 +2161,19 @@ def _chat_memory_context(ws_name, query):
                     'title': entry.get('title', '?'),
                     'project': entry.get('project', ''),
                     'content': entry.get('text', '')[:1500],
-                    'score': min(1.0, score / len(terms) + boost),
+                    'score': min(1.0, _score(score, len(blob)) + boost),
                 })
         except Exception:
             pass
 
     results.sort(key=lambda x: -x['score'])
-    results = results[:5]
+    top = results[:4]
+    notes_matched = [r for r in results if r['source'] == 'memory_note']
+    if notes_matched:
+        best_note = max(notes_matched, key=lambda x: x['score'])
+        if best_note not in top:
+            top.append(best_note)  # never let raw docs bury a curated fact
+    results = top[:6]
     if not results:
         return '(no relevant memory found)'
 
