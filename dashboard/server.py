@@ -5,6 +5,7 @@ Serves the dashboard UI and provides API for reading/writing Dashboard.md,
 fetching Google Calendar events, and browsing project files.
 """
 
+import ipaddress
 import json
 import os
 import re
@@ -426,6 +427,17 @@ def _build_allowed_ips():
     return ips
 
 ALLOWED_IPS = _build_allowed_ips()
+
+# CIDR ranges from DASHBOARD_ALLOWED_IPS (entries containing '/'), e.g.
+# 103.77.225.0/24 — covers dynamic ISP assignments at home/office so the
+# allowlist survives an IP rotation within the same block.
+try:
+    ALLOWED_NETS = [ipaddress.ip_network(v, strict=False)
+                    for v in (s.strip() for s in os.environ.get('DASHBOARD_ALLOWED_IPS', '').split(','))
+                    if '/' in v]
+except ValueError as e:
+    sys.stderr.write(f"[dashboard] bad CIDR in DASHBOARD_ALLOWED_IPS: {e}\n")
+    ALLOWED_NETS = []
 
 # Live crypto prices for the News tab (cached; refreshed at most every 10 min
 # so the dashboard never shows a stale/hallucinated BTC or ETH figure).
@@ -2376,10 +2388,17 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def _check_client_ip(self):
         """Single chokepoint for the IP allowlist -- called at the top of every
-        do_* handler so no endpoint is reachable without passing it."""
+        do_* handler so no endpoint is reachable without passing it. Exact
+        IPs first, then CIDR ranges from ALLOWED_NETS."""
         ip = self.client_address[0]
         if ip in ALLOWED_IPS:
             return True
+        try:
+            addr = ipaddress.ip_address(ip)
+            if any(addr in n for n in ALLOWED_NETS):
+                return True
+        except ValueError:
+            pass
         sys.stderr.write(f"[dashboard] rejected request from disallowed IP: {ip}\n")
         self._send_json(403, json.dumps({'error': 'forbidden ip'}))
         return False
