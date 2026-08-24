@@ -2047,6 +2047,13 @@ def _chat_memory_context(ws_name, query):
     ws = ws_name or 'samudera'
     brain_dir = BASE_DIR / '.agent' / 'brain'
     workspaces_dir = BASE_DIR / '.agent' / 'workspaces'
+
+    def _hits(term, blob):
+        # word-start boundary + prefix, NOT raw substring: stops short words
+        # like 'who'/'have' matching inside 'whole'/'whatever' and letting
+        # giant drive blobs outrank curated memories
+        return 1 if re.search(r'\b' + re.escape(term) + r'\w*', blob) else 0
+
     # strip punctuation so "PSP?" matches "PSP"
     terms = [re.sub(r'\W+', '', t).lower() for t in query.split()]
     terms = [t for t in terms if len(t) > 2]
@@ -2071,7 +2078,7 @@ def _chat_memory_context(ws_name, query):
                     continue
                 blob = (f.get('name', '') + ' ' + f.get('folder_path', '') +
                         ' ' + f.get('project', '') + ' ' + f.get('content', '')).lower()
-                score = sum(1 for t in terms if t in blob)
+                score = sum(_hits(t, blob) for t in terms)
                 if score == 0:
                     continue
                 seen_drive_ids.add(fid)
@@ -2108,7 +2115,7 @@ def _chat_memory_context(ws_name, query):
                 if not blk.strip():
                     continue
                 blob = blk.lower()
-                score = sum(1 for t in terms if t in blob)
+                score = sum(_hits(t, blob) for t in terms)
                 if score == 0:
                     continue
                 m_title = re.search(r'###\s+(.+)', blk)
@@ -2136,11 +2143,12 @@ def _chat_memory_context(ws_name, query):
                     continue
                 blob = (entry.get('text', '') + ' ' + entry.get('title', '') +
                         ' ' + ' '.join(entry.get('entities', []))).lower()
-                score = sum(1 for t in terms if t in blob)
+                score = sum(_hits(t, blob) for t in terms)
                 if score == 0:
                     continue
                 # context boost: memory from the active view ranks higher
                 boost = 0.05 if entry.get('source_ws') == ws else 0.0
+                boost += 0.10  # curated personal facts outrank raw docs
                 results.append({
                     'source': 'memory_note',
                     'title': entry.get('title', '?'),
