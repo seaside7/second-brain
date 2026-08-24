@@ -2243,6 +2243,76 @@ def _chat_live_context(ws_name):
         if overdue:
             lines.append('Overdue: ' + '; '.join(f'{t.get("title", "?")} (due {t.get("due")})' for t in overdue[:3]))
 
+    # ── upcoming schedule: reminders + dated tasks + brain deadlines ──
+    # Lets the chat answer "apa aja task saya besok & rabu?" from real data
+    # instead of claiming it cannot see the agenda.
+    try:
+        horizon = (now + timedelta(days=7)).strftime('%Y-%m-%d')
+
+        def _fmt_due(d10):
+            try:
+                d = datetime.strptime(d10, '%Y-%m-%d')
+                lbl = d.strftime('%a %d %b')
+                if d10 == now.strftime('%Y-%m-%d'):
+                    lbl += ' (today)'
+                elif d10 == (now + timedelta(days=1)).strftime('%Y-%m-%d'):
+                    lbl += ' (tomorrow)'
+                return lbl
+            except ValueError:
+                return d10
+
+        sched = []
+
+        def _read_json(path):
+            try:
+                return json.loads(Path(path).read_text(encoding='utf-8'))
+            except Exception:
+                return {}
+
+        rdoc = _read_json(BASE_DIR / '.agent' / 'workspaces' / 'personal' / 'state' / 'reminders.json')
+        ritems = rdoc.get('reminders', rdoc) if isinstance(rdoc, dict) else rdoc
+        if isinstance(ritems, dict):
+            ritems = list(ritems.values())
+        for r in (ritems or []):
+            if not isinstance(r, dict) or r.get('done'):
+                continue
+            due = str(r.get('due') or '')[:10]
+            if due and due <= horizon:
+                sched.append((due, str(r.get('text') or '?')[:110]))
+
+        tdoc = _read_json(BASE_DIR / 'journal' / 'state' / 'tasks.json')
+        titems = tdoc.get('tasks', []) if isinstance(tdoc, dict) else tdoc
+        t_open = ('new', 'todo', 'in_progress', 'blocked', 'waiting', 'planned')
+        for t in (titems or []):
+            if not isinstance(t, dict) or t.get('status') not in t_open:
+                continue
+            due = str(t.get('due_date') or '')[:10]
+            if due and due <= horizon:
+                sched.append((due, '[task] ' + str(t.get('title') or '?')[:100]))
+
+        bdoc = _read_json(BASE_DIR / '.agent' / 'brain' / 'memory_notes.json')
+        bentries = bdoc.get('entries', {}) if isinstance(bdoc, dict) else {}
+        for e in bentries.values():
+            if not isinstance(e, dict) or e.get('status') == 'inactive':
+                continue
+            if ws_name == 'samudera' and e.get('scope') == 'private':
+                continue
+            if e.get('type') in ('milestone', 'task') and e.get('date'):
+                due = str(e.get('date'))[:10]
+                if due and due <= horizon:
+                    txt = str(e.get('text') or e.get('title') or '?')[:95]
+                    sched.append((due, '[deadline] ' + txt))
+
+        sched.sort(key=lambda x: x[0])
+        if sched:
+            lines.append(f'Upcoming reminders/tasks/deadlines (next 7 days, incl. overdue): {len(sched)} item(s)')
+            for due, txt in sched[:12]:
+                lines.append(f'- {_fmt_due(due)}: {txt}')
+        else:
+            lines.append('No reminders, dated tasks or deadlines in the next 7 days.')
+    except Exception:
+        pass
+
     # ── waiting on / decisions / commitments (workspace-scoped sources) ──
     try:
         wstate = json.loads(_workspace_ledger_path(ws_name, WAITING_ON_PATH).read_text(encoding='utf-8'))
