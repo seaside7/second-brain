@@ -415,7 +415,6 @@ SYSTEM_PROMPTS = {
         '- Include specific numbers/data when useful\n'
         '- Explain the "so what?" behind every story\n'
         '- Consider impact on Indonesia specifically\n'
-        '- If nothing important, say "Nothing major today"\n'
         '- Do NOT use sensational headlines\n'
         '- Distinguish FACT from ANALYSIS\n'
         '- Target read time: 2-3 minutes\n\n'
@@ -434,7 +433,9 @@ SYSTEM_PROMPTS = {
         '{"headline": "...", "news": "...", "why_it_matters": "...", '
         '"impact_on_indonesia": "...", "what_to_watch": "...", "my_take": "...", '
         '"importance": 1-10, "source": "...", "url": "..."}\n\n'
-        'Write 3-5 stories maximum. If nothing major, return empty array [].'
+        'Write 3-5 stories maximum. You MUST select AT LEAST 1 story: the '
+        'candidate list is live, pre-filtered news, so something is always '
+        'worth reporting.'
     ),
     'ai_tech': (
         'You are a senior tech analyst writing a daily AI/tech briefing for '
@@ -445,7 +446,6 @@ SYSTEM_PROMPTS = {
         '- For each story, give a clear verdict: TRY NOW / MONITOR / IGNORE\n'
         '- Focus on: AI agents, new models, enterprise AI, coding AI, tools\n'
         '- Consider: How can this support digital transformation?\n'
-        '- If nothing important, say "Nothing major today"\n'
         '- Target read time: 2-3 minutes\n\n'
         'FORMAT (for each story):\n'
         '**[Headline]**\n'
@@ -463,7 +463,9 @@ SYSTEM_PROMPTS = {
         '"how_it_supports_work": "...", "what_to_watch": "...", "my_take": "...", '
         '"verdict": "TRY NOW|MONITOR|IGNORE", "importance": 1-10, '
         '"source": "...", "url": "..."}\n\n'
-        'Write 3-5 stories maximum. If nothing major, return empty array [].'
+        'Write 3-5 stories maximum. You MUST select AT LEAST 1 story: the '
+        'candidate list is live, pre-filtered news, so something is always '
+        'worth reporting.'
     ),
     'crypto': (
         'You are a crypto market analyst writing a daily briefing for '
@@ -472,7 +474,6 @@ SYSTEM_PROMPTS = {
         '- Include BTC/ETH price movement and market sentiment\n'
         '- Focus on ETF/institutional flows, regulation, major events\n'
         '- Connect macro (Fed/liquidity) to crypto\n'
-        '- If nothing important, say "Nothing major today"\n'
         '- Do NOT use crypto hype language\n'
         '- Target read time: 2 minutes\n\n'
         'FORMAT (for each story):\n'
@@ -489,7 +490,9 @@ SYSTEM_PROMPTS = {
         '{"headline": "...", "market_data": "...", "news": "...", '
         '"why_it_matters": "...", "what_to_watch": "...", "my_take": "...", '
         '"importance": 1-10, "source": "...", "url": "..."}\n\n'
-        'Write 3-5 stories maximum. If nothing major, return empty array [].'
+        'Write 3-5 stories maximum. You MUST select AT LEAST 1 story: the '
+        'candidate list is live, pre-filtered news, so something is always '
+        'worth reporting.'
     ),
 }
 
@@ -527,16 +530,27 @@ def _generate_category(category, items, market_data=None):
     if not raw:
         return []
 
-    try:
-        raw = raw.strip()
-        if raw.startswith('```'):
-            raw = re.sub(r'^```(?:json)?\s*', '', raw)
-            raw = re.sub(r'\s*```$', '', raw)
-        stories = json.loads(raw)
-        if isinstance(stories, list):
-            return stories
-    except (json.JSONDecodeError, TypeError):
-        pass
+    def _parse(text):
+        text = text.strip()
+        if text.startswith('```'):
+            text = re.sub(r'^```(?:json)?\s*', '', text)
+            text = re.sub(r'\s*```$', '', text)
+        data = json.loads(text)
+        return data if isinstance(data, list) else []
+
+    for attempt in range(2):
+        try:
+            stories = _parse(raw)
+            if stories:
+                return stories
+        except (json.JSONDecodeError, TypeError):
+            pass
+        if attempt == 0:
+            print('    [WARN] no usable stories, retrying with stricter demand')
+            raw = _llm_call(prompt + '\n\nSTRICT: respond with ONLY a JSON '
+                            'array of story objects. No prose, no empty '
+                            'array - select at least 1 story.',
+                            system=system)
 
     return []
 
