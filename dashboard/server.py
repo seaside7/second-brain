@@ -2094,29 +2094,35 @@ def _chat_memory_context(ws_name, query):
         except Exception:
             pass
 
-    # Knowledge store search — the canonical brain knowledge dir
+    # Knowledge store search — canonical brain knowledge dir, scored per
+    # '### block' so answers land on precise sections (e.g. "4. Organizational
+    # Structure") instead of a random snippet from a whole category file.
     kb_dir = brain_dir / 'knowledge'
     if kb_dir.exists():
         for md_file in kb_dir.glob('*.md'):
             try:
                 text = md_file.read_text(encoding='utf-8')
-                blob = text.lower()
+            except Exception:
+                continue
+            for blk in re.split(r'\n(?=### )', text):
+                if not blk.strip():
+                    continue
+                blob = blk.lower()
                 score = sum(1 for t in terms if t in blob)
                 if score == 0:
                     continue
-                # Extract relevant snippet around first match
-                idx_match = min((blob.find(t) for t in terms if t in blob), default=0)
-                start = max(0, idx_match - 200)
-                end = min(len(text), idx_match + 1200)
-                snippet = text[start:end]
+                m_title = re.search(r'###\s+(.+)', blk)
+                title = (m_title.group(1).strip()[:90] if m_title
+                         else md_file.stem)
+                idx_match = min((blob.find(t) for t in terms if t in blob),
+                                default=0)
+                start = max(0, idx_match - 150)
                 results.append({
                     'source': 'knowledge',
-                    'title': md_file.stem,
-                    'content': snippet,
+                    'title': title,
+                    'content': blk[start:start + 1400],
                     'score': score / len(terms),
                 })
-            except Exception:
-                pass
 
     # Memory notes search — the ONE brain; private entries stay personal-only
     notes_path = brain_dir / 'memory_notes.json'
