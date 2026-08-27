@@ -315,14 +315,17 @@ is filtered by an IP allowlist (`127.0.0.1`, `::1`, the WSL gateway, plus anythi
 `DASHBOARD_ALLOWED_IPS`). There is **no authentication** on the dashboard, and its
 action buttons run local commands. Options, in order of preference:
 
-1. **SSH tunnel (recommended, zero config):**
+1. **SSH tunnel (recommended, zero config - and the only option that works when
+   your client IP changes, e.g. on mobile / multiple Wi-Fi networks):**
    ```bash
-   # from your laptop, every time you want the dashboard:
-   ssh -N -L 3737:127.0.0.1:3737 brain@<vps-ip>
+   # from your laptop/Mac/phone, every time you want the dashboard:
+   ssh -N -L 3737:127.0.0.1:3737 ubuntu@43.157.241.209
    # then open http://localhost:3737 locally
    ```
    Your laptop's requests arrive as `127.0.0.1` on the server, so the default
-   allowlist already admits them.
+   allowlist already admits them. Because this trusts only your SSH key (not your
+   IP), you can use it from any network - your changing Wi-Fi IP does not matter.
+   See `docs/HANDOFF-ACCESS-MOBILE.md` for GUI (Termius) and macOS-native steps.
 
 2. **Reverse proxy + TLS + your home IP (section 8):** add your home IP to
    `DASHBOARD_ALLOWED_IPS` in the service file:

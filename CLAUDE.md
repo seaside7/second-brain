@@ -338,6 +338,57 @@ For each recurring task, define the exact steps. The AI follows these in order.
 
 ---
 
+## Remote Deployment & VPS Access
+
+The harness/dashboard ALSO runs on a headless Ubuntu VPS that serves as the live
+"cloud" instance (read from anywhere). It is the same repo, deployed separately.
+
+### VPS facts
+- **Host**: `43.157.241.209`, SSH user `ubuntu` (key/password auth; `BatchMode=yes`
+  works for key auth)
+- **Repo path on VPS**: `/home/ubuntu/projects/second-brain`
+- **Service**: systemd `second-brain-dashboard.service` (`Type=simple`, `User=ubuntu`)
+- **Restart (NEVER nohup)**:
+  `sudo systemctl restart second-brain-dashboard`
+- **Dashboard port**: `3737` (`DASHBOARD_PORT` env, default `3737`; bind `0.0.0.0`)
+- **Dashboard is IP-allowlisted** at the app layer via `DASHBOARD_ALLOWED_IPS`
+  (exact IPs + CIDR, see `dashboard/server.py::_build_allowed_ips`) and it ALWAYS
+  admits `127.0.0.1`/`::1`. It has NO authentication of its own - rely on the
+  firewall + SSH tunnel to protect it.
+
+### Deploy flow (approved)
+```bash
+git add <intended files>; git commit -m "..."; git push origin main   # local
+ssh ubuntu@43.157.241.209 "cd /home/ubuntu/projects/second-brain && git pull && sudo systemctl restart second-brain-dashboard"
+```
+- Stage only intended files; leave unrelated dirty files (e.g. `workspace.md`)
+  unstaged.
+- New Python deps on the VPS: `pip3 install --break-system-packages <pkg>` (PEP 668).
+
+### Firewall posture (after 2026-08 hardening)
+- Port `22` (SSH): open to anywhere - this is the ONLY public door.
+- Port `3737`: **blocked from the public internet** (removed from ufw). Reachable
+  ONLY over the SSH tunnel (which lands on localhost, auto-allowed).
+- Port `20128`: still open to 3 allowlisted IPs (separate service) - do not touch
+  unless asked.
+- `sudo ufw status numbered` to inspect; delete rules with `echo y | sudo ufw delete <n>`.
+
+### Remote access - mobile / changing IPs
+The IP allowlist does NOT survive changing Wi-Fi/cellular IPs. The supported way in
+is an **SSH local port-forward** (trusts your SSH key, not your IP):
+```bash
+ssh -N -L 3737:127.0.0.1:3737 ubuntu@43.157.241.209    # keep running
+# then open http://localhost:3737
+```
+Full GUI (Termius) + macOS steps: `docs/HANDOFF-ACCESS-MOBILE.md`.
+
+### Machine-local vs VPS state
+- Memory/state (`.agent/brain/`, `.agent/workspaces/*/state/`) and `invoices/` are
+  **gitignored** - each machine has its own stores. VPS has its own copies of
+  tokens/credentials; copy via scp when needed (never commit tokens).
+
+---
+
 ## Subagents
 
 Referenced by `.claude/hooks/routing_mode.sh`, which prints the session model at startup so the main loop knows which direction to delegate.
@@ -437,7 +488,8 @@ Do NOT post on my behalf — I post manually.
 
 Check which integrations you've set up (see docs/SETUP.md):
 
-- [ ] Google Drive (work account)
+- [x] Google Drive (work account)
+- [x] Invoice Generator (Catalyze monthly billing - `.agent/skills/invoice-generator/`; see `.agent/workspaces/catalyze/workspace.md`)
 - [ ] Google Drive (personal account)
 - [ ] Google Calendar
 - [ ] Gmail

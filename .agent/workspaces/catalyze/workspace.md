@@ -131,6 +131,33 @@ Azure → deployment target
 
 ---
 
+## Invoice Generation (billing)
+
+- **Purpose**: Generate monthly Catalyze invoices from the timesheet Google Sheet.
+- **Skill**: `.agent/skills/invoice-generator/` (`SKILL.md`, `config.json`, `scripts/invoice_gen.py`)
+- **Rate**: IDR 175,000 / hour
+- **Bank**: BNI 2017667507 (Said Iskandar)
+- **Sheet ID**: `1WKRVlUzG1RY0nL-Eb-ahPn4neigBJ4iSsjAOT7C-dqA`
+- **Invoice number format**: `INV-DDMMYY-XXX` (e.g. `INV-310826-001`)
+- **Invoice date** = last calendar day of the month
+- **PDF layout**: A4 (reportlab); header left-aligned flush with table; approval footer
+  `Issued by (Said) / Checked by (HRGA) / Approved by (MD)`; `materai` stamp
+  (`assets/materai.png`) slightly overlapping the signature (`assets/signature.jpeg`) on
+  the right. Signature + materai images are committed in `assets/` (needed on VPS).
+- **Auth**: uses the `catalyze` workspace Drive token (OAuth2, auto-refresh). The token
+  file must exist on any machine that generates invoices (copied to VPS via scp; not
+  committed).
+- **CLI**: `python .agent/skills/invoice-generator/scripts/invoice_gen.py {list-tabs|validate|generate} --month <Month>`
+- **Dashboard UI**: the dashboard has an **Invoice tab** (`/api/invoices`,
+  `/api/invoice/generate` `{month}`, `/api/invoice/file?name=` download) + a
+  `/invoice <month>` slash command in `dashboard/server.py`.
+- **Output**: `invoices/` dir, filename `Invoice - Said - [Month].pdf` (gitignored;
+  per-machine).
+- **Runtime deps**: `reportlab` (installed on VPS with
+  `pip3 install --break-system-packages` due to PEP 668).
+
+---
+
 ## Connected Tools
 
 | Tool | Status | Purpose |
