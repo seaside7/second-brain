@@ -6439,6 +6439,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 'global_economy': {'icon': '\U0001f30e', 'label': 'Global Economic Update'},
                 'ai_tech': {'icon': '\U0001f916', 'label': 'AI & Technology Update'},
                 'crypto': {'icon': '\u20bf', 'label': 'Crypto Update'},
+                'stock': {'icon': '\U0001f4c8', 'label': 'Stock Update'},
             }
 
             store_path = NEWS_BRIEFINGS_DIR / 'news_store.json'

@@ -10,13 +10,14 @@ window.Tabs = window.Tabs || {};
 
 (function () {
   const CATS = [
+    { key: 'stock', icon: '\uD83D\uDCC8', label: 'Stock' },
     { key: 'global_economy', icon: '\uD83C\uDF0E', label: 'Global Economy' },
     { key: 'ai_tech', icon: '\uD83E\uDD16', label: 'AI & Tech' },
     { key: 'crypto', icon: '\u20BF', label: 'Crypto' },
   ];
 
   const state = {
-    activeCat: 'global_economy',
+    activeCat: 'stock',
     data: null,
     dataError: null,
     generating: false,
@@ -158,6 +159,7 @@ window.Tabs = window.Tabs || {};
 
     const topline = [];
     if (story.source) topline.push('<span class="intel-source">' + U.esc(story.source) + '</span>');
+    if (story.market) topline.push('<span class="intel-market intel-market--' + U.esc(marketClass(story.market)) + '">' + U.esc(story.market) + '</span>');
     if (story.stored_on) topline.push('<span class="intel-date">' + U.esc(story.stored_on) + '</span>');
     if (verdict) topline.push(verdict);
     if (story.importance) topline.push(dotRating(story.importance));
@@ -190,6 +192,13 @@ window.Tabs = window.Tabs || {};
 
   function cardKey(story) {
     return (story.url ? story.url.slice(-24) : (story.headline || '').slice(0, 24)).replace(/[^\w-]/g, '');
+  }
+
+  function marketClass(m) {
+    const v = String(m || '').toUpperCase();
+    if (v === 'US' || v.indexOf('US') === 0) return 'US';
+    if (v === 'IDN' || v.indexOf('INDONESIA') === 0) return 'IDN';
+    return '';
   }
 
   function sectionsFor(story) {

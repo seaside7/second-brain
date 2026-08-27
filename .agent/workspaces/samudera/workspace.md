@@ -13,7 +13,7 @@
 ## My Role
 
 - **Title**: Head of Digital Transformation
-- **Reports to**: <!-- TODO: direct reporting line -->
+- **Reports to**: Pak Rando (Digital Transformation) -> Pak Kadek -> Ibu Tara (Human Capital Director)
 - **Scope**: Digital transformation strategy, AI initiatives, business process analysis, technology roadmaps across the group
 - **Started**: **2026-08-18** (official first day — until then NO Samudera corporate access is assumed)
 
@@ -21,10 +21,27 @@
 
 ## Organization Structure
 
-<!-- TODO: org chart — CEO, C-suite, position, direct reports, dotted lines -->
-<!-- Key: who makes decisions, who blocks, who enables -->
+Reporting line (confirmed by owner 2026-08-24):
 
----
+Said Iskandar (Head of Digital Transformation)
+  -> Pak Rando (direct manager)
+    -> Pak Kadek
+      -> Ibu Tara (Human Capital Director)
+
+Group-level structure (from SAMUDERA INDONESIA KNOWLEDGE BASE, Drive/General Docs):
+- President Director / CEO at top; Executive Committee: Investment,
+  Procurement, Organization & Talent, Business Continuity Management.
+- CEO Office Division Head with Special Assistants (Shipowning; Overseas
+  Business Development; Employee Satisfaction & Happiness); Corporate
+  Internal Audit reports to CEO.
+- Directorate level reporting to CEO includes Finance Director (Corporate
+  Controller Lukas Gotama, Treasury Stefani W. Savitri, Tax Indra S. Dewa,
+  Insurance Prita Sylvanny, Commercial Iksan Ade Kurniawan), Compliance
+  Director (Legal: Maharlika Wiedhayaka), Human Capital Director (Ibu Tara).
+- Full details live in the brain: knowledge blocks "Samudera KB - 4.
+  Organizational Structure" and "Samudera KB - 3. Human Capital Director"
+  (.agent/brain/knowledge/people.md). Keep THIS section in sync when new
+  org facts are confirmed.
 
 ## Business Units
 

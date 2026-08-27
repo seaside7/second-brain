@@ -2750,6 +2750,13 @@ a.ticket-chip:hover { border-color: var(--border-active); color: var(--text-acce
 .intel-topline { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; margin-bottom: 6px; }
 .intel-source { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text-accent); }
 .intel-date { font-size: var(--fs-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.intel-market {
+  font-size: 10px; font-weight: 700; letter-spacing: .06em;
+  padding: 2px 8px; border-radius: 999px;
+  background: rgba(255,255,255,.05); border: 1px solid var(--border); color: var(--text-secondary, var(--text-muted));
+}
+.intel-market--US { background: rgba(45,120,220,.22); color: #7ab6ff; border-color: rgba(45,120,220,.4); }
+.intel-market--IDN { background: rgba(220,60,45,.18); color: #ff9a86; border-color: rgba(220,60,45,.4); }
 .intel-verdict {
   font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
   padding: 2px 9px; border-radius: 999px;

@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """intelligence_feed.py - Daily Intelligence Feed generator.
 
-Fetches news from RSS feeds for 3 categories, uses LLM to generate
+Fetches news from RSS feeds for 4 categories, uses LLM to generate
 Bloomberg-quality briefings with structured format.
 
 Categories:
   1. Global Economic Update (US, China, Europe, Asia, commodities, geopolitics)
   2. AI & Technology Update (AI agents, models, enterprise AI, tools)
   3. Crypto Update (BTC/ETH, ETF flows, regulation, macro connections)
+  4. Stock Update (US + Indonesian stock markets, 2 US + 2 IDN stories)
 
 Usage:
   python3 intelligence_feed.py generate [--dry-run]
@@ -66,6 +67,19 @@ RSS_FEEDS = {
         'https://www.coindesk.com/arc/outboundfeeds/rss/',
         'https://cryptonews.com/news/feed/',
     ],
+    'stock': [
+        # US stock/market sources (reliable + reachable from the VPS).
+        'https://www.cnbc.com/id/15839069/device/rss/rss.html',
+        'https://www.cnbc.com/id/10001147/device/rss/rss.html',
+        'https://feeds.finance.yahoo.com/rss/2.0/headline?s=%5EGSPC,%5EIXIC,%5EDJI&region=US&lang=en-US',
+        'https://www.ft.com/markets?format=rss',
+        'https://feeds.a.dj.com/rss/RSSMarketsMain.xml',
+        'https://feeds.marketwatch.com/marketwatch/topstories/',
+        # Indonesia stock/market sources (verified reachable from the VPS).
+        'https://cnbcindonesia.com/market/rss',
+        'https://katadata.co.id/rss',
+        'https://www.antaranews.com/rss/ekonomi',
+    ],
 }
 
 CATEGORY_META = {
@@ -82,6 +96,11 @@ CATEGORY_META = {
     'crypto': {
         'icon': '\u20bf',
         'label': 'Crypto Update',
+        'format': 'MARKET -> NEWS -> WHY IT MATTERS -> WHAT TO WATCH NEXT -> MY TAKE',
+    },
+    'stock': {
+        'icon': '\U0001f4c8',
+        'label': 'Stock Update',
         'format': 'MARKET -> NEWS -> WHY IT MATTERS -> WHAT TO WATCH NEXT -> MY TAKE',
     },
 }
@@ -494,6 +513,43 @@ SYSTEM_PROMPTS = {
         'candidate list is live, pre-filtered news, so something is always '
         'worth reporting.'
     ),
+    'stock': (
+        'You are a senior stock-market analyst writing a daily stock briefing '
+        'for an Indonesian professional. Cover BOTH the US and Indonesian stock '
+        'markets - the two most influential references for a Jakarta-based investor.\n\n'
+        'RULES:\n'
+        '- Mix US + Indonesia roughly equally\n'
+        '- Focus on major index moves, big company earnings, M&A, IPOs, analyst '
+        'moves, and macro signals that move equities\n'
+        '- Prefer the most viral / talked-about stories, but only from credible '
+        'sources (CNBC, FT, WSJ, MarketWatch, Yahoo Finance, CNBC Indonesia, '
+        'Katadata, Antara)\n'
+        '- Include specific numbers (index levels, % moves, prices in USD/IDR)\n'
+        '- For Indonesia, use market/stock news and note the relevant ticker when '
+        'known (e.g. IHSG for the Jakarta Composite Index)\n'
+        '- Do NOT use sensational hype - report facts\n'
+        '- Target read time: 2-3 minutes\n\n'
+        'SELECTION - CRITICAL: pick EXACTLY 4 stories so the market view is '
+        'balanced: exactly 2 from US stocks and exactly 2 from Indonesian stocks. '
+        'If you cannot confidently tell a story belongs to US vs IDN, judge by the '
+        'source and subject matter. Do not exceed 4 stories.\n\n'
+        'FORMAT (for each story):\n'
+        '**[Headline]**\n'
+        'MARKET: Index/price data and whether US or Indonesia\n'
+        'NEWS: What happened, with concrete substance: name the exact company, '
+        'index, ticker, number or event; explain HOW it works or WHAT changed; '
+        'add key figures, dates and named actors. 3-5 sentences. Never just '
+        'paraphrase the headline.\n'
+        'WHY IT MATTERS: The significance\n'
+        'WHAT TO WATCH NEXT: Key developments to monitor\n'
+        'MY TAKE: Brief analyst perspective\n\n'
+        'Return ONLY valid JSON array. Each item:\n'
+        '{"headline": "...", "market_data": "...", "news": "...", '
+        '"why_it_matters": "...", "what_to_watch": "...", "my_take": "...", '
+        '"importance": 1-10, "source": "...", "url": "...", "market": "US|IDN"}\n\n'
+        'Write EXACTLY 4 stories: 2 US + 2 Indonesia. You MUST select at least '
+        '1 of each so the briefing never ends up one-sided.'
+    ),
 }
 
 
@@ -572,7 +628,7 @@ def generate():
     if market_str:
         print('  Live market: %s' % market_str)
 
-    for cat in ('global_economy', 'ai_tech', 'crypto'):
+    for cat in ('global_economy', 'ai_tech', 'crypto', 'stock'):
         meta = CATEGORY_META[cat]
         print('  Fetching %s...' % meta['label'])
         items = _fetch_category(cat)
