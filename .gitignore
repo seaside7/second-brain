@@ -67,3 +67,6 @@ meeting-recorder/scratch/
 # One-brain migration backups (never commit)
 .agent/workspaces/*/knowledge.pre-brain.bak/
 *.pre-brain.bak
+
+# Generated invoices (per-machine artifacts, like memory state)
+invoices/

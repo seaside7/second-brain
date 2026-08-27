@@ -89,8 +89,8 @@ function canRender(container) {
   return !(a && container && container.contains(a) && a.matches('input, textarea, select'));
 }
 
-/* ── Router: #today (default) | #reminders | #news | #finance | #memory ── */
-const TAB_NAMES = ['today', 'reminders', 'news', 'finance', 'memory'];
+/* ── Router: #today (default) | #reminders | #news | #finance | #memory | #invoices ── */
+const TAB_NAMES = ['today', 'reminders', 'news', 'finance', 'memory', 'invoices'];
 
 function parseHash() {
   const h = (location.hash || '#today').replace(/^#/, '');
@@ -291,7 +291,7 @@ function topNewsCard(h) {
 /* The /samudera office-safe view hides personal-finance surfaces:
    reminders + finance. Memory stays visible on both views — ONE shared
    brain; only scope=private entries stay personal-only. */
-const SAMUDERA_HIDDEN_TABS = ['reminders', 'finance'];
+const SAMUDERA_HIDDEN_TABS = ['reminders', 'finance', 'invoices'];
 
 function applySamuderaMode() {
   const hidden = new Set(SAMUDERA_HIDDEN_TABS);

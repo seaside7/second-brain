@@ -1,0 +1,13 @@
+{
+  "bank_name": "BNI",
+  "account_number": "2017667507",
+  "account_name": "Said Iskandar",
+  "signature_image": "assets/signature.jpeg",
+  "materai_image": "assets/materai.png",
+  "signer_name": "Said Iskandar",
+  "company_name": "PT Catalyze",
+  "company_address": [
+    "Jl. Penyaringan No 31, Sanur",
+    "Denpasar Selatan, Bali, Indonesia"
+  ]
+}

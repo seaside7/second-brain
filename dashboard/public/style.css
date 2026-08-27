@@ -2954,3 +2954,40 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
   color: var(--text-muted); white-space: nowrap;
 }
 .home-empty { font-size: var(--fs-xs); color: var(--text-muted); opacity: .7; padding: 2px 0; }
+
+/* ── Invoice tab ─────────────────────────────────────────────────── */
+.inv-container { display: flex; flex-direction: column; gap: var(--sp-3); max-width: 720px; }
+.inv-card {
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: var(--rd-lg, 10px); padding: var(--sp-3);
+}
+.inv-hint { font-size: var(--fs-sm); color: var(--text-muted); margin: 0 0 var(--sp-3); }
+.inv-generate-row { display: flex; gap: var(--sp-2); align-items: center; }
+.inv-select {
+  flex: 1; max-width: 220px; padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text-primary);
+}
+.inv-btn { padding: 8px 16px; border-radius: 8px; cursor: pointer;
+  border: none; background: var(--accent, hsl(var(--h-indigo), 70%, 55%)); color: #fff; font-weight: 600; }
+.inv-btn:disabled { opacity: .6; cursor: not-allowed; }
+.inv-btn-sm { padding: 5px 12px; border-radius: 6px; cursor: pointer;
+  border: none; background: var(--surface-2); color: var(--text-primary);
+  text-decoration: none; font-size: var(--fs-sm); }
+.inv-btn-sm:hover { background: var(--surface-3, var(--surface-2)); }
+.inv-result { margin-top: var(--sp-2); font-size: var(--fs-sm); }
+.inv-result.inv-ok { color: var(--st-ok, #4caf50); }
+.inv-result.inv-err { color: var(--st-serious, #f44336); }
+.inv-success { font-weight: 600; margin-bottom: var(--sp-2); }
+.inv-sums { display: flex; flex-direction: column; gap: 2px; }
+.inv-sum { display: flex; justify-content: space-between; max-width: 360px;
+  font-variant-numeric: tabular-nums; }
+.inv-sum span { color: var(--text-muted); text-transform: capitalize; }
+.inv-list { display: flex; flex-direction: column; gap: var(--sp-2); }
+.inv-row {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2);
+  padding: var(--sp-2); border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface-2);
+}
+.inv-row-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.inv-row-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inv-row-meta { font-size: var(--fs-xs); color: var(--text-muted); }

@@ -20,7 +20,7 @@ from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.request import Request, urlopen
-from urllib.parse import urlencode, unquote, urlsplit, parse_qs
+from urllib.parse import urlencode, unquote, urlsplit, parse_qs, quote
 
 # Startup banner + logs carry emoji/unicode — force UTF-8 so redirected or
 # non-console runs (files, services, some VPS shells) never die on cp1252.
@@ -2455,6 +2455,20 @@ def _run_slash_command(message, ctx):
             return 'Usage: /orchestrate <your executive request>'
         ok, out = _run_executive_orchestrator(ws, prompt)
         return out if ok else f'Orchestrator failed: {out}'
+    if cmd == '/invoice':
+        month = args[0] if args else None
+        if not month:
+            return 'Usage: /invoice <month> (e.g. /invoice August)'
+        script = os.path.join(BASE_DIR, '.agent', 'skills', 'invoice-generator', 'scripts', 'invoice_gen.py')
+        try:
+            result = subprocess.run(
+                [sys.executable, script, 'generate', '--month', month, '--workspace', ws],
+                capture_output=True, text=True, timeout=60,
+                cwd=BASE_DIR,
+            )
+            return result.stdout if result.returncode == 0 else f'Invoice error: {result.stderr}'
+        except Exception as e:
+            return f'Invoice generation failed: {e}'
     if cmd in ('/help', '/commands'):
         return ('Available commands:\n'
                 '- /focus - executive digest (overdue, due-today, blocked, waiting, decisions, commitments, inbox)\n'
@@ -2462,6 +2476,7 @@ def _run_slash_command(message, ctx):
                 '- /brief - daily brief: live context + focus digest\n'
                 '- /approvals - pending approval-queue items for this workspace\n'
                 '- /orchestrate <request> - executive orchestrator: classifies intent, gathers the relevant specialists, synthesizes a decision-oriented answer\n'
+                '- /invoice <month> - generate Catalyze invoice PDF (e.g. /invoice August)\n'
                 '- /help - this list\n\n'
                 'Anything else is answered by the assistant.')
     return ('Unknown command %r. Try /help for the available commands.' % cmd)
@@ -2745,6 +2760,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_get_home()
         elif self.path.split('?')[0] == '/api/finance':
             self._handle_get_finance()
+        elif self.path.split('?')[0] == '/api/invoices':
+            self._handle_get_invoices()
+        elif self.path.split('?')[0] == '/api/invoice/file':
+            self._handle_get_invoice_file()
         else:
             super().do_GET()
 
@@ -2858,6 +2877,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_post_reminders('reopen')
         elif self.path == '/api/reminders/delete':
             self._handle_post_reminders('delete')
+        elif self.path.split('?')[0] == '/api/invoice/generate':
+            self._handle_post_invoice_generate()
         else:
             self.send_error(404, 'Not Found')
 
@@ -6726,6 +6747,97 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             return
         type(self)._finance_cache.update(at=now, data=data)
         self._send_json(200, json.dumps(data))
+
+    # ── Invoice endpoints ──────────────────────────────────────────────
+    def _invoices_dir(self):
+        return BASE_DIR / 'invoices'
+
+    def _handle_get_invoices(self):
+        """GET /api/invoices — list generated invoice PDFs (name, size, mtime)."""
+        d = self._invoices_dir()
+        items = []
+        if d.exists():
+            for f in sorted(d.glob('*.pdf'), key=lambda p: p.name):
+                try:
+                    mtime = datetime.fromtimestamp(f.stat().st_mtime, WIB_TZ)
+                except Exception:
+                    mtime = None
+                items.append({
+                    'name': f.name,
+                    'size': f.stat().st_size,
+                    'mtime_wib': mtime.strftime('%Y-%m-%d %H:%M') if mtime else None,
+                    'url': '/api/invoice/file?name=' + quote(f.name),
+                })
+        self._send_json(200, json.dumps({'invoices': items}))
+
+    def _handle_get_invoice_file(self):
+        """GET /api/invoice/file?name=... — stream an invoice PDF for download."""
+        qs = parse_qs(urlsplit(self.path).query)
+        name = (qs.get('name') or [''])[0]
+        if not name or not name.endswith('.pdf'):
+            self._send_json(400, json.dumps({'error': 'bad name'}))
+            return
+        # Only allow PDFs directly inside the invoices dir (no path traversal)
+        safe_name = os.path.basename(name)
+        path = self._invoices_dir() / safe_name
+        if not path.exists():
+            self._send_json(404, json.dumps({'error': 'not found'}))
+            return
+        try:
+            with open(path, 'rb') as fh:
+                data = fh.read()
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': str(e)[:200]}))
+            return
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/pdf')
+        self.send_header('Content-Disposition',
+                         'attachment; filename="%s"' % safe_name)
+        self.send_header('Content-Length', str(len(data)))
+        self.send_header('Cache-Control', 'no-cache')
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _handle_post_invoice_generate(self):
+        """POST /api/invoice/generate {month} — run the invoice-generator skill."""
+        try:
+            body = self.rfile.read(int(self.headers.get('Content-Length', '0')))
+            payload = json.loads(body or b'{}')
+        except Exception:
+            payload = {}
+        month = (payload.get('month') or '').strip()
+        if not month:
+            self._send_json(400, json.dumps({'error': 'month is required'}))
+            return
+        script = BASE_DIR / '.agent' / 'skills' / 'invoice-generator' / 'scripts' / 'invoice_gen.py'
+        if not script.exists():
+            self._send_json(500, json.dumps({'error': 'invoice skill missing'}))
+            return
+        try:
+            proc = subprocess.run(
+                [sys.executable, str(script), 'generate', '--month', month, '--force'],
+                capture_output=True, text=True, timeout=120, cwd=str(BASE_DIR))
+            out = (proc.stdout or '').strip()
+            err = (proc.stderr or '').strip()
+            if proc.returncode != 0:
+                self._send_json(500, json.dumps({'error': (err or out)[:2000]}))
+                return
+            # Extract summary lines from output
+            summary = {}
+            for line in out.splitlines():
+                key = line.split(':', 1)[0].strip().lower()
+                val = line.split(':', 1)[1].strip() if ':' in line else ''
+                if key in ('month invoiced', 'invoice date', 'invoice number',
+                           'total hours', 'total amount'):
+                    summary[key.replace(' ', '_')] = val
+                if line.startswith('PDF saved to:'):
+                    summary['pdf'] = line.split(':', 1)[1].strip()
+            summary['output'] = out
+            self._send_json(200, json.dumps(summary))
+        except subprocess.TimeoutExpired:
+            self._send_json(500, json.dumps({'error': 'invoice generation timed out'}))
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': str(e)[:500]}))
 
     def _handle_get_briefing(self):
         """GET /api/briefing — newest Pagi + Malam sections from Dashboard.md (file is
