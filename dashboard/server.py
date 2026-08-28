@@ -104,6 +104,8 @@ WORKSPACES_JSON = BASE_DIR / '.agent' / 'workspaces' / 'workspaces.json'
 PERSONAL_FINANCE_PATH = BASE_DIR / '.agent' / 'workspaces' / 'personal' / 'finance.json'
 REMINDER_ENGINE = str(BASE_DIR / '.agent' / 'scripts' / 'reminder_engine.py')
 FINANCE_API = str(BASE_DIR / '.agent' / 'skills' / 'personal-finance' / 'scripts' / 'finance_engine.py')
+CHAT_STATE_DIR = BASE_DIR / 'journal' / 'state'
+CHAT_HISTORY_MAX = 50
 WIB_TZ = timezone(timedelta(hours=7))
 
 # ── Samudera office-safe dashboard data sources ─────────────────────────────
@@ -2039,11 +2041,85 @@ def _ensure_meetings_synced(ws_name, max_age_min=30):
         _MEETINGS_SYNC_LOCK.release()
 
 
+def _chat_history_path(ws_name):
+    ctx = _resolve_workspace(ws_name)
+    return CHAT_STATE_DIR / ('chat_history_%s.json' % (ctx.name if ctx else 'default'))
+
+
+def _chat_history_load(ws_name):
+    """Per-workspace chat history (list of {role, text, ts}), newest last."""
+    path = _chat_history_path(ws_name)
+    try:
+        if path.exists():
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                return data[-CHAT_HISTORY_MAX:]
+    except Exception:
+        pass
+    return []
+
+
+def _chat_history_append(ws_name, role, text):
+    """Append a turn to the workspace chat store, capped at CHAT_HISTORY_MAX."""
+    try:
+        history = _chat_history_load(ws_name)
+        history.append({
+            'role': 'user' if role == 'user' else 'ai',
+            'text': text,
+            'ts': datetime.now(WIB_TZ).isoformat(timespec='seconds'),
+        })
+        history = history[-CHAT_HISTORY_MAX:]
+        CHAT_STATE_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = str(_chat_history_path(ws_name)) + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, str(_chat_history_path(ws_name)))
+    except Exception as e:
+        print('[chat] history persist error: %s' % e, file=sys.stderr)
+
+
+def _chat_history_clear(ws_name):
+    try:
+        path = _chat_history_path(ws_name)
+        if path.exists():
+            path.unlink()
+    except Exception:
+        pass
+
+
+def _chat_history_context(ws_name, max_turns=6):
+    """Recent conversation turns for short-term memory, formatted for the prompt.
+    Returns a string like:
+      RECENT CONVERSATION (workspace: catalyze):
+      user>: ...
+      assistant>: ..."""
+    history = _chat_history_load(ws_name)
+    if not history:
+        return ''
+    turns = history[-max_turns * 2:]  # each turn = user + ai (2 entries)
+    parts = ['RECENT CONVERSATION (workspace: %s) - this is the ongoing session '
+             'with the user. Use it for continuity, but answer the CURRENT '
+             'question at the end:' % (ws_name or '?')]
+    for m in turns:
+        who = 'user' if m.get('role') == 'user' else 'assistant'
+        text = str(m.get('text') or '').strip()
+        if not text:
+            continue
+        if len(text) > 2000:
+            text = text[:1997] + '...'
+        parts.append('%s>: %s' % (who, text))
+    return '\n'.join(parts)
+
+
 def _chat_memory_context(ws_name, query):
-    """Inline keyword search across the ONE brain (knowledge + notes) and
-    every workspace's Drive index for chat. No subprocess, no LLM call —
+    """Inline keyword search across the ONE brain (knowledge + notes) and the
+    ACTIVE workspace's Drive index for chat. No subprocess, no LLM call —
     just fast JSON search. Private memories are hidden from the samudera
-    view; everything else is recallable from anywhere."""
+    view; the active workspace's memory is ranked first, cross-workspace
+    knowledge is deprioritized but still retrievable (labeled with its source).
+    The Drive index is scoped so unrelated projects (e.g. a POS system in one
+    workspace) never surface while answering in another workspace."""
     ws = ws_name or 'samudera'
     brain_dir = BASE_DIR / '.agent' / 'brain'
     workspaces_dir = BASE_DIR / '.agent' / 'workspaces'
@@ -2069,26 +2145,18 @@ def _chat_memory_context(ws_name, query):
 
     results = []
 
-    # Drive index search — scan EVERY workspace's index (one document universe)
-    seen_drive_ids = set()
-    for ws_dir in sorted(workspaces_dir.iterdir()):
-        if not ws_dir.is_dir() or ws_dir.name.startswith('__'):
-            continue
-        drive_path = ws_dir / 'state' / 'drive_index.json'
-        if not drive_path.exists():
-            continue
+    # Drive index search — scoped to the ACTIVE workspace ONLY so unrelated
+    # projects in other workspaces never surface while answering here.
+    drive_path = workspaces_dir / ws / 'state' / 'drive_index.json'
+    if drive_path.exists():
         try:
             idx = json.loads(drive_path.read_text(encoding='utf-8'))
             for f in idx.get('files', []):
-                fid = f.get('id') or (f.get('name', '') + f.get('folder_path', ''))
-                if fid in seen_drive_ids:
-                    continue
                 blob = (f.get('name', '') + ' ' + f.get('folder_path', '') +
                         ' ' + f.get('project', '') + ' ' + f.get('content', '')).lower()
                 score = sum(_hits(t, blob) for t in terms)
                 if score == 0:
                     continue
-                seen_drive_ids.add(fid)
                 content = f.get('content') or ''
                 # Find best snippet: around first term match in content
                 best_pos = len(content)
@@ -2100,6 +2168,7 @@ def _chat_memory_context(ws_name, query):
                 content_preview = content[start:start + 900]
                 results.append({
                     'source': 'drive',
+                    'source_ws': ws,
                     'title': f.get('name', '?'),
                     'project': f.get('project', ''),
                     'content': content_preview,
@@ -2108,11 +2177,18 @@ def _chat_memory_context(ws_name, query):
         except Exception:
             pass
 
-    # Knowledge store search — canonical brain knowledge dir, scored per
-    # '### block' so answers land on precise sections (e.g. "4. Organizational
-    # Structure") instead of a random snippet from a whole category file.
-    kb_dir = brain_dir / 'knowledge'
-    if kb_dir.exists():
+    # Knowledge store search — the ONE shared brain plus each workspace's own
+    # long-term memory, scored per '### block' so answers land on precise
+    # sections (e.g. "4. Organizational Structure") instead of a random snippet
+    # from a whole category file. Workspace-aware: the active workspace's
+    # knowledge ranks highest, the shared brain is neutral, and cross-workspace
+    # knowledge is deprioritized but still retrievable (labeled with its source).
+
+    def _scan_knowledge_dir(kb_dir, source_ws):
+        """Append matching '### blocks' under kb_dir to results; source_ws is
+        None for the shared brain, the workspace name otherwise."""
+        if not kb_dir.exists():
+            return
         for md_file in kb_dir.glob('*.md'):
             try:
                 text = md_file.read_text(encoding='utf-8')
@@ -2133,10 +2209,20 @@ def _chat_memory_context(ws_name, query):
                 start = max(0, idx_match - 150)
                 results.append({
                     'source': 'knowledge',
+                    'source_ws': source_ws,
                     'title': title,
                     'content': blk[start:start + 1400],
                     'score': _score(score, len(blk)),
+                    '_ws_boost': 0.25 if source_ws == ws else (
+                        0.10 if source_ws is None else -0.35),
                 })
+
+    _scan_knowledge_dir(brain_dir / 'knowledge', None)
+    _scan_knowledge_dir(workspaces_dir / ws / 'knowledge', ws)
+    for ws_dir in sorted(workspaces_dir.iterdir()):
+        if ws_dir.name == ws or not ws_dir.is_dir() or ws_dir.name.startswith('__'):
+            continue
+        _scan_knowledge_dir(ws_dir / 'knowledge', ws_dir.name)
 
     # Memory notes search — the ONE brain; private entries stay personal-only
     notes_path = brain_dir / 'memory_notes.json'
@@ -2153,18 +2239,34 @@ def _chat_memory_context(ws_name, query):
                 score = sum(_hits(t, blob) for t in terms)
                 if score == 0:
                     continue
-                # context boost: memory from the active view ranks higher
-                boost = 0.05 if entry.get('source_ws') == ws else 0.0
+                # context boost: memory from the active view ranks highest;
+                # cross-workspace notes are deprioritized but not blocked
+                if entry.get('source_ws') == ws:
+                    boost = 0.20
+                elif entry.get('source_ws'):
+                    boost = -0.30  # labeled low, still retrievable
+                else:
+                    boost = 0.10  # untagged/general, neutral
                 boost += 0.10  # curated personal facts outrank raw docs
                 results.append({
                     'source': 'memory_note',
+                    'source_ws': entry.get('source_ws'),
                     'title': entry.get('title', '?'),
                     'project': entry.get('project', ''),
                     'content': entry.get('text', '')[:1500],
-                    'score': min(1.0, _score(score, len(blob)) + boost),
+                    'score': min(3.0, max(-3.0, _score(score, len(blob)) + boost)),
                 })
         except Exception:
             pass
+
+    # Apply workspace-aware ranking: remember which workspace each hit belongs
+    # to (drive is always active-ws; knowledge carries its _ws_boost; memory
+    # notes carried their boost into score). The active workspace's curated
+    # knowledge wins, shared brain is neutral, cross-workspace is labeled low.
+    for r in results:
+        wb = r.pop('_ws_boost', None)
+        if wb is not None:
+            r['score'] = min(3.0, max(-3.0, r['score'] + wb))
 
     results.sort(key=lambda x: -x['score'])
     top = results[:4]
@@ -2180,6 +2282,9 @@ def _chat_memory_context(ws_name, query):
     lines = []
     for r in results:
         header = f'[{r["source"]}] {r["title"]}'
+        sw = r.get('source_ws')
+        if sw and sw != ws:
+            header += f' [source: {sw}]'  # label cross-workspace knowledge
         if r.get('project'):
             header += f' (project: {r["project"]})'
         header += f' [relevance: {r["score"]:.1f}]'
@@ -2721,6 +2826,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_ledger_find()
         elif self.path.split('?')[0] == '/api/chat-suggestions':
             self._handle_get_chat_suggestions()
+        elif self.path.split('?')[0] == '/api/chat-history':
+            self._handle_get_chat_history()
         elif self.path == '/api/token-efficiency':
             self._handle_get_token_efficiency()
         elif self.path == '/api/work-hours':
@@ -2837,6 +2944,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_post_ai_task()
         elif self.path == '/api/chat':
             self._handle_post_chat()
+        elif self.path == '/api/chat-clear':
+            self._handle_post_chat_clear()
         elif self.path == '/api/approval-decision':
             self._handle_post_approval_decision()
         elif self.path == '/api/agents-skill-save':
@@ -5303,14 +5412,63 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._send_json(500, json.dumps({'error': 'chat-suggestions failed',
                                              'details': str(e)}))
 
+    def _handle_get_chat_history(self):
+        """GET /api/chat-history?workspace=<name> — per-workspace conversation
+        history (last CHAT_HISTORY_MAX turns, newest last). Lets any device
+        hitting the same dashboard resume the same conversation."""
+        try:
+            params = {}
+            if '?' in self.path:
+                for kv in self.path.split('?', 1)[1].split('&'):
+                    if '=' in kv:
+                        k, v = kv.split('=', 1)
+                        params[k] = unquote(v)
+            ws_name = (params.get('workspace') or '').strip() \
+                or (self.headers.get('X-PSB-Workspace') or '').strip()
+            ctx = _resolve_workspace(ws_name)
+            if not ctx:
+                self._send_json(400, json.dumps({'error': 'unknown workspace'}))
+                return
+            history = _chat_history_load(ctx.name)
+            # Backwards-compatible shape for the frontend: already the list of
+            # {role, text, ts} objects the UI consumes.
+            self._send_json(200, json.dumps({
+                'workspace': ctx.name,
+                'messages': history,
+            }, ensure_ascii=False))
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': 'chat-history failed',
+                                             'details': str(e)}))
+
+    def _handle_post_chat_clear(self):
+        """POST /api/chat-clear {workspace} — wipe the workspace's server-side
+        chat history (used by the 'new conversation' button)."""
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+            ws_name = (body.get('workspace') or '').strip() \
+                or (self.headers.get('X-PSB-Workspace') or '').strip()
+            ctx = _resolve_workspace(ws_name)
+            if not ctx:
+                self._send_json(400, json.dumps({'error': 'unknown workspace'}))
+                return
+            _chat_history_clear(ctx.name)
+            self._send_json(200, json.dumps({'status': 'cleared', 'workspace': ctx.name}))
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': 'chat-clear failed',
+                                             'details': str(e)}))
+
     def _handle_post_chat(self):
         """POST /api/chat {message, workspace} — answer a question in the workspace's
         persona (role/mode + workspace.md head as grounding). DeepSeek first
         (deepseek-chat, the cheap backend for reading/summarizing simple tasks),
         falling back to OpenAI (via openai_call) and then ai_call.run()
-        (agy-bridge) when DeepSeek is not configured. The prompt NEVER includes data
-        from other workspaces; the workspace.md context and the model call are both
-        scoped to the requested workspace.
+        (agy-bridge) when DeepSeek is not configured. The workspace.md context and
+        the model call are both scoped to the requested workspace. Recent
+        conversation history (short-term memory) for the same workspace is fed in
+        for continuity. Memory recall is workspace-aware: the active workspace's
+        memory ranks first, cross-workspace knowledge is deprioritized and labeled,
+        and the Drive index is scoped to the active workspace.
         Returns {reply, model, backend, workspace}."""
         try:
             length = int(self.headers.get('Content-Length', 0))
@@ -5339,6 +5497,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 }, ensure_ascii=False))
                 return
 
+            _chat_history_append(ctx.name, 'user', message)
+
             persona = ' '.join(filter(None, [
                 f'Role: {ctx.role}' if ctx.role else '',
                 f'Mode: {ctx.mode}' if ctx.mode else '',
@@ -5348,6 +5508,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             _ensure_meetings_synced(ctx.name)
             live_ctx = _chat_live_context(ctx.name)
             memory_ctx = _chat_memory_context(ctx.name, message)
+            conv_ctx = _chat_history_context(ctx.name, max_turns=6)
             system = (
                 f'You are the Second Brain assistant for the "{ctx.display_name}" '
                 f'workspace ({ctx.name}). {persona}\n\n'
@@ -5356,6 +5517,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 f'{live_ctx}\n\n'
                 f'Relevant knowledge and documents (from memory recall):\n'
                 f'{memory_ctx}\n\n'
+                f'{conv_ctx}\n\n'
                 '# Response Style Guide\n\n'
                 'When replying, use a natural and casual communication style, like a colleague '
                 'or friend discussing work.\n\n'
@@ -5423,6 +5585,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     'backend': backend,
                 }, ensure_ascii=False))
                 return
+            _chat_history_append(ctx.name, 'ai', text)
             self._send_json(200, json.dumps({
                 'reply': text,
                 'model': meta.get('model'),

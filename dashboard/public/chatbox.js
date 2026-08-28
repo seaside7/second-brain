@@ -160,12 +160,33 @@
     renderChat();
   }
 
+  /* Sync history from the server (source of truth across devices). The
+     server persists per-workspace turns server-side, so any device hitting
+     the same dashboard resumes the same conversation. Falls back to the
+     local cache when the call fails (e.g. offline). */
+  async function loadServerHistory(wsName) {
+    if (!wsName) return;
+    try {
+      const q = wsName ? '?workspace=' + encodeURIComponent(wsName) : '';
+      const d = await U.fetchJSON('/api/chat-history' + q, { timeoutMs: 20000 });
+      const msgs = (d && Array.isArray(d.messages)) ? d.messages : null;
+      if (msgs) {
+        Chat.messages = msgs.map(m => ({ role: m.role === 'user' ? 'user' : 'ai', text: m.text || '' }));
+        saveChat();
+        renderChat();
+      }
+    } catch (e) {
+      /* offline / not-yet-deployed server: keep the local cache */
+    }
+  }
+
   /* ---- opening the chat window (shared Drawer shell) ---- */
   function openChat() {
-    ensureSuggestions().then(() => {
+    ensureSuggestions().then(async () => {
       const ws = Chat.suggestions?.display_name || '…';
       const mode = Chat.suggestions?.mode || '';
       const badge = mode ? ` <span class="chat-ws-badge">${U.esc(mode)}</span>` : '';
+      const wsName = Chat.suggestions?.workspace;
       const body = Drawer._paint('💬 Ask the Second Brain',
         `<div class="chatbox">
            <div class="chat-ws-line">Workspace: <b>${U.esc(ws)}</b>${badge}</div>
@@ -175,27 +196,31 @@
              <div class="chat-input-row">
                <button id="chat-new" class="chat-sugg-btn" title="New conversation - clears history so old wrong claims stop anchoring answers">🧹</button>
                <button id="chat-sugg" class="chat-sugg-btn" title="Suggested questions">💡</button>
-               <input id="chat-input" class="chat-input" type="text"
-                      placeholder='Ask anything… type "/" for suggestions'
-                      autocomplete="off" spellcheck="false" />
+               <textarea id="chat-input" class="chat-input" rows="1"
+                      placeholder='Ask anything… type "/" for suggestions (Shift+Enter for new line)'
+                      autocomplete="off" spellcheck="false"></textarea>
                <button id="chat-send" class="chat-send-btn" title="Send">➤</button>
              </div>
            </div>
          </div>`);
       if (!body) return;
+      loadServerHistory(wsName);
 
       const input = body.querySelector('#chat-input');
       const pal = body.querySelector('#chat-palette');
       const sugg = body.querySelector('#chat-sugg');
       const sendBtn = body.querySelector('#chat-send');
 
-      const doSend = () => { const v = input.value; input.value = ''; send(v); };
+      const autoResize = () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; };
+      const doSend = () => { const v = input.value; input.value = ''; autoResize(); send(v); };
+      input.addEventListener('input', autoResize);
       input.addEventListener('keydown', e => {
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
           if (Chat.paletteOpen && Chat.filtered[Chat.hl]) {
             const sel = Chat.filtered[Chat.hl].text;
             input.value = '';
+            autoResize();
             send(sel);
           } else {
             doSend();
@@ -233,10 +258,19 @@
         else openPalette(currentFilter(input));
       });
       const newBtn = body.querySelector('#chat-new');
-      newBtn.addEventListener('click', () => {
+      newBtn.addEventListener('click', async () => {
         Chat.messages = [];
         saveChat();
         renderChat();
+        if (Chat.suggestions?.workspace) {
+          try {
+            await U.fetchJSON('/api/chat-clear', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ workspace: Chat.suggestions.workspace }),
+            });
+          } catch (e) { /* server-side clear is best-effort */ }
+        }
         Comp.toast('New conversation started', true);
       });
       sendBtn.addEventListener('click', doSend);

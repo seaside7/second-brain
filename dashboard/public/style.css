@@ -2468,8 +2468,10 @@ a.ticket-chip:hover { border-color: var(--border-active); color: var(--text-acce
   background: var(--bg-input); border: 1px solid var(--border);
   border-radius: var(--radius-xs); color: var(--text-primary);
   font-size: var(--fs-sm); outline: 0;
+  resize: none; overflow-y: auto; font-family: inherit; line-height: 1.4;
 }
 .chat-input:focus { border-color: var(--border-active); }
+.chat-input-row { display: flex; align-items: flex-end; gap: 8px; }
 .chat-input::placeholder { color: var(--text-muted); }
 .chat-sugg-btn, .chat-send-btn {
   flex: none; width: 34px; height: 34px; display: inline-flex;
