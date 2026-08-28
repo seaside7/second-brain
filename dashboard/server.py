@@ -2115,11 +2115,12 @@ def _chat_history_context(ws_name, max_turns=6):
 def _chat_memory_context(ws_name, query):
     """Inline keyword search across the ONE brain (knowledge + notes) and the
     ACTIVE workspace's Drive index for chat. No subprocess, no LLM call —
-    just fast JSON search. Private memories are hidden from the samudera
-    view; the active workspace's memory is ranked first, cross-workspace
-    knowledge is deprioritized but still retrievable (labeled with its source).
-    The Drive index is scoped so unrelated projects (e.g. a POS system in one
-    workspace) never surface while answering in another workspace."""
+    just fast JSON search. Private memories are hidden from the samudera view.
+    Strictly workspace-scoped: the active workspace's memory ranks first and
+    general (untagged) knowledge is neutral, while knowledge and notes that
+    belong to a DIFFERENT workspace are blocked entirely — so Samudera's
+    ETOS/CRM memory never leaks into a Catalyze or personal answer (or vice
+    versa). The Drive index is scoped to the active workspace too."""
     ws = ws_name or 'samudera'
     brain_dir = BASE_DIR / '.agent' / 'brain'
     workspaces_dir = BASE_DIR / '.agent' / 'workspaces'
@@ -2180,13 +2181,40 @@ def _chat_memory_context(ws_name, query):
     # Knowledge store search — the ONE shared brain plus each workspace's own
     # long-term memory, scored per '### block' so answers land on precise
     # sections (e.g. "4. Organizational Structure") instead of a random snippet
-    # from a whole category file. Workspace-aware: the active workspace's
-    # knowledge ranks highest, the shared brain is neutral, and cross-workspace
-    # knowledge is deprioritized but still retrievable (labeled with its source).
+    # from a whole category file. Strictly workspace-aware: the ACTIVE
+    # workspace's knowledge ranks highest, the shared brain's untagged blocks
+    # are neutral, and blocks that belong to a DIFFERENT workspace are blocked
+    # entirely (never surfaced), so Samudera's ETOS/CRM memory can't leak into
+    # a Catalyze or personal answer.
 
-    def _scan_knowledge_dir(kb_dir, source_ws):
-        """Append matching '### blocks' under kb_dir to results; source_ws is
-        None for the shared brain, the workspace name otherwise."""
+    known_ws = {d.name for d in workspaces_dir.iterdir()
+                if d.is_dir() and not d.name.startswith('__')}
+    # Blocks in the aggregated shared brain carry a source marker, e.g.
+    #   <!-- source: samudera/projects.md -->
+    # telling us which workspace the block actually belongs to. The marker is
+    # not always inside the block, so fall back to the block's own
+    # "**Workspace**: <ws>" field (used across Samudera KB blocks) and to the
+    # "Samudera KB" title prefix used for Samudera's uploaded knowledge base.
+    _SRC_RE = re.compile(r'<!--\s*source:\s*([^/\s]+)/')
+    _WSFIELD_RE = re.compile(r'\*\*Workspace\*\*:\s*([\w\-]+)')
+    _strip_com_or = re.compile(r'<!--.*?-->', re.S)
+
+    def _block_source(blk):
+        m = _SRC_RE.search(blk)
+        if m and m.group(1) in known_ws:
+            return m.group(1)
+        m = _WSFIELD_RE.search(blk)
+        if m and m.group(1) in known_ws:
+            return m.group(1)
+        if re.search(r'^###\s*Samudera KB\b', blk, re.M):
+            return 'samudera'
+        return None
+
+    def _scan_knowledge_dir(kb_dir, default_source):
+        """Append matching '### blocks' under kb_dir to results. Each block's
+        real source = marker / Workspace field / Samudera-KB heuristic / the
+        dir's default_source. Blocks owned by a workspace other than the active
+        one are skipped entirely, so nothing cross-workspace ever surfaces."""
         if not kb_dir.exists():
             return
         for md_file in kb_dir.glob('*.md'):
@@ -2197,6 +2225,9 @@ def _chat_memory_context(ws_name, query):
             for blk in re.split(r'\n(?=### )', text):
                 if not blk.strip():
                     continue
+                src = _block_source(blk) or default_source
+                if src in known_ws and src != ws:
+                    continue  # block cross-workspace knowledge entirely
                 blob = blk.lower()
                 score = sum(_hits(t, blob) for t in terms)
                 if score == 0:
@@ -2209,12 +2240,11 @@ def _chat_memory_context(ws_name, query):
                 start = max(0, idx_match - 150)
                 results.append({
                     'source': 'knowledge',
-                    'source_ws': source_ws,
+                    'source_ws': src,
                     'title': title,
                     'content': blk[start:start + 1400],
                     'score': _score(score, len(blk)),
-                    '_ws_boost': 0.25 if source_ws == ws else (
-                        0.10 if source_ws is None else -0.35),
+                    '_ws_boost': 0.25 if src == ws else 0.10,  # active vs general
                 })
 
     _scan_knowledge_dir(brain_dir / 'knowledge', None)
@@ -2224,7 +2254,8 @@ def _chat_memory_context(ws_name, query):
             continue
         _scan_knowledge_dir(ws_dir / 'knowledge', ws_dir.name)
 
-    # Memory notes search — the ONE brain; private entries stay personal-only
+    # Memory notes search — the ONE brain; private entries stay personal-only,
+    # and notes from OTHER workspaces are blocked entirely.
     notes_path = brain_dir / 'memory_notes.json'
     if notes_path.exists():
         try:
@@ -2234,23 +2265,20 @@ def _chat_memory_context(ws_name, query):
                     continue
                 if ws == 'samudera' and entry.get('scope') == 'private':
                     continue
+                note_ws = entry.get('source_ws')
+                if note_ws and note_ws in known_ws and note_ws != ws:
+                    continue  # block cross-workspace notes entirely
                 blob = (entry.get('text', '') + ' ' + entry.get('title', '') +
                         ' ' + ' '.join(entry.get('entities', []))).lower()
                 score = sum(_hits(t, blob) for t in terms)
                 if score == 0:
                     continue
-                # context boost: memory from the active view ranks highest;
-                # cross-workspace notes are deprioritized but not blocked
-                if entry.get('source_ws') == ws:
-                    boost = 0.20
-                elif entry.get('source_ws'):
-                    boost = -0.30  # labeled low, still retrievable
-                else:
-                    boost = 0.10  # untagged/general, neutral
+                # context boost: active-ws notes rank highest, untagged neutral
+                boost = (0.20 if note_ws == ws else 0.10)
                 boost += 0.10  # curated personal facts outrank raw docs
                 results.append({
                     'source': 'memory_note',
-                    'source_ws': entry.get('source_ws'),
+                    'source_ws': note_ws,
                     'title': entry.get('title', '?'),
                     'project': entry.get('project', ''),
                     'content': entry.get('text', '')[:1500],
@@ -2259,14 +2287,32 @@ def _chat_memory_context(ws_name, query):
         except Exception:
             pass
 
-    # Apply workspace-aware ranking: remember which workspace each hit belongs
-    # to (drive is always active-ws; knowledge carries its _ws_boost; memory
-    # notes carried their boost into score). The active workspace's curated
-    # knowledge wins, shared brain is neutral, cross-workspace is labeled low.
+    # Apply per-workspace ranking boost, then de-duplicate: the aggregated
+    # shared brain repeats per-workspace files, so the same block can be scored
+    # twice (once from brain/knowledge, once from the workspace's own dir).
+    # Keep the higher-scoring copy only.
     for r in results:
         wb = r.pop('_ws_boost', None)
         if wb is not None:
             r['score'] = min(3.0, max(-3.0, r['score'] + wb))
+
+    # dedup by normalized content, keeping the best score. The aggregated shared
+    # brain repeats per-workspace blocks (once from brain/knowledge, once from
+    # the workspace's own dir), so the same block can be scored twice. Since the
+    # duplicate copies share the same title/source, key on those — snippet
+    # offsets differ between copies (embedded source comments shift them), so
+    # content-based keys don't reliably collide.
+    seen = {}
+    order = []
+    for r in results:
+        key = (r.get('source', '') + '|' + (r.get('title') or '')).strip().lower()
+        if key in seen:
+            if r['score'] > seen[key]['score']:
+                seen[key] = r
+        else:
+            seen[key] = r
+            order.append(key)
+    results = [seen[k] for k in order]
 
     results.sort(key=lambda x: -x['score'])
     top = results[:4]
@@ -2289,7 +2335,7 @@ def _chat_memory_context(ws_name, query):
             header += f' (project: {r["project"]})'
         header += f' [relevance: {r["score"]:.1f}]'
         lines.append(header)
-        lines.append(r['content'])
+        lines.append(_strip_com_or.sub('', r['content']).strip())
         lines.append('')
     return '\n'.join(lines)
 
