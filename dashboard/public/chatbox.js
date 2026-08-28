@@ -35,6 +35,7 @@
     hl: 0,                      // highlighted row index in `filtered`
     lastFetch: 0,
     answered: false,
+    hint: '',                   // empty-state hint (e.g. workspace has no history)
   };
 
   function saveChat() {
@@ -120,6 +121,9 @@
         parts.push(`<div class="chat-msg chat-msg-ai"><div class="chat-bubble chat-bubble-ai">${U.mdToHtml(m.text)}</div></div>`);
       }
     }
+    if (Chat.hint && Chat.messages.length === 0 && !Chat.pendingText) {
+      parts.push(`<div class="chat-hint">${U.esc(Chat.hint)}</div>`);
+    }
     if (Chat.pendingText) {
       parts.push(`<div class="chat-msg chat-msg-ai"><div class="chat-bubble chat-bubble-ai chat-typing">…</div></div>`);
     }
@@ -139,6 +143,7 @@
     Chat.messages.push({ role: 'user', text });
     Chat.pendingText = text;
     Chat.answered = false;
+    Chat.hint = '';
     closePalette();
     saveChat();
     renderChat();
@@ -162,16 +167,29 @@
 
   /* Sync history from the server (source of truth across devices). The
      server persists per-workspace turns server-side, so any device hitting
-     the same dashboard resumes the same conversation. Falls back to the
-     local cache when the call fails (e.g. offline). */
+     the same dashboard resumes the same conversation. A successful fetch
+     REPLACES the local view (even when empty), so one device's stale local
+     cache can never masquerade as the shared history for a workspace that
+     actually has none (e.g. opening / on the catalyze route while the shared
+     conversation lives under /samudera). Falls back to the local cache only
+     when the server is unreachable. */
   async function loadServerHistory(wsName) {
     if (!wsName) return;
     try {
       const q = wsName ? '?workspace=' + encodeURIComponent(wsName) : '';
       const d = await U.fetchJSON('/api/chat-history' + q, { timeoutMs: 20000 });
       const msgs = (d && Array.isArray(d.messages)) ? d.messages : null;
+      const displayName = (d && d.workspace) || wsName;
       if (msgs) {
         Chat.messages = msgs.map(m => ({ role: m.role === 'user' ? 'user' : 'ai', text: m.text || '' }));
+        if (!Chat.messages.length) {
+          const same = (d && d.workspace) === Chat.suggestions?.workspace;
+          Chat.hint = same
+            ? `No chat history for workspace "` + displayName + `" yet - ask the first question.`
+            : `No chat history for workspace "` + displayName + `" here. The shared conversation may live under another route (e.g. /samudera).`;
+        } else {
+          Chat.hint = '';
+        }
         saveChat();
         renderChat();
       }
@@ -260,6 +278,7 @@
       const newBtn = body.querySelector('#chat-new');
       newBtn.addEventListener('click', async () => {
         Chat.messages = [];
+        Chat.hint = '';
         saveChat();
         renderChat();
         if (Chat.suggestions?.workspace) {

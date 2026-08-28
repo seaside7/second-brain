@@ -2417,6 +2417,11 @@ a.ticket-chip:hover { border-color: var(--border-active); color: var(--text-acce
 .chat-msg { display: flex; }
 .chat-msg-user { justify-content: flex-end; }
 .chat-msg-ai { justify-content: flex-start; }
+.chat-hint {
+  font-size: var(--fs-xs); color: var(--text-muted); text-align: center;
+  padding: 14px 10px; border: 1px dashed var(--border); border-radius: var(--radius-sm);
+  margin: auto; max-width: 90%;
+}
 .chat-bubble {
   max-width: 82%; padding: 8px 12px; font-size: var(--fs-sm); line-height: 1.5;
   border-radius: var(--radius-xs); overflow-wrap: anywhere;
