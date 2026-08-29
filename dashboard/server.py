@@ -2102,6 +2102,7 @@ def _conversations_load():
     """Global list of all chats (list of conversation dicts). Applies the
     one-time legacy migration on first use."""
     try:
+        _conversations_migrate()
         path = CONVERSATIONS_PATH
         if path.exists():
             with open(path, 'r', encoding='utf-8') as f:
