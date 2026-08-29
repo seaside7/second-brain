@@ -2566,36 +2566,39 @@ a.ticket-chip:hover { border-color: var(--border-active); color: var(--text-acce
 .chat-modal-overlay {
   position: fixed; inset: 0; z-index: 400;
   display: flex; align-items: center; justify-content: center;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.82);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
   padding: var(--sp-4);
 }
 .chat-modal {
-  width: 100%; max-width: 420px;
-  display: flex; flex-direction: column; gap: 8px;
-  background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: var(--radius); box-shadow: 0 18px 50px rgba(0,0,0,.5);
-  padding: var(--sp-4);
+  width: 100%; max-width: 480px;
+  display: flex; flex-direction: column; gap: 10px;
+  background: var(--surface-opaque);
+  border: 1px solid #3a3a46;
+  border-radius: var(--radius); box-shadow: 0 20px 55px rgba(0,0,0,.6);
+  padding: var(--sp-5);
 }
 .chat-modal-title {
-  font-size: var(--fs-md); font-weight: 700; color: var(--text-primary);
+  font-size: var(--fs-md); font-weight: 700; color: #f5f5f7;
 }
 .chat-modal-sub {
-  font-size: var(--fs-sm); color: var(--text-muted); margin-bottom: 4px;
+  font-size: var(--fs-sm); color: #b8b8c2; margin-bottom: 6px;
 }
 .chat-modal-opt {
-  display: flex; flex-direction: column; gap: 2px; text-align: left;
-  padding: 11px 14px; font-size: var(--fs-sm);
-  background: var(--bg-glass); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); color: var(--text-primary);
+  display: flex; flex-direction: column; gap: 3px; text-align: left;
+  padding: 13px 16px; font-size: var(--fs-sm);
+  background: #20202a; border: 1px solid #41414f;
+  border-radius: var(--radius-sm); color: #f5f5f7;
   cursor: pointer; transition: border-color .15s, background .15s;
 }
 .chat-modal-opt:hover {
-  border-color: var(--secondary-border);
-  background: hsla(var(--h-violet), 55%, 60%, 0.14);
+  border-color: #5b5b6b;
+  background: #282835;
 }
-.chat-modal-opt:focus-visible { outline: 2px solid var(--secondary-border); outline-offset: 1px; }
-.chat-modal-opt-name { font-weight: 700; }
-.chat-modal-opt-desc { font-size: var(--fs-xs); color: var(--text-muted); line-height: 1.4; }
+.chat-modal-opt:focus-visible { outline: 2px solid #6b6b7d; outline-offset: 1px; }
+.chat-modal-opt-name { font-weight: 600; color: #f5f5f7; }
+.chat-modal-opt-desc { font-size: var(--fs-sm); color: #b8b8c2; line-height: 1.45; }
 
 /* ── Memory Notes chatbox (notes-chat.js) ── */
 .notes-box { display: flex; flex-direction: column; gap: var(--sp-3); height: 100%; }
