@@ -57,9 +57,8 @@
   }
   function wsDisplayName(ws) {
     if (ws === 'samudera') return 'Samudera Indonesia';
-    if (ws === 'catalyze') return 'Catalyze';
     if (ws === 'personal') return 'Personal';
-    return ws || 'Second Brain';
+    return 'Second Brain';
   }
   function displayMode(mode) { return (mode || '').toUpperCase(); }
 
@@ -110,13 +109,15 @@
     }
   }
 
-  async function newConversation() {
+  /* Create a chat already tagged with a workspace (called from the new-chat
+     picker). workspace is 'personal' or 'samudera'. */
+  async function createConversation(ws) {
     let conv = null;
     try {
       conv = await U.fetchJSON('/api/chat-conversations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ workspace: ws }),
         timeoutMs: 20000,
       });
     } catch (e) { conv = null; }
@@ -129,6 +130,54 @@
     renderAll();
     const input = $('#chat-input');
     if (input) input.focus();
+  }
+
+  /* Persist a tag change on the active conversation, then refresh suggestions
+     + chrome so the persona/palette follow. */
+  async function setWorkspace(ws) {
+    if (!Chat.activeId) return;
+    try {
+      await U.fetchJSON('/api/chat-conversations/set-workspace', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: Chat.activeId, workspace: ws }),
+        timeoutMs: 20000,
+      });
+      const c = Chat.convos.find(x => x.id === Chat.activeId);
+      if (c) c.workspace = ws;
+      Chat.suggestions = null;
+      await ensureSuggestions(ws, true);
+      renderHeader();
+      renderSidebar();
+    } catch (e) { /* best-effort */ }
+  }
+
+  /* The ＋ New chat button in the composer: opens the Personal/Samudera
+     picker (dropdown) instead of creating immediately. */
+  function newConversation() {
+    const wrap = document.getElementById('chat-composer');
+    if (!wrap) return;
+    const old = wrap.querySelector('#chat-new-picker');
+    if (old) { old.remove(); return; }
+    const btn = wrap.querySelector('#chat-new');
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const d = document.createElement('div');
+    d.id = 'chat-new-picker';
+    d.className = 'chat-new-picker';
+    d.style.left = rect.left + 'px';
+    d.style.top = (rect.top - 110) + 'px';
+    d.innerHTML =
+      `<div class="chat-new-picker-label">New chat · context</div>
+       <button class="chat-new-picker-opt" data-ws="personal">Personal</button>
+       <button class="chat-new-picker-opt" data-ws="samudera">Samudera</button>`;
+    d.addEventListener('click', e => {
+      const opt = e.target.closest('.chat-new-picker-opt');
+      if (!opt) return;
+      d.remove();
+      createConversation(opt.dataset.ws);
+    });
+    document.body.appendChild(d);
   }
 
   async function deleteConversation(id) {
@@ -265,11 +314,23 @@
     const el = $('#chat-ws-line');
     if (!el) return;
     const c = Chat.convos.find(x => x.id === Chat.activeId);
-    const ws = c ? wsDisplayName(c.workspace) : '';
+    const cws = (c && c.workspace) || '';
     const mode = (Chat.suggestions && Chat.suggestions.mode) || '';
-    el.innerHTML = `<b>${U.esc(ws || 'Second Brain')}</b>` +
-      (mode ? ` <span class="chat-ws-badge">${U.esc(displayMode(mode))}</span>` : '') +
-      (Chat.activeId ? ' · global memory (all workspaces)' : '');
+    const opts = [
+      ['personal', 'Personal'],
+      ['samudera', 'Samudera'],
+    ];
+    const chips = opts.map(([ws, label]) =>
+      `<button class="chat-ws-chip${cws === ws ? ' is-active' : ''}" data-ws="${ws}">${label}</button>`
+    ).join('');
+    el.innerHTML = (Chat.activeId
+      ? `<span class="chat-ws-label">Context</span><span class="chat-ws-chips">${chips}</span>` +
+        `<span class="chat-ws-badge">${U.esc(displayMode(mode))}</span>` +
+        `<span class="chat-ws-global">global memory</span>`
+      : `<span class="chat-ws-label">Pick a context to start</span>`);
+    el.onclick = null;
+    el.querySelectorAll('.chat-ws-chip').forEach(btn =>
+      btn.addEventListener('click', () => setWorkspace(btn.dataset.ws)));
   }
 
   function renderAll() {
@@ -283,8 +344,10 @@
     text = (text || '').trim();
     if (!text || Chat.pendingText) return;
     if (!Chat.activeId) {
-      // no conversation yet: create one on the fly
-      await newConversation();
+      // no conversation yet: open the Personal/Samudera picker first, keep
+      // the typed text so it isn't lost (user re-focuses and sends after).
+      newConversation();
+      return;
     }
     const ws = (Chat.convos.find(c => c.id === Chat.activeId) || {}).workspace || '';
     Chat.messages.push({ role: 'user', text });

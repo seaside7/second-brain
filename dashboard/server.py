@@ -163,6 +163,7 @@ SAMUDERA_ALLOWED_GET = {
 # (no external effect) and is workspace-scoped.
 SAMUDERA_ALLOWED_POST = {'/api/chat', '/api/chat-conversations',
                          '/api/chat-conversations/delete',
+                         '/api/chat-conversations/set-workspace',
                          '/api/approval-decision',
                          '/api/agents-skill-save',
                          '/api/drive-index-rebuild', '/api/knowledge-build-embeddings',
@@ -3082,6 +3083,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_post_chat_conversations()
         elif self.path == '/api/chat-conversations/delete':
             self._handle_post_chat_conversation_delete()
+        elif self.path == '/api/chat-conversations/set-workspace':
+            self._handle_post_chat_conversation_set_workspace()
         elif self.path == '/api/approval-decision':
             self._handle_post_approval_decision()
         elif self.path == '/api/agents-skill-save':
@@ -5640,6 +5643,35 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._send_json(200, json.dumps({'status': 'deleted', 'id': conv_id}))
         except Exception as e:
             self._send_json(500, json.dumps({'error': 'chat-conversation delete failed',
+                                             'details': str(e)}))
+
+    def _handle_post_chat_conversation_set_workspace(self):
+        """POST /api/chat-conversations/set-workspace {id, workspace} — retag a
+        conversation (drives its persona + suggestion palette; memory recall
+        stays global). Valid workspaces: personal | samudera | catalyze."""
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+            conv_id = (body.get('id') or '').strip()
+            ws_name = (body.get('workspace') or '').strip()
+            if not conv_id:
+                self._send_json(400, json.dumps({'error': 'id is required'}))
+                return
+            ctx = _resolve_workspace(ws_name)
+            if not ctx:
+                self._send_json(400, json.dumps({'error': f'unknown workspace {ws_name!r}'}))
+                return
+            convos = _conversations_load()
+            conv = next((c for c in convos if c.get('id') == conv_id), None)
+            if not conv:
+                self._send_json(404, json.dumps({'error': 'conversation not found'}))
+                return
+            conv['workspace'] = ctx.name
+            _conversations_save(convos)
+            self._send_json(200, json.dumps({'status': 'updated', 'id': conv_id,
+                                             'workspace': ctx.name}))
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': 'set-workspace failed',
                                              'details': str(e)}))
 
     def _handle_post_chat_clear(self):
