@@ -89,8 +89,8 @@ function canRender(container) {
   return !(a && container && container.contains(a) && a.matches('input, textarea, select'));
 }
 
-/* ── Router: #today (default) | #reminders | #news | #finance | #memory | #invoices ── */
-const TAB_NAMES = ['today', 'reminders', 'news', 'finance', 'memory', 'invoices'];
+/* ── Router: #today (default) | #chat | #reminders | #news | #finance | #memory | #invoices ── */
+const TAB_NAMES = ['today', 'chat', 'reminders', 'news', 'finance', 'memory', 'invoices'];
 
 function parseHash() {
   const h = (location.hash || '#today').replace(/^#/, '');

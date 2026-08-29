@@ -2487,6 +2487,65 @@ a.ticket-chip:hover { border-color: var(--border-active); color: var(--text-acce
 }
 .chat-sugg-btn:hover, .chat-send-btn:hover { border-color: var(--border-active); color: var(--text-primary); }
 
+/* ── Chat tab page (chatbox.js, full-page two-pane) ── */
+.tab-panel.is-active > .chat-page { height: calc(100vh - 208px); min-height: 420px; }
+.chat-page { display: flex; gap: var(--sp-3); }
+.chat-sidebar {
+  flex: none; width: 252px; display: flex; flex-direction: column; gap: var(--sp-2);
+  padding: var(--sp-3); background: var(--bg-card);
+  border: 1px solid var(--border); border-radius: var(--radius);
+}
+.chat-side-new {
+  width: 100%; padding: 8px 10px; font-size: var(--fs-sm); font-weight: 600;
+  background: var(--bg-glass); border: 1px solid var(--border-active);
+  border-radius: var(--radius-sm); color: var(--text-primary); cursor: pointer;
+  transition: background .15s;
+}
+.chat-side-new:hover { background: hsla(var(--h-violet), 55%, 60%, 0.15); }
+.chat-sidebar-label {
+  font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--text-muted); margin-top: 2px;
+}
+.chat-convos { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.chat-convo {
+  display: flex; align-items: center; gap: 6px; padding: 7px 9px;
+  border: 1px solid transparent; border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.chat-convo:hover { background: var(--bg-glass); border-color: var(--border); }
+.chat-convo.is-active {
+  background: hsla(var(--h-violet), 55%, 60%, 0.14);
+  border-color: var(--secondary-border);
+}
+.chat-convo-title {
+  flex: 1; min-width: 0; text-align: left; font-size: var(--fs-sm);
+  color: var(--text-primary); background: none; border: 0; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0;
+}
+.chat-convo-ws {
+  flex: none; font-size: 9px; color: var(--text-muted); border: 1px solid var(--border);
+  border-radius: 999px; padding: 1px 6px; white-space: nowrap;
+}
+.chat-convo-del {
+  flex: none; width: 18px; height: 18px; display: inline-flex; align-items: center;
+  justify-content: center; font-size: 10px; border: 0; border-radius: 999px;
+  background: transparent; color: var(--text-muted); cursor: pointer; opacity: 0;
+  transition: opacity .15s, color .15s;
+}
+.chat-convo:hover .chat-convo-del { opacity: 1; }
+.chat-convo-del:hover { color: var(--danger, #ff6b6b); background: var(--bg-glass); }
+.chat-convo-time { flex: none; font-size: 10px; color: var(--text-muted); }
+.chat-sidebar-empty {
+  font-size: var(--fs-xs); color: var(--text-muted); padding: 10px 4px;
+}
+.chat-pane {
+  flex: 1; min-width: 0; display: flex; flex-direction: column;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg-card); padding: var(--sp-3); gap: var(--sp-3);
+}
+.chat-body-page { flex: 1; max-height: none; min-height: 0; }
+#chat-composer { position: relative; display: flex; flex-direction: column; }
+
 /* ── Memory Notes chatbox (notes-chat.js) ── */
 .notes-box { display: flex; flex-direction: column; gap: var(--sp-3); height: 100%; }
 .notes-hint { font-size: var(--fs-xs); color: var(--text-muted); padding: 4px 0; }

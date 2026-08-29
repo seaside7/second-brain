@@ -106,6 +106,8 @@ REMINDER_ENGINE = str(BASE_DIR / '.agent' / 'scripts' / 'reminder_engine.py')
 FINANCE_API = str(BASE_DIR / '.agent' / 'skills' / 'personal-finance' / 'scripts' / 'finance_engine.py')
 CHAT_STATE_DIR = BASE_DIR / 'journal' / 'state'
 CHAT_HISTORY_MAX = 50
+CONVERSATIONS_PATH = CHAT_STATE_DIR / 'chats.json'
+CONVERSATION_MAX_MSGS = 200
 WIB_TZ = timezone(timedelta(hours=7))
 
 # ── Samudera office-safe dashboard data sources ─────────────────────────────
@@ -139,6 +141,7 @@ SAMUDERA_ALLOWED_GET = {
     '/api/calendar', '/api/news', '/api/intelligence', '/api/tracker', '/api/overview',
     '/api/decisions', '/api/commitments', '/api/waiting-on', '/api/followups',
     '/api/inbox', '/api/ledger-find', '/api/chat-suggestions',
+    '/api/chat-conversations',
     '/api/approval-queue',
     # Agents / AI Architecture panel (read-only views: map + skill detail)
     '/api/agents-map', '/api/agents-skill',
@@ -158,7 +161,9 @@ SAMUDERA_ALLOWED_GET = {
 # mode is denied by default. /api/chat is the read-mostly assistant; the
 # approval queue's decide endpoint only flips a flag + appends an audit line
 # (no external effect) and is workspace-scoped.
-SAMUDERA_ALLOWED_POST = {'/api/chat', '/api/approval-decision',
+SAMUDERA_ALLOWED_POST = {'/api/chat', '/api/chat-conversations',
+                         '/api/chat-conversations/delete',
+                         '/api/approval-decision',
                          '/api/agents-skill-save',
                          '/api/drive-index-rebuild', '/api/knowledge-build-embeddings',
                          '/api/action', '/api/toggle',
@@ -2041,66 +2046,169 @@ def _ensure_meetings_synced(ws_name, max_age_min=30):
         _MEETINGS_SYNC_LOCK.release()
 
 
-def _chat_history_path(ws_name):
-    ctx = _resolve_workspace(ws_name)
-    return CHAT_STATE_DIR / ('chat_history_%s.json' % (ctx.name if ctx else 'default'))
-
-
-def _chat_history_load(ws_name):
-    """Per-workspace chat history (list of {role, text, ts}), newest last."""
-    path = _chat_history_path(ws_name)
+def _conversations_migrate():
+    """One-time import of the legacy per-workspace chat_history_<ws>.json files
+    into the single global conversations store. Runs only when chats.json does
+    not exist; each legacy file becomes one conversation titled from its first
+    user message and tagged with its workspace. Old files are left in place
+    (gitignored) but are no longer read or written by the chat."""
     try:
+        path = CONVERSATIONS_PATH
+        if path.exists():
+            return
+        convos = []
+        legacy_dir = CHAT_STATE_DIR
+        if not legacy_dir.exists():
+            return
+        for f in sorted(legacy_dir.glob('chat_history_*.json')):
+            try:
+                data = json.loads(f.read_text(encoding='utf-8'))
+            except Exception:
+                continue
+            if not isinstance(data, list) or not data:
+                continue
+            ws_name = f.name[len('chat_history_'):-len('.json')]
+            try:
+                ws_name = _resolve_workspace(ws_name).name
+            except Exception:
+                pass
+            title = _conversation_title_from(
+                next((m.get('text') for m in data
+                      if m.get('role') == 'user' and m.get('text')), ''))
+            created = (data[0].get('ts') or
+                       datetime.now(WIB_TZ).isoformat(timespec='seconds'))
+            updated = (data[-1].get('ts') or created)
+            msgs = [{'role': m.get('role') or 'user',
+                     'text': str(m.get('text') or ''),
+                     'ts': m.get('ts') or created}
+                    for m in data if m.get('text')]
+            convos.append({'id': 'c_' + os.urandom(8).hex(),
+                           'title': title,
+                           'workspace': ws_name,
+                           'created': created,
+                           'updated': updated,
+                           'messages': msgs[-CONVERSATION_MAX_MSGS:]})
+        _conversations_save(convos)
+    except Exception as e:
+        print('[chat] migration error: %s' % e, file=sys.stderr)
+
+
+def _conversations_path():
+    _conversations_migrate()
+    return CONVERSATIONS_PATH
+
+
+def _conversations_load():
+    """Global list of all chats (list of conversation dicts). Applies the
+    one-time legacy migration on first use."""
+    try:
+        path = CONVERSATIONS_PATH
         if path.exists():
             with open(path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            if isinstance(data, list):
-                return data[-CHAT_HISTORY_MAX:]
+            if isinstance(data, dict) and isinstance(data.get('conversations'), list):
+                return data['conversations']
     except Exception:
         pass
     return []
 
 
-def _chat_history_append(ws_name, role, text):
-    """Append a turn to the workspace chat store, capped at CHAT_HISTORY_MAX."""
+def _conversations_save(convos):
+    """Atomically persist the full conversations list (shared across devices)."""
     try:
-        history = _chat_history_load(ws_name)
-        history.append({
+        CHAT_STATE_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = str(CONVERSATIONS_PATH) + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump({'conversations': convos}, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, str(CONVERSATIONS_PATH))
+    except Exception as e:
+        print('[chat] conversations persist error: %s' % e, file=sys.stderr)
+
+
+def _conversation_title_from(text):
+    """Auto-title a conversation from its first user message (trimmed, single
+    line). Falls back to 'New chat'."""
+    text = (text or '').strip().replace('\n', ' ')
+    return text[:52] + ('…' if len(text) > 52 else '') if text else 'New chat'
+
+
+def _conversation_get(conv_id):
+    """Return the conversation dict for conv_id, or None."""
+    for c in _conversations_load():
+        if c.get('id') == conv_id:
+            return c
+    return None
+
+
+def _conversation_create(ws_name=''):
+    """Create a new empty conversation and return it (and persist)."""
+    try:
+        ctx = _resolve_workspace(ws_name)
+    except Exception:
+        ctx = None
+    convos = _conversations_load()
+    now = datetime.now(WIB_TZ).isoformat(timespec='seconds')
+    conv = {'id': 'c_' + os.urandom(8).hex(),
+            'title': 'New chat',
+            'workspace': (ctx.name if ctx else 'samudera'),
+            'created': now,
+            'updated': now,
+            'messages': []}
+    convos.append(conv)
+    _conversations_save(convos)
+    return conv
+
+
+def _conversation_append(conv_id, role, text, ws_name=''):
+    """Append a turn to a conversation (creating it implicitly with the given
+    workspace if conv_id is unknown/empty), cap the message list, set the
+    auto-title from the first user message, and persist. Returns the
+    conversation id actually used."""
+    try:
+        convos = _conversations_load()
+        conv = next((c for c in convos if c.get('id') == conv_id), None)
+        if conv is None:
+            try:
+                ctx = _resolve_workspace(ws_name)
+            except Exception:
+                ctx = None
+            now = datetime.now(WIB_TZ).isoformat(timespec='seconds')
+            conv = {'id': conv_id or ('c_' + os.urandom(8).hex()),
+                    'title': 'New chat',
+                    'workspace': (ctx.name if ctx else 'samudera'),
+                    'created': now,
+                    'updated': now,
+                    'messages': []}
+            convos.append(conv)
+        conv.setdefault('messages', [])
+        conv['messages'].append({
             'role': 'user' if role == 'user' else 'ai',
             'text': text,
             'ts': datetime.now(WIB_TZ).isoformat(timespec='seconds'),
         })
-        history = history[-CHAT_HISTORY_MAX:]
-        CHAT_STATE_DIR.mkdir(parents=True, exist_ok=True)
-        tmp = str(_chat_history_path(ws_name)) + '.tmp'
-        with open(tmp, 'w', encoding='utf-8') as f:
-            json.dump(history, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, str(_chat_history_path(ws_name)))
+        conv['messages'] = conv['messages'][-CONVERSATION_MAX_MSGS:]
+        if role == 'user' and not conv['title'] or conv['title'] == 'New chat':
+            conv['title'] = _conversation_title_from(text)
+        conv['updated'] = conv['messages'][-1]['ts']
+        _conversations_save(convos)
+        return conv['id']
     except Exception as e:
-        print('[chat] history persist error: %s' % e, file=sys.stderr)
+        print('[chat] append error: %s' % e, file=sys.stderr)
+        return conv_id
 
 
-def _chat_history_clear(ws_name):
-    try:
-        path = _chat_history_path(ws_name)
-        if path.exists():
-            path.unlink()
-    except Exception:
-        pass
-
-
-def _chat_history_context(ws_name, max_turns=6):
-    """Recent conversation turns for short-term memory, formatted for the prompt.
-    Returns a string like:
-      RECENT CONVERSATION (workspace: catalyze):
-      user>: ...
-      assistant>: ..."""
-    history = _chat_history_load(ws_name)
-    if not history:
+def _conversation_context(conv, max_turns=6):
+    """Recent turns of ONE conversation, formatted for the prompt. This is the
+    per-conversation short-term memory that keeps each chat topic-isolated even
+    though global memory recall spans every workspace."""
+    messages = conv.get('messages') or []
+    if not messages:
         return ''
-    turns = history[-max_turns * 2:]  # each turn = user + ai (2 entries)
-    parts = ['RECENT CONVERSATION (workspace: %s) - this is the ongoing session '
-             'with the user. Use it for continuity, but answer the CURRENT '
-             'question at the end:' % (ws_name or '?')]
+    turns = messages[-max_turns * 2:]  # each turn = user + ai (2 entries)
+    ws_label = conv.get('workspace') or '?'
+    parts = ['RECENT CONVERSATION (workspace: %s) - this ongoing session is the '
+             'back-and-forth in the CURRENT chat. Use it for continuity, but '
+             'answer the CURRENT question at the end:' % ws_label]
     for m in turns:
         who = 'user' if m.get('role') == 'user' else 'assistant'
         text = str(m.get('text') or '').strip()
@@ -2113,14 +2221,16 @@ def _chat_history_context(ws_name, max_turns=6):
 
 
 def _chat_memory_context(ws_name, query):
-    """Inline keyword search across the ONE brain (knowledge + notes) and the
-    ACTIVE workspace's Drive index for chat. No subprocess, no LLM call —
-    just fast JSON search. Private memories are hidden from the samudera view.
-    Strictly workspace-scoped: the active workspace's memory ranks first and
-    general (untagged) knowledge is neutral, while knowledge and notes that
-    belong to a DIFFERENT workspace are blocked entirely — so Samudera's
-    ETOS/CRM memory never leaks into a Catalyze or personal answer (or vice
-    versa). The Drive index is scoped to the active workspace too."""
+    """Inline keyword search across ALL memory (every workspace's knowledge +
+    notes + drive index) for the chat, plus the shared brain. No subprocess,
+    no LLM call — just fast JSON search. The Second Brain assistant is now
+    GLOBAL: it can recall facts from any workspace (Samudera ETOS/CRM, Catalyze
+    projects, personal) regardless of which conversation you are in, and every
+    snippet is labeled with its origin workspace [source: ws] so the answer can
+    attribute where a fact came from. Topic isolation is handled per
+    conversation (each chat keeps its own short-term history), not by blocking
+    cross-workspace knowledge. Private memory notes stay hidden from the
+    samudera view."""
     ws = ws_name or 'samudera'
     brain_dir = BASE_DIR / '.agent' / 'brain'
     workspaces_dir = BASE_DIR / '.agent' / 'workspaces'
@@ -2146,10 +2256,16 @@ def _chat_memory_context(ws_name, query):
 
     results = []
 
-    # Drive index search — scoped to the ACTIVE workspace ONLY so unrelated
-    # projects in other workspaces never surface while answering here.
-    drive_path = workspaces_dir / ws / 'state' / 'drive_index.json'
-    if drive_path.exists():
+    # Drive index search — across EVERY workspace's index so the global
+    # assistant can find a doc from any project. Each hit is tagged source_ws.
+    known_ws = []
+    if workspaces_dir.exists():
+        known_ws = [d.name for d in workspaces_dir.iterdir()
+                    if d.is_dir() and not d.name.startswith('__')]
+    for ws_dir in known_ws:
+        drive_path = workspaces_dir / ws_dir / 'state' / 'drive_index.json'
+        if not drive_path.exists():
+            continue
         try:
             idx = json.loads(drive_path.read_text(encoding='utf-8'))
             for f in idx.get('files', []):
@@ -2169,7 +2285,7 @@ def _chat_memory_context(ws_name, query):
                 content_preview = content[start:start + 900]
                 results.append({
                     'source': 'drive',
-                    'source_ws': ws,
+                    'source_ws': ws_dir,
                     'title': f.get('name', '?'),
                     'project': f.get('project', ''),
                     'content': content_preview,
@@ -2181,20 +2297,9 @@ def _chat_memory_context(ws_name, query):
     # Knowledge store search — the ONE shared brain plus each workspace's own
     # long-term memory, scored per '### block' so answers land on precise
     # sections (e.g. "4. Organizational Structure") instead of a random snippet
-    # from a whole category file. Strictly workspace-aware: the ACTIVE
-    # workspace's knowledge ranks highest, the shared brain's untagged blocks
-    # are neutral, and blocks that belong to a DIFFERENT workspace are blocked
-    # entirely (never surfaced), so Samudera's ETOS/CRM memory can't leak into
-    # a Catalyze or personal answer.
-
-    known_ws = {d.name for d in workspaces_dir.iterdir()
-                if d.is_dir() and not d.name.startswith('__')}
-    # Blocks in the aggregated shared brain carry a source marker, e.g.
-    #   <!-- source: samudera/projects.md -->
-    # telling us which workspace the block actually belongs to. The marker is
-    # not always inside the block, so fall back to the block's own
-    # "**Workspace**: <ws>" field (used across Samudera KB blocks) and to the
-    # "Samudera KB" title prefix used for Samudera's uploaded knowledge base.
+    # from a whole category file. GLOBAL: blocks from every workspace are
+    # surfaced (not blocked), each tagged with its origin workspace for the
+    # answer to attribute.
     _SRC_RE = re.compile(r'<!--\s*source:\s*([^/\s]+)/')
     _WSFIELD_RE = re.compile(r'\*\*Workspace\*\*:\s*([\w\-]+)')
     _strip_com_or = re.compile(r'<!--.*?-->', re.S)
@@ -2213,8 +2318,7 @@ def _chat_memory_context(ws_name, query):
     def _scan_knowledge_dir(kb_dir, default_source):
         """Append matching '### blocks' under kb_dir to results. Each block's
         real source = marker / Workspace field / Samudera-KB heuristic / the
-        dir's default_source. Blocks owned by a workspace other than the active
-        one are skipped entirely, so nothing cross-workspace ever surfaces."""
+        dir's default_source. All blocks surface (global recall)."""
         if not kb_dir.exists():
             return
         for md_file in kb_dir.glob('*.md'):
@@ -2226,8 +2330,6 @@ def _chat_memory_context(ws_name, query):
                 if not blk.strip():
                     continue
                 src = _block_source(blk) or default_source
-                if src in known_ws and src != ws:
-                    continue  # block cross-workspace knowledge entirely
                 blob = blk.lower()
                 score = sum(_hits(t, blob) for t in terms)
                 if score == 0:
@@ -2244,18 +2346,15 @@ def _chat_memory_context(ws_name, query):
                     'title': title,
                     'content': blk[start:start + 1400],
                     'score': _score(score, len(blk)),
-                    '_ws_boost': 0.25 if src == ws else 0.10,  # active vs general
                 })
 
     _scan_knowledge_dir(brain_dir / 'knowledge', None)
-    _scan_knowledge_dir(workspaces_dir / ws / 'knowledge', ws)
-    for ws_dir in sorted(workspaces_dir.iterdir()):
-        if ws_dir.name == ws or not ws_dir.is_dir() or ws_dir.name.startswith('__'):
-            continue
-        _scan_knowledge_dir(ws_dir / 'knowledge', ws_dir.name)
+    for ws_dir in known_ws:
+        _scan_knowledge_dir(workspaces_dir / ws_dir / 'knowledge', ws_dir)
 
-    # Memory notes search — the ONE brain; private entries stay personal-only,
-    # and notes from OTHER workspaces are blocked entirely.
+    # Memory notes search — the ONE brain. GLOBAL: notes from every workspace
+    # surface (tagged with source_ws); private entries stay hidden from the
+    # samudera view.
     notes_path = brain_dir / 'memory_notes.json'
     if notes_path.exists():
         try:
@@ -2266,16 +2365,12 @@ def _chat_memory_context(ws_name, query):
                 if ws == 'samudera' and entry.get('scope') == 'private':
                     continue
                 note_ws = entry.get('source_ws')
-                if note_ws and note_ws in known_ws and note_ws != ws:
-                    continue  # block cross-workspace notes entirely
                 blob = (entry.get('text', '') + ' ' + entry.get('title', '') +
                         ' ' + ' '.join(entry.get('entities', []))).lower()
                 score = sum(_hits(t, blob) for t in terms)
                 if score == 0:
                     continue
-                # context boost: active-ws notes rank highest, untagged neutral
-                boost = (0.20 if note_ws == ws else 0.10)
-                boost += 0.10  # curated personal facts outrank raw docs
+                boost = 0.10  # curated personal facts outrank raw docs
                 results.append({
                     'source': 'memory_note',
                     'source_ws': note_ws,
@@ -2287,21 +2382,9 @@ def _chat_memory_context(ws_name, query):
         except Exception:
             pass
 
-    # Apply per-workspace ranking boost, then de-duplicate: the aggregated
-    # shared brain repeats per-workspace files, so the same block can be scored
-    # twice (once from brain/knowledge, once from the workspace's own dir).
-    # Keep the higher-scoring copy only.
-    for r in results:
-        wb = r.pop('_ws_boost', None)
-        if wb is not None:
-            r['score'] = min(3.0, max(-3.0, r['score'] + wb))
-
-    # dedup by normalized content, keeping the best score. The aggregated shared
-    # brain repeats per-workspace blocks (once from brain/knowledge, once from
-    # the workspace's own dir), so the same block can be scored twice. Since the
-    # duplicate copies share the same title/source, key on those — snippet
-    # offsets differ between copies (embedded source comments shift them), so
-    # content-based keys don't reliably collide.
+    # de-duplicate: the aggregated shared brain repeats per-workspace files,
+    # so the same block can be scored twice (once from brain/knowledge, once
+    # from the workspace's own dir). Keep the higher-scoring copy only.
     seen = {}
     order = []
     for r in results:
@@ -2329,8 +2412,8 @@ def _chat_memory_context(ws_name, query):
     for r in results:
         header = f'[{r["source"]}] {r["title"]}'
         sw = r.get('source_ws')
-        if sw and sw != ws:
-            header += f' [source: {sw}]'  # label cross-workspace knowledge
+        if sw and sw in known_ws:
+            header += f' [source: {sw}]'  # label origin workspace for attribution
         if r.get('project'):
             header += f' (project: {r["project"]})'
         header += f' [relevance: {r["score"]:.1f}]'
@@ -2872,6 +2955,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_ledger_find()
         elif self.path.split('?')[0] == '/api/chat-suggestions':
             self._handle_get_chat_suggestions()
+        elif self.path.split('?')[0] == '/api/chat-conversations':
+            self._handle_get_chat_conversations()
         elif self.path.split('?')[0] == '/api/chat-history':
             self._handle_get_chat_history()
         elif self.path == '/api/token-efficiency':
@@ -2992,6 +3077,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_post_chat()
         elif self.path == '/api/chat-clear':
             self._handle_post_chat_clear()
+        elif self.path == '/api/chat-conversations':
+            self._handle_post_chat_conversations()
+        elif self.path == '/api/chat-conversations/delete':
+            self._handle_post_chat_conversation_delete()
         elif self.path == '/api/approval-decision':
             self._handle_post_approval_decision()
         elif self.path == '/api/agents-skill-save':
@@ -5458,10 +5547,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._send_json(500, json.dumps({'error': 'chat-suggestions failed',
                                              'details': str(e)}))
 
-    def _handle_get_chat_history(self):
-        """GET /api/chat-history?workspace=<name> — per-workspace conversation
-        history (last CHAT_HISTORY_MAX turns, newest last). Lets any device
-        hitting the same dashboard resume the same conversation."""
+    def _handle_get_chat_conversations(self):
+        """GET /api/chat-conversations[?id=<id>] — the global, cross-device
+        conversation list (id/title/workspace/updated), newest first; with an
+        ?id= it returns ONE full conversation including its messages. The
+        title text is NOT returned in the list. Lets any device resume or
+        pick any conversation regardless of route or workspace."""
         try:
             params = {}
             if '?' in self.path:
@@ -5469,61 +5560,136 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     if '=' in kv:
                         k, v = kv.split('=', 1)
                         params[k] = unquote(v)
-            ws_name = (params.get('workspace') or '').strip() \
-                or (self.headers.get('X-PSB-Workspace') or '').strip()
-            ctx = _resolve_workspace(ws_name)
-            if not ctx:
-                self._send_json(400, json.dumps({'error': 'unknown workspace'}))
+            conv_id = (params.get('id') or '').strip()
+            convos = _conversations_load()
+            if conv_id:
+                conv = next((c for c in convos if c.get('id') == conv_id), None)
+                if not conv:
+                    self._send_json(404, json.dumps({'error': 'conversation not found'}))
+                    return
+                self._send_json(200, json.dumps(conv, ensure_ascii=False))
                 return
-            history = _chat_history_load(ctx.name)
-            # Backwards-compatible shape for the frontend: already the list of
-            # {role, text, ts} objects the UI consumes.
+            listing = [{
+                'id': c.get('id'),
+                'title': c.get('title') or 'New chat',
+                'workspace': c.get('workspace') or '',
+                'created': c.get('created'),
+                'updated': c.get('updated'),
+            } for c in sorted(convos, key=lambda x: (x.get('updated') or ''), reverse=True)]
+            self._send_json(200, json.dumps({'conversations': listing}, ensure_ascii=False))
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': 'chat-conversations failed',
+                                             'details': str(e)}))
+
+    def _handle_get_chat_history(self):
+        """GET /api/chat-history?id=<id> — alias for fetching one conversation's
+        messages. Kept for backwards compatibility: returns {id, workspace,
+        messages}."""
+        try:
+            params = {}
+            if '?' in self.path:
+                for kv in self.path.split('?', 1)[1].split('&'):
+                    if '=' in kv:
+                        k, v = kv.split('=', 1)
+                        params[k] = unquote(v)
+            conv_id = (params.get('id') or '').strip()
+            if not conv_id:
+                convos = _conversations_load()
+                conv_id = (sorted(convos, key=lambda x: (x.get('updated') or ''),
+                                  reverse=True) or [None])[0].get('id') if convos else ''
+            conv = _conversation_get(conv_id) if conv_id else None
+            if not conv:
+                self._send_json(200, json.dumps({'id': '', 'workspace': '',
+                                                 'messages': []}, ensure_ascii=False))
+                return
             self._send_json(200, json.dumps({
-                'workspace': ctx.name,
-                'messages': history,
+                'id': conv['id'],
+                'workspace': conv.get('workspace', ''),
+                'messages': conv.get('messages', []),
             }, ensure_ascii=False))
         except Exception as e:
             self._send_json(500, json.dumps({'error': 'chat-history failed',
                                              'details': str(e)}))
 
-    def _handle_post_chat_clear(self):
-        """POST /api/chat-clear {workspace} — wipe the workspace's server-side
-        chat history (used by the 'new conversation' button)."""
+    def _handle_post_chat_conversations(self):
+        """POST /api/chat-conversations {workspace?} — create a new, empty
+        conversation and return it (id/title/workspace/messages)."""
         try:
             length = int(self.headers.get('Content-Length', 0))
             body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
-            ws_name = (body.get('workspace') or '').strip() \
-                or (self.headers.get('X-PSB-Workspace') or '').strip()
-            ctx = _resolve_workspace(ws_name)
-            if not ctx:
-                self._send_json(400, json.dumps({'error': 'unknown workspace'}))
+            ws_name = (body.get('workspace') or '').strip()
+            conv = _conversation_create(ws_name)
+            self._send_json(200, json.dumps(conv, ensure_ascii=False))
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': 'chat-conversation create failed',
+                                             'details': str(e)}))
+
+    def _handle_post_chat_conversation_delete(self):
+        """POST /api/chat-conversations/delete {id} — remove a conversation."""
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+            conv_id = (body.get('id') or '').strip()
+            if not conv_id:
+                self._send_json(400, json.dumps({'error': 'id is required'}))
                 return
-            _chat_history_clear(ctx.name)
-            self._send_json(200, json.dumps({'status': 'cleared', 'workspace': ctx.name}))
+            convos = _conversations_load()
+            convos = [c for c in convos if c.get('id') != conv_id]
+            _conversations_save(convos)
+            self._send_json(200, json.dumps({'status': 'deleted', 'id': conv_id}))
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': 'chat-conversation delete failed',
+                                             'details': str(e)}))
+
+    def _handle_post_chat_clear(self):
+        """POST /api/chat-clear {id} — wipe a conversation's messages (keeps the
+        conversation shell). Backwards-compatible with {workspace} which clears
+        all conversations for that workspace."""
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+            conv_id = (body.get('id') or '').strip()
+            ws_name = (body.get('workspace') or '').strip()
+            convos = _conversations_load()
+            kept = []
+            for c in convos:
+                if conv_id and c.get('id') == conv_id:
+                    c['messages'] = []
+                    c['title'] = 'New chat'
+                elif ws_name and c.get('workspace') == ws_name:
+                    c['messages'] = []
+                    c['title'] = 'New chat'
+                kept.append(c)
+            _conversations_save(kept)
+            self._send_json(200, json.dumps({'status': 'cleared'}))
         except Exception as e:
             self._send_json(500, json.dumps({'error': 'chat-clear failed',
                                              'details': str(e)}))
 
     def _handle_post_chat(self):
-        """POST /api/chat {message, workspace} — answer a question in the workspace's
-        persona (role/mode + workspace.md head as grounding). DeepSeek first
-        (deepseek-chat, the cheap backend for reading/summarizing simple tasks),
-        falling back to OpenAI (via openai_call) and then ai_call.run()
-        (agy-bridge) when DeepSeek is not configured. The workspace.md context and
-        the model call are both scoped to the requested workspace. Recent
-        conversation history (short-term memory) for the same workspace is fed in
-        for continuity. Memory recall is workspace-aware: the active workspace's
-        memory ranks first, cross-workspace knowledge is deprioritized and labeled,
-        and the Drive index is scoped to the active workspace.
-        Returns {reply, model, backend, workspace}."""
+        """POST /api/chat {message, conversation_id, workspace} — answer a
+        question in the Second Brain's global assistant. Conversation_id selects
+        WHICH conversation this turn belongs to (short-term context = that
+        conversation's own recent turns, so topics stay isolated per chat).
+        Workspace drives the persona/suggestions for that conversation only —
+        memory recall is GLOBAL and searches every workspace, with each snippet
+        labeled by origin. DeepSeek first (deepseek-chat, the cheap backend for
+        reading/summarizing simple tasks), falling back to OpenAI (via
+        openai_call) and then ai_call.run() (agy-bridge) when DeepSeek is not
+        configured.
+        Returns {reply, model, backend, workspace, conversation_id}."""
         try:
             length = int(self.headers.get('Content-Length', 0))
             body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
             message = (body.get('message') or '').strip()
-            # Workspace resolution order: explicit body field > view header
-            # (X-PSB-Workspace) > active workspace default.
+            conv_id = ((body.get('conversation_id') or '').strip())
+            # Workspace resolution order: explicit body field > the requested
+            # conversation's tag > view header > active workspace default.
             ws_name = ((body.get('workspace') or '').strip()
                        or (self.headers.get('X-PSB-Workspace') or '').strip())
+            conv = _conversation_get(conv_id) if conv_id else None
+            if conv is not None and conv.get('workspace'):
+                ws_name = ws_name or conv['workspace']
             if not message:
                 self._send_json(400, json.dumps({'error': 'message is required'}))
                 return
@@ -5540,10 +5706,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     'model': None,
                     'backend': 'local',
                     'workspace': ctx.name,
+                    'conversation_id': conv_id,
                 }, ensure_ascii=False))
                 return
 
-            _chat_history_append(ctx.name, 'user', message)
+            conv_id = _conversation_append(conv_id, 'user', message,
+                                           ctx.name if conv_id else '')
 
             persona = ' '.join(filter(None, [
                 f'Role: {ctx.role}' if ctx.role else '',
@@ -5553,15 +5721,17 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             ctx_head = _workspace_md_head(ctx.name)
             _ensure_meetings_synced(ctx.name)
             live_ctx = _chat_live_context(ctx.name)
+            conv = _conversation_get(conv_id) or {}
             memory_ctx = _chat_memory_context(ctx.name, message)
-            conv_ctx = _chat_history_context(ctx.name, max_turns=6)
+            conv_ctx = _conversation_context(conv, max_turns=6)
             system = (
-                f'You are the Second Brain assistant for the "{ctx.display_name}" '
-                f'workspace ({ctx.name}). {persona}\n\n'
+                f'You are the Second Brain assistant for "{ctx.display_name}" '
+                f'({ctx.name}). {persona}\n\n'
                 f'Context from the workspace operating manual:\n{ctx_head or "(none)"}\n\n'
                 f'Live dashboard context (includes today\'s meetings and open work):\n'
                 f'{live_ctx}\n\n'
-                f'Relevant knowledge and documents (from memory recall):\n'
+                f'Relevant knowledge and documents (from memory recall, spanning ALL '
+                f'workspaces - each snippet is tagged [source: workspace]):\n'
                 f'{memory_ctx}\n\n'
                 f'{conv_ctx}\n\n'
                 '# Response Style Guide\n\n'
@@ -5595,7 +5765,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 'you MUST use it as your primary source. Do NOT say "I don\'t have access" '
                 'or "based on general knowledge" when the answer is literally in the context. '
                 'Synthesize from the provided documents, not from your training data. '
-                'Never reference or reveal data from other workspaces. Keep the reply '
+                'Memory recall is global - facts may come from any workspace. When you '
+                'use a specific fact, briefly note its origin workspace in brackets '
+                '(e.g. "[samudera]") so the user knows the source; do NOT reveal '
+                'sensitive private details outside their context. Keep the reply '
                 'under ~300 words unless the question asks for more.'
             )
 
@@ -5629,14 +5802,16 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     'error': 'AI backend unavailable',
                     'workspace': ctx.name,
                     'backend': backend,
+                    'conversation_id': conv_id,
                 }, ensure_ascii=False))
                 return
-            _chat_history_append(ctx.name, 'ai', text)
+            conv_id = _conversation_append(conv_id, 'ai', text)
             self._send_json(200, json.dumps({
                 'reply': text,
                 'model': meta.get('model'),
                 'backend': backend,
                 'workspace': ctx.name,
+                'conversation_id': conv_id,
             }, ensure_ascii=False))
         except Exception as e:
             self._send_json(500, json.dumps({'error': 'chat failed', 'details': str(e)}))
