@@ -152,32 +152,41 @@
     } catch (e) { /* best-effort */ }
   }
 
-  /* The ＋ New chat button in the composer: opens the Personal/Samudera
-     picker (dropdown) instead of creating immediately. */
+  /* The ＋ New chat button in the composer (or the sidebar): opens a centered
+     modal so the user must choose a workspace before the chat is created.
+     No workspace is preselected; clicking the overlay does NOT create
+     anything - only an explicit Personal/Samudera choice does. */
   function newConversation() {
-    const wrap = document.getElementById('chat-composer');
-    if (!wrap) return;
-    const old = wrap.querySelector('#chat-new-picker');
-    if (old) { old.remove(); return; }
-    const btn = wrap.querySelector('#chat-new');
-    if (!btn) return;
-    const rect = btn.getBoundingClientRect();
-    const d = document.createElement('div');
-    d.id = 'chat-new-picker';
-    d.className = 'chat-new-picker';
-    d.style.left = rect.left + 'px';
-    d.style.top = (rect.top - 110) + 'px';
-    d.innerHTML =
-      `<div class="chat-new-picker-label">New chat · context</div>
-       <button class="chat-new-picker-opt" data-ws="personal">Personal</button>
-       <button class="chat-new-picker-opt" data-ws="samudera">Samudera</button>`;
-    d.addEventListener('click', e => {
-      const opt = e.target.closest('.chat-new-picker-opt');
+    if (document.getElementById('chat-ws-modal')) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'chat-ws-modal';
+    overlay.className = 'chat-modal-overlay';
+    overlay.innerHTML = `
+      <div class="chat-modal" role="dialog" aria-modal="true"
+           aria-labelledby="chat-modal-title">
+        <div class="chat-modal-title" id="chat-modal-title">Choose workspace for this chat</div>
+        <div class="chat-modal-sub">Select where this conversation belongs:</div>
+        <button class="chat-modal-opt" data-ws="personal">
+          <span class="chat-modal-opt-name">Personal</span>
+          <span class="chat-modal-opt-desc">For personal topics and general knowledge.</span>
+        </button>
+        <button class="chat-modal-opt" data-ws="samudera">
+          <span class="chat-modal-opt-name">Samudera</span>
+          <span class="chat-modal-opt-desc">For Samudera projects and work-related context.</span>
+        </button>
+      </div>`;
+    overlay.addEventListener('click', e => {
+      const opt = e.target.closest('.chat-modal-opt');
       if (!opt) return;
-      d.remove();
+      overlay.remove();
       createConversation(opt.dataset.ws);
     });
-    document.body.appendChild(d);
+    overlay.addEventListener('keydown', e => {
+      if (e.key === 'Escape') overlay.remove();
+    });
+    document.body.appendChild(overlay);
+    const first = overlay.querySelector('.chat-modal-opt');
+    if (first) first.focus();
   }
 
   async function deleteConversation(id) {
