@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "updated_wib": null,
+  "note": "Curated liquid IDX watchlist, grouped by sector. Yahoo symbol suffix = .JK. Editable via `watchlist add/remove`.",
+  "intent_skip": [
+    "BIRD",
+    "LEAD",
+    "GOTO"
+  ],
+  "intent_keywords": [
+    "saham",
+    "stock",
+    "invest",
+    "dividen",
+    "dividend",
+    "pbv",
+    "roe",
+    "roe",
+    "fundamental",
+    "scalp",
+    "trading",
+    "screening"
+  ],
+  "sectors": {
+    "bank": [
+      "BBCA",
+      "BBNI",
+      "BBRI",
+      "BBTN",
+      "BMRI",
+      "BRIS"
+    ],
+    "telecom": [
+      "EXCL",
+      "ISAT",
+      "MTEL",
+      "TBIG",
+      "TLKM"
+    ],
+    "consumer": [
+      "GGRM",
+      "HMSP",
+      "ICBP",
+      "INDF",
+      "KLBF",
+      "MYOR",
+      "SIDO",
+      "UNVR"
+    ],
+    "energy_mining": [
+      "ADRO",
+      "ANTM",
+      "INCO",
+      "ITMG",
+      "MEDC",
+      "PGAS",
+      "PTBA",
+      "TINS"
+    ],
+    "basic_materials": [
+      "BRPT",
+      "INKP",
+      "INTP",
+      "SMGR",
+      "TKIM"
+    ],
+    "healthcare": [
+      "HEAL",
+      "MIKA",
+      "SILO"
+    ],
+    "auto_parts": [
+      "ASII",
+      "AUTO"
+    ],
+    "retail_media": [
+      "ACES",
+      "AMRT",
+      "MAPI",
+      "MNCN",
+      "SCMA"
+    ],
+    "infra_property": [
+      "ADHI",
+      "BSDE",
+      "CTRA",
+      "JSMR",
+      "PTPP",
+      "SMRA",
+      "WIKA"
+    ],
+    "plantations": [
+      "AALI",
+      "LSIP",
+      "TAPG"
+    ],
+    "logistics": [
+      "BIRD",
+      "LEAD",
+      "SMDR"
+    ],
+    "technology": [
+      "GOTO",
+      "MTDL"
+    ],
+    "unassigned": []
+  }
+}

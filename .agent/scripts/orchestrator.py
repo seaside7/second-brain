@@ -159,6 +159,12 @@ SKILL_REGISTRY = {
         "description": "Build/query FAISS embedding index for knowledge store using OpenAI text-embedding-3-small",
         "cli_style": "positional",
     },
+    "investment-analyst": {
+        "script": "skills/investment-analyst/scripts/investment_analyst.py",
+        "category": "trading_analysis",
+        "description": "Read-only IDX stock analyst (personal): real quotes from Yahoo Finance - price, PBV, ROE, EPS, dividend, shares/float, institutional ownership; raw facts + calculated metrics, cached + paced, partial-result honest",
+        "cli_style": "flag",
+    },
 }
 
 

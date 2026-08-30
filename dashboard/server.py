@@ -104,6 +104,9 @@ WORKSPACES_JSON = BASE_DIR / '.agent' / 'workspaces' / 'workspaces.json'
 PERSONAL_FINANCE_PATH = BASE_DIR / '.agent' / 'workspaces' / 'personal' / 'finance.json'
 REMINDER_ENGINE = str(BASE_DIR / '.agent' / 'scripts' / 'reminder_engine.py')
 FINANCE_API = str(BASE_DIR / '.agent' / 'skills' / 'personal-finance' / 'scripts' / 'finance_engine.py')
+INVESTMENT_ANALYST_CLI = str(BASE_DIR / '.agent' / 'skills' / 'investment-analyst' / 'scripts' / 'investment_analyst.py')
+DEEP_DIVE_TEMPLATE = str(BASE_DIR / '.agent' / 'skills' / 'investment-analyst' / 'templates' / 'deep_dive.md')
+DEEP_DIVES_DIR = BASE_DIR / '.agent' / 'workspaces' / 'personal' / 'state' / 'deepdives'
 CHAT_STATE_DIR = BASE_DIR / 'journal' / 'state'
 CHAT_HISTORY_MAX = 50
 CONVERSATIONS_PATH = CHAT_STATE_DIR / 'chats.json'
@@ -2222,6 +2225,70 @@ def _conversation_context(conv, max_turns=6):
     return '\n'.join(parts)
 
 
+def _investment_chat_context(message):
+    """Auto-detect investment-intent in a chat message (personal workspace only)
+    and inject REAL market quotes fetched on demand from the investment-analyst
+    skill. Two stages, both silent no-ops when nothing matches:
+      1. intent - which watchlist tickers appear in the message (exact symbol
+         match; skips English-word tickers like BIRD/LEAD/GOTO unless investment
+         keywords are present). Plain words like PROJECT never trigger.
+      2. fetch - quote the matched tickers (cached 10 min) and render a compact
+         block so the assistant answers from live data, not training memory.
+    Returns '' when no watchlist ticker is matched. Never fabricates."""
+    try:
+        ok, out = _run_investment_cli(['intent', '--text', message, '--json'], timeout=20)
+        if not ok:
+            return ''
+        matched = (json.loads(out) or {}).get('matched') or []
+        if not matched:
+            return ''
+        ok2, out2 = _run_investment_cli(
+            ['quote', '--symbols', ','.join(matched), '--json'], timeout=120)
+        if not ok2:
+            return ''
+        data = json.loads(out2)
+        quotes = data.get('quotes') or []
+        if not quotes:
+            return ''
+        lines = ['# Live market data (from Yahoo Finance; timing/source per quote)']
+        for q in quotes:
+            raw = q.get('raw') or {}
+            calc = q.get('calculated') or {}
+            parts = [
+                '- %s (%s)' % (q['ticker'], raw.get('company_name') or '?'),
+                'price %s %s' % (raw.get('price'), raw.get('currency') or '?'),
+            ]
+            if calc.get('change_pct') is not None:
+                parts.append('chg %s%%' % calc['change_pct'])
+            if calc.get('pbv') is not None:
+                parts.append('PBV %s' % calc['pbv'])
+            if raw.get('return_on_equity') is not None:
+                parts.append('ROE %s%%' % raw['return_on_equity'])
+            if raw.get('dividend_yield') is not None:
+                parts.append('div %s%%' % raw['dividend_yield'])
+            if raw.get('shares_outstanding') is not None:
+                parts.append('shares %s' % raw['shares_outstanding'])
+            if raw.get('float_shares') is not None:
+                parts.append('float %s%s' % (
+                    raw['float_shares'],
+                    (' (%s%%)' % calc['float_pct']) if calc.get('float_pct') is not None else ''))
+            if raw.get('held_percent_institutions') is not None:
+                parts.append('inst %s%%' % raw['held_percent_institutions'])
+            if raw.get('market_timestamp') is not None:
+                parts.append('as-of %s' % raw['market_timestamp'])
+            lines.append('  %s' % ' | '.join(parts))
+            missing = q.get('unavailable') or []
+            if missing:
+                lines.append('  data not provided: %s' % ', '.join(missing))
+        lines.append('\nUse these quotes as RAW market facts. Do NOT invent values '
+                     'not listed above. PBV/float%%/change are calculated from raw '
+                     'values. Institutional ownership is an indicator, not a '
+                     'whale signal. Distinguish raw facts vs your interpretation.')
+        return '\n'.join(lines)
+    except Exception:
+        return ''
+
+
 def _chat_memory_context(ws_name, query):
     """Inline keyword search across ALL memory (every workspace's knowledge +
     notes + drive index) for the chat, plus the shared brain. No subprocess,
@@ -2650,6 +2717,145 @@ def _run_executive_orchestrator(ws_name, prompt):
         return False, f'executive-orchestrator unavailable: {e}'
 
 
+def _run_investment_cli(args, timeout=180):
+    """Run the investment-analyst skill CLI. Returns (ok, text)."""
+    try:
+        r = subprocess.run(
+            [sys.executable, INVESTMENT_ANALYST_CLI] + list(args),
+            cwd=str(BASE_DIR), capture_output=True, text=True, timeout=timeout)
+        out = (r.stdout or '').strip() or (r.stderr or '').strip()
+        return r.returncode == 0, out
+    except Exception as e:
+        return False, 'investment-analyst unavailable: %s' % e
+
+
+def _chat_deep_dive(message, ctx, conv_id):
+    """/deepdive <TICKER> [--refresh-market] - full "Stock Deep Dive" report.
+
+    Data-only pipeline: (1) run the investment-analyst deep-dive CLI to FETCH +
+    AGGREGATE the carrier (market snapshot, annual + quarterly statements, peer
+    comparison, missing fields, existing documents, sources); (2) inject the
+    carrier + the fixed template into ONE existing chat-model call (deepseek ->
+    openai -> ai_call) which writes the full 18-section narrative; (3) save both
+    the carrier and the report under the personal state dir. Returns
+    (reply, model, backend). Personal workspace only. No buy/sell advice."""
+    parts = [p for p in message.strip().split() if p]
+    cmd = parts[0].lower()
+    if parts[1:2] and parts[1].lower() in ('--list', '-l'):
+        try:
+            files = sorted(DEEP_DIVES_DIR.glob('*.md'))
+        except Exception:
+            files = []
+        if not files:
+            return 'Belum ada deep-dive tersimpan.', None, 'local'
+        lines = ['Deep-dive tersimpan (%d):' % len(files)]
+        for f in files[-12:]:
+            lines.append('- %s' % f.name)
+        lines.append('\nSemua snapshot adalah HISTORIS. Jalankan /deepdive <TICKER> lagi untuk data pasar terbaru.')
+        return '\n'.join(lines), None, 'local'
+    if ctx.name != 'personal':
+        return 'Deep-dive hanya tersedia di workspace Personal.', None, 'local'
+    if len(parts) < 2:
+        return ('Usage: /deepdive <TICKER>  |  /deepdive --list\n'
+                'Contoh: /deepdive BMRI\n'
+                'Opsi: --refresh-market (lewati cache harga 10 menit)'), None, 'local'
+    ticker = parts[1].upper()
+    if not re.fullmatch(r'[A-Z0-9]{1,4}', ticker):
+        return "Ticker tidak valid (1-4 huruf/angka). Contoh: /deepdive BMRI", None, 'local'
+    refresh_market = any(p.lower() == '--refresh-market' for p in parts[2:])
+
+    cli = [sys.executable, INVESTMENT_ANALYST_CLI, 'deep-dive', ticker, '--json', '--top', '5']
+    if refresh_market:
+        cli.append('--refresh-market')
+    try:
+        r = subprocess.run(cli, cwd=str(BASE_DIR), capture_output=True, text=True, timeout=240)
+        out = (r.stdout or '').strip()
+    except Exception as e:
+        return 'deep-dive gagal: %s' % e, None, 'local'
+    if r.returncode != 0 or not out:
+        return ('deep-dive gagal untuk %s: %s' %
+                (ticker, ((r.stderr or '').strip() or 'tidak ada output')), None, 'local')
+    try:
+        carrier = json.loads(out)
+    except Exception:
+        return 'deep-dive: output tidak valid.', None, 'local'
+    if carrier.get('error'):
+        return ('deep-dive gagal untuk %s: %s'
+                % (ticker, carrier.get('reason') or carrier.get('error')), None, 'local')
+
+    try:
+        template = Path(DEEP_DIVE_TEMPLATE).read_text(encoding='utf-8')
+    except Exception:
+        template = ''
+
+    persona = ' '.join(filter(None, [
+        f'Role: {ctx.role}' if ctx.role else '',
+        f'Mode: {ctx.mode}' if ctx.mode else '',
+        ctx.style if ctx.style else '',
+    ]))
+    conv = _conversation_get(conv_id) or {}
+    system = (
+        f'You are the Second Brain assistant for "{ctx.display_name}" ({ctx.name}). '
+        f'{persona}\n\n'
+        f'Context from the workspace operating manual:\n'
+        f'{_workspace_md_head(ctx.name) or "(none)"}\n\n'
+        f'Live dashboard context:\n{_chat_live_context(ctx.name)}\n\n'
+        f'Relevant knowledge and documents (memory recall, tagged [source: workspace]):\n'
+        f'{_chat_memory_context(ctx.name, message)}\n\n'
+        f'Recent conversation:\n{_conversation_context(conv, max_turns=6)}\n\n'
+        '--- STOCK DEEP DIVE TASK ---\n'
+        'Hasilkan laporan "Stock Deep Dive" LENGKAP SEKALI JADI (semua 18 section '
+        'sesuai template di bawah) dalam satu respons. JANGAN bertanya lanjutan; '
+        'seluruh data sudah ada di carrier. Bahasa Indonesia.\n\n'
+        '--- DATA CARRIER (fakta & metrik terhitung; JANGAN mengarang angka di luar ini) ---\n'
+        f'{json.dumps(carrier, ensure_ascii=False, indent=1)}\n\n'
+        f'--- TEMPLATE LAPORAN ---\n{template}\n\n'
+        '# Style untuk laporan ini saja\n'
+        'Formal, bahasa Indonesia, tanpa em-dash, tabel rapi. Ini LAPORAN, bukan '
+        'balasan obrolan santai - abaikan aturan gaya casual chat untuk output ini.'
+    )
+
+    ok, text, meta = False, '', {}
+    backend = None
+    if deepseek_call is not None:
+        ok, text, meta = deepseek_call.call(system, max_tokens=4000,
+                                            temperature=0.3, timeout=240)
+        backend = 'deepseek'
+    if not ok and openai_call is not None:
+        ok, text, meta = openai_call.call(message, system=system, tier='medium',
+                                          max_tokens=4000, timeout=240)
+        backend = 'openai'
+    if not ok:
+        ok, text, meta = ai_call.run(system, task='draft', model='sonnet', timeout=240)
+        backend = meta.get('backend') or 'none'
+
+    stamp = time.strftime('%Y%m%d-%H%M')
+    try:
+        DEEP_DIVES_DIR.mkdir(parents=True, exist_ok=True)
+        base = DEEP_DIVES_DIR / f'{ticker}_{stamp}'
+        (DEEP_DIVES_DIR / f'{ticker}_{stamp}.json').write_text(
+            json.dumps(carrier, ensure_ascii=False, indent=2), encoding='utf-8')
+        if ok:
+            head = (f'# Stock Deep Dive - {ticker}\n\n'
+                    f'_Snapshot HISTORIS per {carrier.get("analysis_date")}; harga pasar per '
+                    f'{carrier.get("market_price_timestamp")}. Jalankan /deepdive {ticker} lagi '
+                    f'untuk data pasar terbaru._\n\n')
+            (DEEP_DIVES_DIR / f'{ticker}_{stamp}.md').write_text(
+                head + text, encoding='utf-8')
+        else:
+            (DEEP_DIVES_DIR / f'{ticker}_{stamp}.md').write_text(
+                'Model tidak tersedia untuk narasi.\n', encoding='utf-8')
+    except Exception:
+        pass
+
+    if not ok:
+        reason = (meta.get('reason') or 'ai call failed').strip()
+        return ('Saya sudah mengumpulkan dan menyimpan data package untuk %s, tapi model tidak '
+                'tersedia untuk menulis narasi (%s). Data package tersimpan di state/deepdives/. '
+                'Coba lagi nanti.' % (ticker, reason[:200])), None, 'local'
+    return text, meta.get('model'), backend
+
+
 def _run_slash_command(message, ctx):
     """Handle a leading-'/' command for the chat. Returns a reply string.
     Deterministic + instant (no AI call): digests read the workspace ledgers
@@ -2705,6 +2911,39 @@ def _run_slash_command(message, ctx):
             return result.stdout if result.returncode == 0 else f'Invoice error: {result.stderr}'
         except Exception as e:
             return f'Invoice generation failed: {e}'
+    if cmd == '/invest':
+        q = ' '.join(args).strip()
+        if not q:
+            return 'Usage: /invest <ticker OR screen=bank> (e.g. /invest BBCA,ASII or /invest screen=bank --sort pbv)'
+        cli = [sys.executable, INVESTMENT_ANALYST_CLI]
+        # /invest BBCA,ASII   ->  quote --symbols BBCA,ASII
+        # /invest screen=bank --sort pbv  ->  screen --sector bank --sort pbv
+        if q.lower().startswith('screen='):
+            sector = q[len('screen='):].split()[0]
+            rest = q[len('screen=') + len(sector):].strip().split()
+            cli += ['screen', '--sector', sector] + rest
+        else:
+            cli += ['quote', '--symbols', q]
+        try:
+            r = subprocess.run(cli, capture_output=True, text=True,
+                               timeout=180, cwd=BASE_DIR)
+            return (r.stdout or '').strip() or ('Invest error: ' + (r.stderr or '').strip())
+        except Exception as e:
+            return f'Invest command failed: {e}'
+    if cmd == '/watchlist':
+        cli = [sys.executable, INVESTMENT_ANALYST_CLI, 'watchlist']
+        if len(args) >= 2 and args[0] in ('add', 'remove'):
+            cli += [args[0]] + args[1:]
+        elif not args:
+            cli += ['list']
+        else:
+            return 'Usage: /watchlist  OR  /watchlist add <TICKER>  OR  /watchlist remove <TICKER>'
+        try:
+            r = subprocess.run(cli, capture_output=True, text=True,
+                               timeout=30, cwd=BASE_DIR)
+            return (r.stdout or '').strip() or ('Watchlist error: ' + (r.stderr or '').strip())
+        except Exception as e:
+            return f'Watchlist command failed: {e}'
     if cmd in ('/help', '/commands'):
         return ('Available commands:\n'
                 '- /focus - executive digest (overdue, due-today, blocked, waiting, decisions, commitments, inbox)\n'
@@ -2713,6 +2952,9 @@ def _run_slash_command(message, ctx):
                 '- /approvals - pending approval-queue items for this workspace\n'
                 '- /orchestrate <request> - executive orchestrator: classifies intent, gathers the relevant specialists, synthesizes a decision-oriented answer\n'
                 '- /invoice <month> - generate Catalyze invoice PDF (e.g. /invoice August)\n'
+                '- /invest <ticker(s) or screen=sector> - real IDX quotes/fundamentals from Yahoo Finance (e.g. /invest BBCA,ASII, /invest screen=bank --sort pbv)\n'
+                '- /deepdive <TICKER> - full Stock Deep Dive report (personal): fetch + aggregate data once, then one chat call writes the 18-section report (e.g. /deepdive BMRI, /deepdive --list)\n'
+                '- /watchlist [add|remove] [TICKER] - list or edit the investment watchlist\n'
                 '- /help - this list\n\n'
                 'Anything else is answered by the assistant.')
     return ('Unknown command %r. Try /help for the available commands.' % cmd)
@@ -5733,6 +5975,28 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
             # ── slash commands: deterministic digests, no LLM call ──
             if message.startswith('/'):
+                if message.lower().startswith('/deepdive'):
+                    reply, dd_model, dd_backend = _chat_deep_dive(message, ctx, conv_id)
+                    if dd_model is None and dd_backend == 'local':
+                        self._send_json(200, json.dumps({
+                            'reply': reply,
+                            'model': None,
+                            'backend': 'local',
+                            'workspace': ctx.name,
+                            'conversation_id': conv_id,
+                        }, ensure_ascii=False))
+                        return
+                    _conversation_append(conv_id, 'user', message,
+                                         ctx.name if conv_id else '')
+                    conv_id = _conversation_append(conv_id, 'ai', reply)
+                    self._send_json(200, json.dumps({
+                        'reply': reply,
+                        'model': dd_model,
+                        'backend': dd_backend,
+                        'workspace': ctx.name,
+                        'conversation_id': conv_id,
+                    }, ensure_ascii=False))
+                    return
                 reply = _run_slash_command(message, ctx)
                 self._send_json(200, json.dumps({
                     'reply': reply,
@@ -5756,6 +6020,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             live_ctx = _chat_live_context(ctx.name)
             conv = _conversation_get(conv_id) or {}
             memory_ctx = _chat_memory_context(ctx.name, message)
+            invest_ctx = ''
+            if ctx.name == 'personal':
+                invest_ctx = _investment_chat_context(message)
             conv_ctx = _conversation_context(conv, max_turns=6)
             system = (
                 f'You are the Second Brain assistant for "{ctx.display_name}" '
@@ -5766,6 +6033,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 f'Relevant knowledge and documents (from memory recall, spanning ALL '
                 f'workspaces - each snippet is tagged [source: workspace]):\n'
                 f'{memory_ctx}\n\n'
+                f'{invest_ctx}\n\n'
                 f'{conv_ctx}\n\n'
                 '# Response Style Guide\n\n'
                 'When replying, use a natural and casual communication style, like a colleague '
