@@ -6,6 +6,7 @@ fetching Google Calendar events, and browsing project files.
 """
 
 import ipaddress
+import io
 import json
 import os
 import re
@@ -2727,6 +2728,144 @@ def _run_investment_cli(args, timeout=180):
         return r.returncode == 0, out
     except Exception as e:
         return False, 'investment-analyst unavailable: %s' % e
+
+
+# ── Drive document fetch for chat grounding ────────────────────────────
+# The chat can only truthfully summarize a document it actually opened.
+# These helpers detect Drive URLs in the user's message, fetch the file with
+# whatever token CAN see it (current workspace -> personal -> work-drive),
+# extract text (Google Docs export / docx / pdf / txt), and return a block that
+# is either grounded content or an explicit "could not access" note - so the
+# assistant never fabricates a summary of an unreadable document.
+
+DRIVE_FILE_URL_RE = re.compile(
+    r'(?:https?://)?(?:docs\.google\.com/(?:document|spreadsheets|presentation|file)/d/'
+    r'|drive\.google\.com/(?:open\?id=|file/d/))([A-Za-z0-9_-]{10,})')
+
+
+def _drive_doc_ids(message):
+    return list(dict.fromkeys(DRIVE_FILE_URL_RE.findall(message)))
+
+
+def _drive_token_chain(ws_name):
+    cands = []
+    for name in (ws_name, 'personal'):
+        p = BASE_DIR / '.agent' / 'workspaces' / name / 'token_drive.json'
+        if p.exists():
+            cands.append(str(p))
+    legacy = BASE_DIR / '.agent' / 'skills' / 'work-drive-connector' / 'token.json'
+    if legacy.exists():
+        cands.append(str(legacy))
+    return cands
+
+
+def _parse_drive_bytes(raw, mime, name):
+    """Minimal robust text extraction for downloaded Drive files."""
+    ext = os.path.splitext(name)[1].lower()
+    docx_mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    try:
+        if mime == docx_mime or ext == '.docx':
+            try:
+                from docx import Document
+                doc = Document(io.BytesIO(raw))
+                text = '\n\n'.join(p.text for p in doc.paragraphs if p.text.strip())
+                return text or '(empty document)', None
+            except ImportError:
+                import re as _re
+                import zipfile
+                z = zipfile.ZipFile(io.BytesIO(raw))
+                parts = []
+                for n in z.namelist():
+                    if n.startswith('word/') and n.endswith('.xml'):
+                        xml = z.read(n).decode('utf-8', 'replace')
+                        parts.append(''.join(_re.findall(r'<w:t[^>]*>(.*?)</w:t>', xml)))
+                return '\n'.join(parts) or '(no extractable text)', None
+        if mime == 'application/pdf' or ext == '.pdf':
+            try:
+                from PyPDF2 import PdfReader
+                r = PdfReader(io.BytesIO(raw))
+                return '\n\n'.join((p.extract_text() or '') for p in r.pages) or '(empty pdf)', None
+            except ImportError:
+                return None, 'PDF parsing needs PyPDF2 (not installed)'
+        return raw.decode('utf-8', 'replace'), None
+    except Exception as e:
+        return None, 'parse failed: %s' % e
+
+
+def _drive_doc_text(file_id, token_chain):
+    """Fetch metadata + text for file_id using the first token that can see it.
+    Returns (text, meta) or (None, error message)."""
+    try:
+        from google.auth.transport.requests import Request as _GoogleRequest
+        from google.oauth2.credentials import Credentials
+        from googleapiclient.discovery import build as _build
+        from googleapiclient.http import MediaIoBaseDownload
+    except Exception as e:
+        return None, 'google-api library unavailable: %s' % e
+    last_err = 'no usable Drive token'
+    for tf in token_chain:
+        try:
+            tok = json.loads(Path(tf).read_text(encoding='utf-8'))
+            scopes = tok.get('scopes') or ['https://www.googleapis.com/auth/drive.readonly']
+            creds = Credentials.from_authorized_user_file(tf, scopes)
+            if not creds.valid:
+                if creds.expired and creds.refresh_token:
+                    creds.refresh(_GoogleRequest())
+                else:
+                    last_err = 'token created without refresh support (%s)' % tf
+                    continue
+            svc = _build('drive', 'v3', credentials=creds)
+            meta = svc.files().get(fileId=file_id, fields='name,mimeType,size',
+                                   supportsAllDrives=True).execute()
+            mime = meta.get('mimeType', '')
+            if mime == 'application/vnd.google-apps.document':
+                text = svc.files().export(fileId=file_id, mimeType='text/plain').execute()
+                if isinstance(text, bytes):
+                    text = text.decode('utf-8', 'replace')
+                return text, meta
+            buf = io.BytesIO()
+            dl = MediaIoBaseDownload(buf, svc.files().get_media(
+                fileId=file_id, supportsAllDrives=True))
+            done = False
+            while not done:
+                _, done = dl.next_chunk()
+            text, err = _parse_drive_bytes(buf.getvalue(), mime, meta.get('name', ''))
+            if err:
+                return None, err
+            return text, meta
+        except Exception as e:
+            if 'File not found' in str(e) or 'notFound' in str(e):
+                last_err = 'not visible to any configured Drive token (404)'
+            else:
+                last_err = '%s: %s' % (type(e).__name__, str(e)[:160])
+    return None, last_err
+
+
+def _drive_doc_context(message, ws_name, max_chars=15000):
+    """Build a grounded document block for the chat system prompt from Drive
+    URLs in the message. Returns '' when no Drive link is present."""
+    ids = _drive_doc_ids(message)
+    if not ids:
+        return ''
+    chain = _drive_token_chain(ws_name)
+    blocks = []
+    for fid in ids:
+        text, meta = _drive_doc_text(fid, chain)
+        if text is None:
+            blocks.append(
+                '- Document id %s: ACCESS FAILED (%s). You did NOT read this '
+                'document. Do not summarize or quote it; tell the user you could '
+                'not open it and ask them to share it with the account that owns '
+                'access or re-upload it.'
+                % (fid, meta))
+            continue
+        name = (meta or {}).get('name') or fid
+        if len(text) > max_chars:
+            text = text[:max_chars] + '\n...[content truncated for length]'
+        blocks.append('### %s\n%s' % (name, text))
+    return ('Please base your answer on the fetched content below. Only the section(s) '
+            'actually present may be summarized; never add facts not in this text.\n\n'
+            + '\n\n'.join(blocks))
 
 
 def _chat_deep_dive(message, ctx, conv_id):
@@ -6020,6 +6159,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             live_ctx = _chat_live_context(ctx.name)
             conv = _conversation_get(conv_id) or {}
             memory_ctx = _chat_memory_context(ctx.name, message)
+            doc_ctx = _drive_doc_context(message, ctx.name)
             invest_ctx = ''
             if ctx.name == 'personal':
                 invest_ctx = _investment_chat_context(message)
@@ -6033,7 +6173,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 f'Relevant knowledge and documents (from memory recall, spanning ALL '
                 f'workspaces - each snippet is tagged [source: workspace]):\n'
                 f'{memory_ctx}\n\n'
-                f'{invest_ctx}\n\n'
+                + (f'{doc_ctx}\n\n' if doc_ctx else '')
+                + f'{invest_ctx}\n\n'
                 f'{conv_ctx}\n\n'
                 '# Response Style Guide\n\n'
                 'When replying, use a natural and casual communication style, like a colleague '
@@ -6070,7 +6211,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 'use a specific fact, briefly note its origin workspace in brackets '
                 '(e.g. "[samudera]") so the user knows the source; do NOT reveal '
                 'sensitive private details outside their context. Keep the reply '
-                'under ~300 words unless the question asks for more.'
+                'under ~300 words unless the question asks for more.\n\n'
+                'IMPORTANT - honesty about documents: you may only summarize a document '
+                'that was actually fetched into your context. If a Drive link could not '
+                'be opened (or you only found its title/metadata in memory recall), say '
+                'openly "saya nggak bisa akses dokumen itu" / "saya cuma punya judulnya" '
+                'and never invent its contents, sections, entities, or numbers.'
             )
 
             ok, text, meta = False, '', {}
