@@ -11,7 +11,7 @@
 window.Tabs = window.Tabs || {};
 
 const CodingTab = (() => {
-  const { toast, fetchJSON } = U;
+  const { fetchJSON } = U;
 
   const T = {
     repos: [],
@@ -160,7 +160,7 @@ const CodingTab = (() => {
         }
         await refreshJobs();
       } catch (err) {
-        toast(`Gagal: ${err.message}`, false);
+        Comp.toast(`Gagal: ${err.message}`, false);
       } finally {
         btn.disabled = false;
       }
@@ -169,7 +169,7 @@ const CodingTab = (() => {
       if (e.target.id === 'coding-branch') {
         const v = e.target.value.trim();
         if (['main', 'master', 'develop'].includes(v)) {
-          toast(`${v} cannot be used — falling back to staging`, false);
+          Comp.toast(`${v} cannot be used — falling back to staging`, false);
           e.target.value = 'staging';
         }
       }
@@ -191,7 +191,7 @@ const CodingTab = (() => {
       body: JSON.stringify({ repo, mode, task, branch, files }),
     });
     if (!res || !res.ok) throw new Error((res && res.error) || 'create failed');
-    toast(`Job started: ${res.job.id}`);
+    Comp.toast(`Job started: ${res.job.id}`);
     T.selected = res.job.id;
     const ta = $('coding-task'); if (ta) ta.value = '';
     const fi = $('coding-files'); if (fi) fi.value = '';
@@ -220,7 +220,7 @@ const CodingTab = (() => {
     });
     const err = res && res.error;
     if (err) throw new Error(err);
-    toast(`Approved: ${gate}`);
+    Comp.toast(`Approved: ${gate}`);
   }
 
   async function permission(id, permissionId, response) {
@@ -229,12 +229,12 @@ const CodingTab = (() => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ permission_id: permissionId, response }),
     });
-    toast(response === 'allowed' ? 'Permission allowed' : 'Permission denied');
+    Comp.toast(response === 'allowed' ? 'Permission allowed' : 'Permission denied');
   }
 
   async function stopJob(id) {
     await fetchJSON(`/api/coding/jobs/${encodeURIComponent(id)}/stop`, { method: 'POST' });
-    toast('Job stopped');
+    Comp.toast('Job stopped');
   }
 
   async function preview(mode, id) {
@@ -243,7 +243,7 @@ const CodingTab = (() => {
     });
     if (res && res.error) throw new Error(res.error);
     if (mode === 'start' && res && res.url) window.open(res.url, '_blank');
-    toast(mode === 'start' ? 'Preview started' : 'Preview stopped');
+    Comp.toast(mode === 'start' ? 'Preview started' : 'Preview stopped');
   }
 
   async function sendPrompt(id) {
@@ -255,7 +255,7 @@ const CodingTab = (() => {
       body: JSON.stringify({ text }),
     });
     if (ta) ta.value = '';
-    toast('Follow-up sent');
+    Comp.toast('Follow-up sent');
   }
 
   /* ── rendering: repos + jobs + detail ─────────────────────────────── */

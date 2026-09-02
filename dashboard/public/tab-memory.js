@@ -11,7 +11,7 @@
 window.Tabs = window.Tabs || {};
 
 const MemoryTab = (() => {
-  const { toast } = U;
+  
 
   /* ── State ──────────────────────────────────────────────────────── */
   let _status = null;
@@ -328,10 +328,10 @@ const MemoryTab = (() => {
     if (el) el.innerHTML = '<span class="mem-loading">Scanning Drive folders…</span>';
     const result = await rebuildDriveIndex();
     if (result.ok) {
-      toast('Drive index rebuilt', 'success');
+      Comp.toast('Drive index rebuilt', 'success');
       await _refreshAll();
     } else {
-      toast('Drive rebuild failed: ' + (result.error || 'unknown'), 'error');
+      Comp.toast('Drive rebuild failed: ' + (result.error || 'unknown'), 'error');
       if (el) el.innerHTML = '<span class="mem-warn">Rebuild failed.</span>';
     }
     if (btn) { btn.disabled = false; btn.textContent = '↻ Rebuild'; }
@@ -344,10 +344,10 @@ const MemoryTab = (() => {
     if (el) el.innerHTML = '<span class="mem-loading">Building FAISS embeddings…</span>';
     const result = await buildEmbeddings();
     if (result.ok) {
-      toast('FAISS index built', 'success');
+      Comp.toast('FAISS index built', 'success');
       await _refreshAll();
     } else {
-      toast('Embeddings build failed: ' + (result.error || 'unknown'), 'error');
+      Comp.toast('Embeddings build failed: ' + (result.error || 'unknown'), 'error');
       if (el) el.innerHTML = '<span class="mem-warn">Build failed.</span>';
     }
     if (btn) { btn.disabled = false; btn.textContent = '🏗 Build Embeddings'; }
