@@ -44,13 +44,23 @@ const CodingTab = (() => {
     startPoll();
   }
 
+  function stopPoll() {
+    if (T.interval) { clearInterval(T.interval); T.interval = null; }
+  }
+
   function startPoll() {
-    if (T.interval) return;
-    T.interval = setInterval(async () => {
+    stopPoll();
+    T.interval = setInterval(() => {
       const panel = $('tab-coding');
-      if (!panel || !panel.classList.contains('is-active')) return;
-      await refreshJobs();
-    }, 3000);
+      if (!panel || !panel.classList.contains('is-active') || document.hidden) { stopPoll(); return; }
+      const hasActive = T.jobs.some(j => /planning|building|testing|awaiting|pushing|running/.test(j.status));
+      if (!hasActive) { stopPoll(); return; }
+      refreshJobs();
+    }, 10000);
+  }
+
+  function activeTabName() {
+    return ((location.hash || '#today').replace(/^#/, '').split('/')[0]) || 'today';
   }
 
   async function refreshRepos() {
@@ -356,7 +366,11 @@ const CodingTab = (() => {
        </div>`).join('') : '<div class="coding-hint">no changes yet</div>');
 
     const approvals = [];
-    if (job.status === 'awaiting_build_approval' && job.plan) {
+    const isPlanOnly = job.mode === 'plan' && job.status === 'awaiting_build_approval';
+    if (isPlanOnly) {
+      approvals.push(`<div class="coding-hint">plan complete — approve build to implement, or close</div>`);
+    }
+    if (job.status === 'awaiting_build_approval' && job.plan && !isPlanOnly) {
       approvals.push(`<button class="coding-btn coding-btn--primary" data-coding-action="approve"
         data-job-id="${esc(job.id)}" data-gate="build">✅ Approve build</button>`);
     }
@@ -377,9 +391,10 @@ const CodingTab = (() => {
           : `<button class="coding-btn" data-coding-action="preview-start" data-job-id="${esc(job.id)}">▶ Start preview</button>`}
       </div>` : '';
 
+    const serverLive = job.opencode && job.opencode.pid;
     const actions = [
       ...approvals,
-      job.status !== 'failed' && job.status !== 'cancelled'
+      serverLive
         ? `<button class="coding-btn coding-btn--danger" data-coding-action="stop" data-job-id="${esc(job.id)}">⏹ Stop</button>` : '',
       `<button class="coding-btn" data-coding-action="refresh" data-job-id="">↻ Refresh</button>`,
     ].filter(Boolean).join('') || '<div class="coding-hint">no actions available</div>';
@@ -432,7 +447,16 @@ const CodingTab = (() => {
     if (T.selected) await renderDetail();
   }
 
-  return { load };
+  return { load, _stopPoll: stopPoll };
 })();
 
 window.Tabs.coding = CodingTab;
+
+window.addEventListener('hashchange', () => {
+  if (((location.hash || '#today').replace(/^#/, '').split('/')[0]) !== 'coding') {
+    CodingTab._stopPoll && CodingTab._stopPoll();
+  }
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) CodingTab._stopPoll && CodingTab._stopPoll();
+});
