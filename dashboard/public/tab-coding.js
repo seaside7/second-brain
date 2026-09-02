@@ -53,7 +53,7 @@ const CodingTab = (() => {
     T.interval = setInterval(() => {
       const panel = $('tab-coding');
       if (!panel || !panel.classList.contains('is-active') || document.hidden) { stopPoll(); return; }
-      const hasActive = T.jobs.some(j => /planning|building|testing|awaiting|pushing|running/.test(j.status));
+      const hasActive = T.jobs.some(j => /planning|building|testing|pushing|running/.test(j.status));
       if (!hasActive) { stopPoll(); return; }
       refreshJobs();
     }, 10000);
