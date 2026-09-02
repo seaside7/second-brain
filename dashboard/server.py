@@ -62,6 +62,10 @@ except Exception:
 sys.path.insert(0, str(BASE_DIR / '.agent' / 'workspaces'))
 import workspace_resolver as ws_resolver  # noqa: E402
 
+# Coding Agent: OpenCode-backed per-job coding runs (repos under CODING_PROJECTS_ROOT).
+# All /api/coding/* + /api/coding/preview/* traffic is delegated here.
+import coding_agent  # noqa: E402
+
 DASHBOARD_PATH = BASE_DIR / 'Dashboard.md'
 PUBLIC_DIR = Path(__file__).resolve().parent / 'public'
 CLIENTS_DIR = BASE_DIR / 'Clients'
@@ -3385,6 +3389,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_get_invoices()
         elif self.path.split('?')[0] == '/api/invoice/file':
             self._handle_get_invoice_file()
+        elif self.path.split('?')[0] == '/api/coding/jobs' or \
+                self.path.startswith('/api/coding/repos') or \
+                self.path.startswith('/api/coding/jobs/') or \
+                self.path.startswith('/api/coding/preview/'):
+            coding_agent.route_get(self)
         else:
             super().do_GET()
 
@@ -3508,6 +3517,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_post_reminders('delete')
         elif self.path.split('?')[0] == '/api/invoice/generate':
             self._handle_post_invoice_generate()
+        elif self.path == '/api/coding/jobs' or \
+                self.path.startswith('/api/coding/jobs/'):
+            try:
+                coding_agent.route_post(self)
+            except Exception as e:
+                self._send_json(500, json.dumps({'error': f'coding route failed: {e}'}))
         else:
             self.send_error(404, 'Not Found')
 
@@ -8257,6 +8272,7 @@ def main():
     # HTTPServer hung all tabs when one connection blocked).
     server = ThreadingHTTPServer(('0.0.0.0', PORT), DashboardHandler)
     server.daemon_threads = True
+    coding_agent.start_background()
     threading.Thread(target=_intel_scheduler, daemon=True).start()
     print(f"\n  [Dashboard] running at http://localhost:{PORT}\n")
     print(f"  Intel feed:  auto 07:00 + 13:00 WIB")
