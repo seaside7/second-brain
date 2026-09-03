@@ -3148,6 +3148,8 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
 .coding-btn:disabled { opacity: .5; pointer-events: none; }
 .coding-btn--primary { background: var(--text-accent); border-color: var(--text-accent); color: #111; }
 .coding-btn--danger { border-color: #c0392b; color: #e74c3c; }
+.coding-btn--ghost { border-color: transparent; background: transparent; color: var(--text-muted); padding: 4px 6px; }
+.coding-btn--ghost:hover { color: #e74c3c; border-color: transparent; }
 .coding-actions { display: flex; flex-wrap: wrap; gap: var(--sp-1); align-items: center; }
 .coding-msg { background: var(--surface-opaque); border: 1px solid var(--border); border-radius: 8px;
   padding: var(--sp-2); margin-top: var(--sp-1); }
@@ -3172,7 +3174,8 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
   gap: var(--sp-2); margin-bottom: var(--sp-2); }
 .coding-repo-card { border: 1px solid var(--border); border-radius: 8px; padding: var(--sp-2);
   cursor: pointer; background: var(--surface-opaque); }
-.coding-repo-card:hover { border-color: var(--border-active); }
+.coding-repo-card:hover, .coding-repo-card.is-repo-selected { border-color: var(--text-accent); }
+.coding-repo-card.is-repo-selected { box-shadow: 0 0 0 1px var(--text-accent) inset; }
 .coding-repo-name { font-weight: 650; font-size: var(--fs-sm); margin-bottom: 4px; }
 .coding-repo-meta { font-size: var(--fs-xs); color: var(--text-muted); word-break: break-all; }
 .coding-job-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2);

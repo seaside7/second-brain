@@ -17,6 +17,7 @@ const CodingTab = (() => {
     repos: [],
     configured: false,
     root: null,
+    selectedRepo: null,
     jobs: [],
     selected: null,   // job id currently open in detail
     interval: null,
@@ -160,13 +161,20 @@ const CodingTab = (() => {
         else if (action === 'approve') await approve(id, btn.dataset.gate);
         else if (action === 'permission') await permission(id, btn.dataset.permissionId, btn.dataset.response);
         else if (action === 'stop') await stopJob(id);
+        else if (action === 'delete') {
+          if (confirm('Delete this job permanently? This removes its worktree and log.')) await deleteJob(id);
+        }
         else if (action === 'preview-start') await preview('start', id);
         else if (action === 'preview-stop') await preview('stop', id);
         else if (action === 'prompt') await sendPrompt(id);
         else if (action === 'select') T.selected = id;
         else if (action === 'select-repo') {
           const sel = $('coding-repo');
-          if (sel) sel.value = btn.dataset.repo;
+          const repo = btn.dataset.repo;
+          if (sel && repo) { sel.value = repo; T.selectedRepo = repo; }
+          const details = document.querySelector('#tab-coding details[data-key="coding:newjob"]');
+          if (details) { details.open = true; details.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+          renderRepos();
         }
         await refreshJobs();
       } catch (err) {
@@ -247,6 +255,15 @@ const CodingTab = (() => {
     Comp.toast('Job stopped');
   }
 
+  async function deleteJob(id) {
+    const res = await fetchJSON(`/api/coding/jobs/${encodeURIComponent(id)}/delete`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    });
+    if (res && res.error) throw new Error(res.error);
+    if (T.selected === id) T.selected = null;
+    Comp.toast('Job deleted');
+  }
+
   async function preview(mode, id) {
     const res = await fetchJSON(`/api/coding/jobs/${encodeURIComponent(id)}/preview/${mode}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
@@ -286,8 +303,9 @@ const CodingTab = (() => {
     slot.innerHTML = `<div class="coding-repo-grid">` + T.repos.map(r => {
       const cfg = r.config || {};
       const dirty = r.dirty ? '<span class="badge badge--warn">dirty</span>' : '';
-      return `<div class="coding-repo-card" data-coding-action="select-repo" data-repo="${esc(r.name)}">
-        <div class="coding-repo-name">📦 ${esc(r.name)}</div>
+      const selCls = T.selectedRepo === r.name ? ' is-repo-selected' : '';
+      return `<div class="coding-repo-card${selCls}" data-coding-action="select-repo" data-repo="${esc(r.name)}">
+        <div class="coding-repo-name">📦 ${esc(r.name)}${selCls ? ' ✓' : ''}</div>
         <div class="coding-repo-meta">${esc(cfg.type || 'repo')} · ${esc(r.current_branch)} → ${esc(r.default_branch)}</div>
         <div class="coding-repo-meta">${esc(r.origin_url || 'no origin')}</div>
         <div class="coding-actions">${dirty}
@@ -307,12 +325,16 @@ const CodingTab = (() => {
     slot.innerHTML = `<h3 class="coding-section-title">🧩 Jobs</h3>` + T.jobs.slice(0, 20).map(j => {
       const badge = Comp.badge(STATUS_BADGE[j.status] || 'muted', j.status.replace(/_/g, ' '));
       const sel = T.selected === j.id ? ' is-selected' : '';
+      const deletable = !/planning|building|testing|pushing|running/.test(j.status);
       return `<div class="coding-job-row${sel}" data-coding-action="select" data-job-id="${esc(j.id)}">
         <div class="coding-job-main">
           <span class="coding-job-id">${esc(j.id)}</span>
           <span class="coding-job-meta">${esc(j.repo)} · ${esc(j.mode)} · ${esc(j.branch)}</span>
         </div>
-        <div class="coding-actions">${badge}</div>
+        <div class="coding-actions">${badge}
+          ${deletable ? `<button class="coding-btn coding-btn--ghost" data-coding-action="delete"
+            data-job-id="${esc(j.id)}" title="Delete job">🗑</button>` : ''}
+        </div>
       </div>`;
     }).join('') + `<div class="coding-hint">tap a job to open it · auto-refreshes while open</div>`;
   }

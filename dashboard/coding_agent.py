@@ -986,6 +986,42 @@ def stop_job(job_id):
     return public_job(job)
 
 
+def delete_job(job_id):
+    """Permanently remove a finished job: stop its server if any, delete its
+    worktree if present, delete its job log, and drop it from the job store."""
+    job = _jobs.get(job_id)
+    if not job:
+        raise ValueError('unknown job')
+    if job.get('status') in ('planning', 'building', 'testing', 'pushing', 'running'):
+        raise ValueError('stop the job first (it is still working)')
+    try:
+        _stop_server(job)
+    except Exception:
+        pass
+    try:
+        _cleanup_worktree(job)
+    except Exception:
+        pass
+    try:
+        cfg = _config()
+        wt_root = Path(cfg['worktrees_root']).resolve()
+        job_dir = Path(job['directory']).resolve() if job.get('directory') else None
+        if job_dir and str(job_dir).lower().startswith(str(wt_root).lower()) and job_dir.exists():
+            _git(Path(job['repo_path']), 'worktree', 'remove', '--force', str(job_dir), timeout=60)
+    except Exception:
+        pass
+    try:
+        job_log = _job_log(job_id)
+        if job_log.exists():
+            job_log.unlink()
+    except Exception:
+        pass
+    _jobs.pop(job_id, None)
+    _pids.pop(job_id, None)
+    _save_jobs()
+    return {'ok': True}
+
+
 def prompt_job(job_id, text):
     job = _jobs.get(job_id)
     if not job:
@@ -1257,6 +1293,8 @@ def route_post(handler):
                                                    ensure_ascii=False))
             elif sub == 'stop':
                 handler._send_json(200, json.dumps(stop_job(job_id), ensure_ascii=False))
+            elif sub == 'delete':
+                handler._send_json(200, json.dumps(delete_job(job_id), ensure_ascii=False))
             elif sub == 'approve':
                 gate = (body or {}).get('gate')
                 if gate not in GATES:
