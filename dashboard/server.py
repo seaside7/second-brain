@@ -3518,7 +3518,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         elif self.path.split('?')[0] == '/api/invoice/generate':
             self._handle_post_invoice_generate()
         elif self.path == '/api/coding/jobs' or \
-                self.path.startswith('/api/coding/jobs/'):
+                self.path.startswith('/api/coding/jobs/') or \
+                self.path.startswith('/api/coding/repos/'):
             try:
                 coding_agent.route_post(self)
             except Exception as e:

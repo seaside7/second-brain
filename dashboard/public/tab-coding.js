@@ -176,6 +176,10 @@ const CodingTab = (() => {
           if (details) { details.open = true; details.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
           renderRepos();
         }
+        else if (action === 'set-type') {
+          e.stopPropagation();
+          await setRepoType(btn.dataset.repo, btn.dataset.type);
+        }
         await refreshJobs();
       } catch (err) {
         Comp.toast(`Gagal: ${err.message}`, false);
@@ -255,6 +259,21 @@ const CodingTab = (() => {
     Comp.toast('Job stopped');
   }
 
+  async function setRepoType(repo, type) {
+    const res = await fetchJSON(`/api/coding/repos/${encodeURIComponent(repo)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type }),
+    });
+    if (res && res.error) throw new Error(res.error);
+    if (res && res.repo) {
+      const i = T.repos.findIndex(x => x.name === repo);
+      if (i >= 0) T.repos[i] = res.repo;
+    }
+    Comp.toast(`${repo} flagged as ${type.toUpperCase()}`);
+    renderRepos();
+  }
+
   async function deleteJob(id) {
     const res = await fetchJSON(`/api/coding/jobs/${encodeURIComponent(id)}/delete`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
@@ -304,12 +323,21 @@ const CodingTab = (() => {
       const cfg = r.config || {};
       const dirty = r.dirty ? '<span class="badge badge--warn">dirty</span>' : '';
       const selCls = T.selectedRepo === r.name ? ' is-repo-selected' : '';
+      const type = cfg.type || 'other';
+      const isFe = type === 'fe' || type === 'frontend';
+      const isBe = type === 'be' || type === 'api' || type === 'cms' || type === 'php' || type === 'backend';
       return `<div class="coding-repo-card${selCls}" data-coding-action="select-repo" data-repo="${esc(r.name)}">
         <div class="coding-repo-name">📦 ${esc(r.name)}${selCls ? ' ✓' : ''}</div>
-        <div class="coding-repo-meta">${esc(cfg.type || 'repo')} · ${esc(r.current_branch)} → ${esc(r.default_branch)}</div>
+        <div class="coding-repo-meta">type: ${esc(type)} · ${esc(r.current_branch)} → ${esc(r.default_branch)}</div>
         <div class="coding-repo-meta">${esc(r.origin_url || 'no origin')}</div>
-        <div class="coding-actions">${dirty}
-          ${r.config && r.config.lintCommand ? `<span class="badge">lint ✓</span>` : ''}
+        <div class="coding-actions">
+          <span class="coding-type-label">Type:</span>
+          <button class="coding-type-btn${isFe ? ' is-active' : ''}" data-coding-action="set-type"
+            data-repo="${esc(r.name)}" data-type="fe">FE</button>
+          <button class="coding-type-btn${isBe ? ' is-active' : ''}" data-coding-action="set-type"
+            data-repo="${esc(r.name)}" data-type="be">BE</button>
+          <span class="coding-type-muted">${dirty ? ' · dirty' : ''}</span>
+          <span class="coding-type-muted">${cfg.previewEnabled ? ' · preview ✓' : ' · no preview'}</span>
         </div>
       </div>`;
     }).join('') + `</div>`;
@@ -405,7 +433,9 @@ const CodingTab = (() => {
         data-job-id="${esc(job.id)}" data-gate="push">🚀 Approve push to ${esc(job.branch)}</button>`);
     }
 
-    const previewBlock = hasWorktree ? `
+    const repoInfo = T.repos.find(x => x.name === job.repo);
+    const previewAllowed = repoInfo && repoInfo.config ? repoInfo.config.previewEnabled !== false : true;
+    const previewBlock = hasWorktree && previewAllowed ? `
       <div class="coding-actions">
         ${job.preview && job.preview.active
           ? `<button class="coding-btn" data-coding-action="preview-stop" data-job-id="${esc(job.id)}">🛑 Stop preview</button>

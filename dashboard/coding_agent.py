@@ -45,6 +45,9 @@ GIT_EMAIL = os.environ.get('CODING_GIT_EMAIL', 'said@catalyze.id')
 NEVER_BRANCHES = {'main', 'master', 'develop'}
 GATES = ('build', 'commit', 'push')
 
+# repo types that have no browser preview (backend/api/cms/php)
+BACKEND_TYPES = {'be', 'api', 'backend', 'cms', 'php', 'worker'}
+
 MAX_FILES = 10
 MAX_FILE_BYTES = 2 * 1024 * 1024
 
@@ -183,9 +186,56 @@ def _load_repo_config(repo_path):
         'port': int(cfg['port']) if cfg.get('port') else None,
         'previewEnabled': bool(cfg.get('previewEnabled', True)),
     }
+    if out['type'].lower() in BACKEND_TYPES:
+        out['previewEnabled'] = False
     if not out['devCommand'] and out['startCommand']:
         out['devCommand'] = out['startCommand']
     return out
+
+
+def _set_repo_type(name, rtype):
+    """Persist the repo's fe/be type into <repo>/.coding.json and gitignore that
+    file so it never marks the repo dirty or gets committed. rtype is one of:
+    fe, be, cms, api, php, other, auto (auto = clear override, re-detect)."""
+    info = _find_repo(name)
+    if not info:
+        raise ValueError('repo not found')
+    repo_path = Path(info['path'])
+    coding_json = repo_path / '.coding.json'
+    cfg = {}
+    if coding_json.exists():
+        try:
+            cfg = json.loads(coding_json.read_text(encoding='utf-8')) or {}
+        except Exception:
+            cfg = {}
+    if rtype == 'auto' or rtype in ('fe', 'be', 'cms', 'api', 'php', 'other'):
+        if rtype == 'auto':
+            cfg.pop('type', None)
+        else:
+            cfg['type'] = rtype
+    else:
+        raise ValueError("type must be one of: fe, be, cms, api, php, other, auto")
+    coding_json.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    _ignore_coding_json(repo_path)
+    return _repo_info(info['path'])
+
+
+def _ignore_coding_json(repo_path):
+    """Ensure .coding.json is gitignored in the repo so our agent metadata never
+    shows up as dirty changes or gets committed."""
+    gitignore = repo_path / '.gitignore'
+    lines = []
+    if gitignore.exists():
+        try:
+            lines = gitignore.read_text(encoding='utf-8').splitlines()
+        except Exception:
+            lines = []
+    if '.coding.json' not in [l.strip() for l in lines]:
+        lines.append('.coding.json')
+        try:
+            gitignore.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+        except Exception:
+            pass
 
 
 def _detect_type(repo_path, has_pkg, scripts, deps):
@@ -779,6 +829,8 @@ def _start_preview(job):
         return job['preview']
     cfg = _config()
     repo_cfg = _load_repo_config(Path(job['repo_path']))
+    if repo_cfg.get('type','').lower() in BACKEND_TYPES or not repo_cfg.get('previewEnabled', True):
+        raise ValueError('preview is not available for this repo type (backend/api/cms)')
     cmd = repo_cfg.get('devCommand') or repo_cfg.get('startCommand')
     if not cmd:
         raise ValueError('no dev/start command configured for this repo')
@@ -1274,6 +1326,16 @@ def route_get(handler):
 def route_post(handler):
     path = handler.path.split('?', 1)[0]
     preview_stop = False
+    if path.startswith('/api/coding/repos/'):
+        name = urllib.parse.unquote(path[len('/api/coding/repos/'):])
+        body = _read_json(handler)
+        try:
+            rtype = (body or {}).get('type', '')
+            info = _set_repo_type(name, rtype)
+            handler._send_json(200, json.dumps({'ok': True, 'repo': info}, ensure_ascii=False))
+        except ValueError as e:
+            handler._send_json(400, json.dumps({'error': str(e)}))
+        return True
     if path == '/api/coding/jobs':
         body = _read_json(handler)
         try:
