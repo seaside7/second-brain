@@ -353,7 +353,7 @@ const CodingTab = (() => {
     slot.innerHTML = `<h3 class="coding-section-title">🧩 Jobs</h3>` + T.jobs.slice(0, 20).map(j => {
       const badge = Comp.badge(STATUS_BADGE[j.status] || 'muted', j.status.replace(/_/g, ' '));
       const sel = T.selected === j.id ? ' is-selected' : '';
-      const deletable = !/planning|building|testing|pushing|running/.test(j.status);
+      const deletable = !['planning','building','testing','awaiting_build_approval','awaiting_commit_approval','awaiting_push_approval','pushing','running'].includes(j.status);
       return `<div class="coding-job-row${sel}" data-coding-action="select" data-job-id="${esc(j.id)}">
         <div class="coding-job-main">
           <span class="coding-job-id">${esc(j.id)}</span>
