@@ -3211,3 +3211,7 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
 .coding-files-list { margin-top: var(--sp-1); display: flex; flex-direction: column; gap: 2px; }
 .coding-repo-card { cursor: pointer; }
 .coding-repo-card:hover { transform: translateY(-1px); box-shadow: 0 1px 6px rgba(0,0,0,.08); }
+.coding-progress { font-size: var(--fs-xs); color: var(--text-accent); font-weight: 600;
+  padding: 4px 0; }
+.coding-live { border-left: 3px solid var(--text-accent); opacity: .95; }
+.coding-live .role { color: var(--text-accent); }

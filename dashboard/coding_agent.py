@@ -1355,6 +1355,10 @@ def _repo_refresh_messages(repo):
             msgs.append({'role': role, 'text': text})
     s['messages'] = msgs[-60:]
     s['updated_at'] = _now_iso()
+    if not s.get('in_flight'):
+        # idle: no streaming overlay should remain
+        s.pop('live', None)
+        s.pop('progress', None)
 
 
 def _repo_sse_loop(repo, base, auth):
@@ -1378,6 +1382,7 @@ def _repo_sse_loop(repo, base, auth):
                         except Exception:
                             continue
                         ev = str(data.get('type') or '')
+                        props = data.get('properties') or data.get('propertiesHTML') or {}
                         if 'question' in ev.lower() or 'permission' in ev.lower():
                             pid = _find_permission_id(data)
                             text = json.dumps(data, ensure_ascii=False)[:500]
@@ -1385,6 +1390,12 @@ def _repo_sse_loop(repo, base, auth):
                             if pid and not any(q.get('id') == pid for q in questions):
                                 questions.append({'id': pid, 'event': ev, 'text': text,
                                                   'answered': False, 'asked_at': _now_iso()})
+                        elif ev == 'message.part.updated':
+                            _track_live_part(repo, props)
+                        elif ev == 'message.updated':
+                            _track_live_message(repo, props)
+                        elif ev == 'session.status':
+                            _track_session_status(repo, props)
         except requests.exceptions.ReadTimeout:
             continue
         except Exception:
@@ -1392,6 +1403,64 @@ def _repo_sse_loop(repo, base, auth):
                 break
             time.sleep(5)
             continue
+
+
+def _track_live_part(repo, props):
+    """Capture in-progress assistant reply + current tool/step for live UX overlay."""
+    s = _sessions.get(repo)
+    if not s:
+        return
+    part = (props or {}).get('part') or {}
+    state = part.get('state') or 'streaming'
+    ptype = part.get('type') or ''
+    if ptype == 'text':
+        if state == 'streaming':
+            s['live'] = part.get('text') or ''
+        elif state == 'completed' and s.get('live') is not None:
+            s.pop('live', None)
+        return
+    # non-text parts (tool calls, reasoning) feed the progress line
+    meta = (part.get('metadata') or {}).get('step') or {}
+    cand = (meta.get('log') or '').strip()
+    if not cand and ptype == 'tool':
+        tool = part.get('tool') or ''
+        label = {'bash': 'running a command…', 'read': 'reading a file…',
+                 'edit': 'editing a file…', 'write': 'writing a file…',
+                 'glob': 'searching files…', 'grep': 'searching code…',
+                 'todowrite': 'updating the plan…'}.get(
+            tool if not isinstance(tool, str) else tool, f'using {tool}…')
+        cand = label
+    if cand and len(cand) < 120 and not cand.startswith('{'):
+        # surface even while a text part streams, so the user sees tool -> text flow
+        s['progress'] = cand
+    elif state == 'completed':
+        s.pop('progress', None)
+
+
+def _track_live_message(repo, props):
+    """Use message.updated token/finish state to refine the progress line."""
+    s = _sessions.get(repo)
+    if not s:
+        return
+    info = (props or {}).get('info') or {}
+    tokens = (info.get('tokens') or {}).get('total') or 0
+    finish = info.get('finish') or ''
+    if finish == 'stop' and tokens:
+        s['last_tokens'] = tokens
+        if not s.get('live'):
+            s.pop('progress', None)
+
+
+def _track_session_status(repo, props):
+    """Flip busy/live overlay based on opencode's authoritative running state."""
+    s = _sessions.get(repo)
+    if not s:
+        return
+    status = (props or {}).get('status') or ''
+    if status == 'idle':
+        s.pop('live', None)
+        s.pop('progress', None)
+        s['sse_status'] = 'idle'
 
 
 def _repo_start_sse(repo):
@@ -1507,6 +1576,8 @@ def repo_session_view(name):
             'session_id': s.get('session_id'),
             'active': bool(s.get('active')),
             'busy': bool(busy),
+            'live': s.get('live') or '',
+            'progress': s.get('progress') or '',
             'messages': s.get('messages', []),
             'questions': [q for q in s.get('questions', []) if not q.get('answered')],
             'repo_info': info}
@@ -1541,6 +1612,8 @@ def _repo_send_worker(name, text, mode):
     finally:
         s['in_flight'] = False
         s['in_flight_at'] = 0
+        s.pop('live', None)
+        s.pop('progress', None)
         _save_sessions()
 
 

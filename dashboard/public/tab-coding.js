@@ -261,11 +261,17 @@ const CodingTab = (() => {
     // messages (stream gets updated in place; the textarea is NEVER touched here)
     const msgs = (s.messages || []);
     const nearBottom = stream.scrollTop + stream.clientHeight >= stream.scrollHeight - 40;
+    const progressLine = s.progress
+      ? `<div class="coding-progress">⚙️ ${esc(s.progress)}</div>` : '';
+    const liveBlock = s.live
+      ? `<div class="coding-msg assistant coding-live"><div class="role">agent · typing…</div>
+         <div class="body">${U.mdToHtml(s.live)}</div></div>` : '';
     stream.innerHTML = msgs.map(m => `
       <div class="coding-msg ${esc(m.role)}">
         <div class="role">${m.role === 'user' ? 'you' : 'agent'}</div>
         <div class="body">${U.mdToHtml(m.text)}</div>
-      </div>`).join('') || '<div class="coding-hint">no messages yet — type below to start talking to this repo</div>';
+      </div>`).join('') + progressLine + liveBlock
+      || '<div class="coding-hint">no messages yet — type below to start talking to this repo</div>';
     T.lastMsgCount = msgs.length;
     if (nearBottom || T.pending) stream.scrollTop = stream.scrollHeight;
   }
