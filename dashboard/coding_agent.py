@@ -61,6 +61,13 @@ _pids = {}            # job_id -> process object (opencode serve)
 _sse_threads = {}     # job_id -> SSE consumer thread
 _running_threads = {} # job_id -> worker thread
 
+# persistent per-repo opencode sessions (the "terminal" model)
+REPO_SESSION_STATE = STATE_DIR / 'coding_sessions.json'
+_sessions = {}        # repo_name -> session record
+_sessions_lock = threading.Lock()
+_rep_pids = {}        # repo_name -> process object
+_rep_sse = {}         # repo_name -> SSE thread
+
 
 # ── small infra ────────────────────────────────────────────────────────
 def _log(msg):
@@ -1207,6 +1214,7 @@ def sweep():
             except Exception:
                 continue
         _save_jobs()
+    _repo_sweep()
 
 
 def _sweep_loop():
@@ -1226,10 +1234,15 @@ class _ProcStub:
 
 def start_background():
     _loads_jobs()
+    _load_sessions()
     for job in _jobs.values():
         p = job.get('opencode', {})
         if p.get('pid'):
             _pids[job['id']] = _ProcStub(p['pid'])  # sweep can reap stale pids across restarts
+    # restore repo-session pid stubs so a restart can reap stale repo servers
+    for name, s in _sessions.items():
+        if s.get('pid'):
+            _rep_pids[name] = _ProcStub(s['pid'])
     threading.Thread(target=_sweep_loop, daemon=True).start()
 
 
@@ -1262,6 +1275,340 @@ def get_job_log(job_id):
     return {'job': job_id, 'tail': tail[-60:]}
 
 
+# ── per-repo persistent "terminal" sessions ────────────────────────────
+# One long-lived opencode server + session per repository, rooted in the
+# real checkout. Sessions persist in opencode's SQLite store, so a session_id
+# resumes full context across dashboard restarts.
+REPO_SESSION_TTL = float(os.environ.get('CODING_REPO_SESSION_TTL_HOURS', '24'))
+
+
+def _save_sessions():
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        slim = {}
+        for name, s in _sessions.items():
+            slim[name] = {k: s[k] for k in
+                          ('session_id', 'mode', 'created_at', 'touched_at')
+                          if k in s}
+        REPO_SESSION_STATE.write_text(json.dumps(slim, ensure_ascii=False, indent=2),
+                                      encoding='utf-8')
+    except Exception as e:
+        _log(f"failed to save coding sessions: {e}")
+
+
+def _load_sessions():
+    global _sessions
+    try:
+        _sessions = json.loads(REPO_SESSION_STATE.read_text(encoding='utf-8'))
+        for k in list(_sessions):
+            if not isinstance(_sessions.get(k), dict):
+                _sessions.pop(k, None)
+    except FileNotFoundError:
+        _sessions = {}
+    except Exception as e:
+        _log(f"failed to load coding sessions: {e}")
+        _sessions = {}
+
+
+def _repo_session(name):
+    return _sessions.get(name) or {}
+
+
+def _repo_open_oc_base(repo):
+    s = _sessions.get(repo) or {}
+    return f"http://127.0.0.1:{s.get('port')}"
+
+
+def _repo_auth(repo):
+    s = _sessions.get(repo) or {}
+    return (s.get('username') or 'opencode', s.get('password') or 'opencode')
+
+
+def _repo_oc(repo, method, path, json_body=None, timeout=(15, 120)):
+    return requests.request(method, _repo_open_oc_base(repo) + path,
+                            auth=_repo_auth(repo), json=json_body, timeout=timeout)
+
+
+def _repo_server_proc(repo):
+    return _rep_pids.get(repo)
+
+
+def _repo_refresh_messages(repo):
+    """Pull the persistent session's message history into the session record."""
+    s = _sessions.get(repo)
+    if not s or not s.get('session_id') or not _repo_server_proc(repo):
+        return
+    try:
+        r = _repo_oc(repo, 'GET', f"/session/{s['session_id']}/message?limit=100", timeout=30)
+        if not r.ok:
+            return
+        data = r.json() or []
+    except Exception:
+        return
+    msgs = []
+    for m in data:
+        info = m.get('info') or {}
+        role = info.get('role')
+        text = _extract_text(m.get('parts'))
+        if role and text:
+            msgs.append({'role': role, 'text': text})
+    s['messages'] = msgs[-60:]
+    s['updated_at'] = _now_iso()
+
+
+def _repo_sse_loop(repo, base, auth):
+    while _repo_server_proc(repo):
+        try:
+            with requests.get(base + '/event', auth=auth, stream=True,
+                              timeout=(10, 60)) as resp:
+                if not resp.ok:
+                    time.sleep(3)
+                    continue
+                for raw in resp.iter_lines(decode_unicode=True):
+                    if not raw:
+                        continue
+                    line = raw.strip()
+                    if line.startswith('data:'):
+                        payload = line[len('data:'):].strip()
+                        if not payload:
+                            continue
+                        try:
+                            data = json.loads(payload) if payload else {}
+                        except Exception:
+                            continue
+                        ev = str(data.get('type') or '')
+                        if 'question' in ev.lower() or 'permission' in ev.lower():
+                            pid = _find_permission_id(data)
+                            text = json.dumps(data, ensure_ascii=False)[:500]
+                            questions = _sessions[repo].setdefault('questions', [])
+                            if pid and not any(q.get('id') == pid for q in questions):
+                                questions.append({'id': pid, 'event': ev, 'text': text,
+                                                  'answered': False, 'asked_at': _now_iso()})
+        except requests.exceptions.ReadTimeout:
+            continue
+        except Exception:
+            if not _repo_server_proc(repo):
+                break
+            time.sleep(5)
+            continue
+
+
+def _repo_start_sse(repo):
+    if _rep_sse.get(repo) and _rep_sse[repo].is_alive():
+        return
+    t = threading.Thread(target=_repo_sse_loop,
+                         args=(repo, _repo_open_oc_base(repo), _repo_auth(repo)),
+                         daemon=True)
+    t.start()
+    _rep_sse[repo] = t
+
+
+def _repo_kill_server(repo):
+    proc = _repo_server_proc(repo)
+    if proc:
+        _kill_proc(proc.pid)
+    _rep_pids.pop(repo, None)
+    if _sessions.get(repo):
+        _sessions[repo]['active'] = False
+        _sessions[repo]['pid'] = None
+
+
+def _ensure_repo_session(name):
+    """Ensure a live opencode server + persistent session exist for `repo`.
+    Roots the server in the REAL checkout; reuses the stored session_id."""
+    info = _find_repo(name)
+    if not info:
+        raise ValueError('repo not found')
+    repo_path = Path(info['path'])
+    cfg = _config()
+
+    with _sessions_lock:
+        s = _sessions.setdefault(name, {
+            'mode': 'build', 'active': False, 'messages': [], 'questions': [],
+            'created_at': _now_iso(), 'touched_at': _now_iso(),
+        })
+        s['touched_at'] = _now_iso()
+
+    # reuse a live server
+    if s.get('active') and s.get('port') and _repo_server_proc(name):
+        if not s.get('session_id'):
+            raise RuntimeError('session id missing from live session')
+        return s
+
+    # spawn a fresh server rooted in the real checkout
+    port = _alloc_port('repo-' + name, cfg)
+    password = secrets.token_urlsafe(18)
+    env = os.environ.copy()
+    env['OPENCODE_SERVER_PASSWORD'] = password
+    env['OPENCODE_SERVER_USERNAME'] = cfg['opencode_username']
+    log_fh = open(_job_log(f'repo-{name}'), 'ab')
+    try:
+        proc = subprocess.Popen(
+            [cfg['opencode_bin'], 'serve', '--hostname', '127.0.0.1', '--port', str(port)],
+            cwd=str(repo_path), env=env, stdout=log_fh, stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL, start_new_session=True)
+    finally:
+        log_fh.close()
+    _rep_pids[name] = proc
+
+    base = f"http://127.0.0.1:{port}"
+    auth = (cfg['opencode_username'], password)
+    deadline = time.time() + 90
+    healthy = False
+    while time.time() < deadline:
+        if proc.poll() is not None:
+            break
+        try:
+            r = requests.get(base + '/global/health', auth=auth, timeout=3)
+            if r.ok and r.json().get('healthy'):
+                healthy = True
+                break
+        except Exception:
+            pass
+        time.sleep(1)
+    if not healthy:
+        _kill_proc(proc.pid)
+        _rep_pids.pop(name, None)
+        raise RuntimeError('opencode serve did not become healthy for repo ' + name)
+
+    s['port'] = port
+    s['password'] = password
+    s['username'] = cfg['opencode_username']
+    s['pid'] = proc.pid
+    s['active'] = True
+
+    # reuse the memorized session id, else create one
+    if not s.get('session_id'):
+        try:
+            r = requests.post(base + '/session', auth=auth,
+                              json={'title': f"repo {name}"}, timeout=30)
+            r.raise_for_status()
+            s['session_id'] = r.json().get('id')
+        except Exception as e:
+            _repo_kill_server(name)
+            raise RuntimeError(f"failed to create opencode session for {name}: {e}")
+        _save_sessions()
+
+    _repo_start_sse(name)
+    _repo_refresh_messages(name)
+    return s
+
+
+def repo_session_view(name):
+    """Public view of a repo's persistent session (no secrets)."""
+    _ensure_repo_session(name)
+    s = _sessions[name]
+    info = _find_repo(name) or {}
+    return {'repo': name,
+            'mode': s.get('mode', 'build'),
+            'session_id': s.get('session_id'),
+            'active': bool(s.get('active')),
+            'messages': s.get('messages', []),
+            'questions': [q for q in s.get('questions', []) if not q.get('answered')],
+            'repo_info': info}
+
+
+def repo_message(name, text, mode=None):
+    if not text or not text.strip():
+        raise ValueError('empty prompt')
+    _ensure_repo_session(name)
+    s = _sessions[name]
+    if mode and mode in ('plan', 'build'):
+        s['mode'] = mode
+        _save_sessions()
+    mode = s['mode']
+    system = PLAN_SYSTEM if mode == 'plan' else BUILD_SYSTEM
+    agent = 'plan' if mode == 'plan' else 'build'
+    r = _repo_oc(name, 'POST', f"/session/{s['session_id']}/message",
+                  json_body={'system': system, 'agent': agent,
+                             'parts': [{'type': 'text', 'text': text}]},
+                  timeout=(15, 3600))
+    if r.status_code >= 400:
+        raise RuntimeError(f"opencode prompt failed ({r.status_code}): {r.text[:400]}")
+    _repo_refresh_messages(name)
+    return repo_session_view(name)
+
+
+def repo_set_mode(name, mode):
+    if mode not in ('plan', 'build'):
+        raise ValueError("mode must be 'plan' or 'build'")
+    s = _sessions.setdefault(name, {'mode': 'build', 'active': False,
+                                    'messages': [], 'questions': [],
+                                    'created_at': _now_iso(), 'touched_at': _now_iso()})
+    s['mode'] = mode
+    s['touched_at'] = _now_iso()
+    _save_sessions()
+    return repo_session_view(name)
+
+
+def repo_answer_permission(name, permission_id, response):
+    if response not in ('allowed', 'denied'):
+        raise ValueError("response must be 'allowed' or 'denied'")
+    _ensure_repo_session(name)
+    s = _sessions[name]
+    sid = s.get('session_id')
+    if not sid:
+        raise ValueError('no live session')
+    r = _repo_oc(name, 'POST', f'/session/{sid}/permissions/{permission_id}',
+                 json_body={'response': response, 'remember': False}, timeout=30)
+    if r.status_code >= 400:
+        raise RuntimeError(f"permission reply failed ({r.status_code}): {r.text[:300]}")
+    for q in s.get('questions', []):
+        if q.get('id') == permission_id:
+            q['answered'] = True
+    _repo_refresh_messages(name)
+    return {'ok': True}
+
+
+def repo_reset(name):
+    """Forget this repo's memorized session and start a fresh one."""
+    _repo_kill_server(name)
+    s = _sessions.get(name)
+    if s:
+        s['session_id'] = None
+        s['messages'] = []
+        s['questions'] = []
+        s['mode'] = 'build'
+        s['created_at'] = _now_iso()
+    _save_sessions()
+    return repo_session_view(name)
+
+
+def repo_stop(name):
+    _repo_kill_server(name)
+    _save_sessions()
+    return {'ok': True}
+
+
+def repo_diff(name):
+    info = _find_repo(name)
+    if not info:
+        raise ValueError('repo not found')
+    r = _git(info['path'], 'diff', 'HEAD')
+    tracked = (r.stdout or '') if r.returncode == 0 else ''
+    files = []
+    st = _git(info['path'], 'status', '--short')
+    if st.returncode == 0:
+        files = [{'flag': l[:2].strip() or '??', 'path': l[3:].strip()}
+                 for l in st.stdout.splitlines() if l.strip()]
+    return {'diff': tracked[:80000], 'files': files}
+
+
+def _repo_sweep():
+    now = time.time()
+    ttl = float(os.environ.get('CODING_REPO_SESSION_TTL_HOURS', '24')) * 3600
+    with _sessions_lock:
+        for name, s in list(_sessions.items()):
+            if not s.get('active'):
+                continue
+            try:
+                touched = datetime.fromisoformat(s.get('touched_at') or s.get('created_at')).timestamp()
+            except Exception:
+                touched = 0
+            if now - touched > ttl:
+                _repo_kill_server(name)
+
+
 # ── HTTP routing hook (called from server.py handlers) ─────────────────
 def route_get(handler):
     path = handler.path.split('?', 1)[0]
@@ -1269,12 +1616,24 @@ def route_get(handler):
         handler._send_json(200, json.dumps(_scan_repos(), ensure_ascii=False))
         return True
     if path.startswith('/api/coding/repos/'):
-        name = urllib.parse.unquote(path[len('/api/coding/repos/'):])
-        info = _find_repo(name)
-        if not info:
-            handler._send_json(404, json.dumps({'error': 'repo not found'}))
-        else:
-            handler._send_json(200, json.dumps(info, ensure_ascii=False))
+        parts = urllib.parse.unquote(path[len('/api/coding/repos/'):]).split('/')
+        name = parts[0]
+        sub = parts[1] if len(parts) > 1 else None
+        try:
+            if sub is None:
+                info = _find_repo(name)
+                if not info:
+                    handler._send_json(404, json.dumps({'error': 'repo not found'}))
+                else:
+                    handler._send_json(200, json.dumps(info, ensure_ascii=False))
+            elif sub == 'session':
+                handler._send_json(200, json.dumps(repo_session_view(name), ensure_ascii=False))
+            elif sub == 'diff':
+                handler._send_json(200, json.dumps(repo_diff(name), ensure_ascii=False))
+            else:
+                handler._send_json(404, json.dumps({'error': 'not found'}))
+        except ValueError as e:
+            handler._send_json(400, json.dumps({'error': str(e)}))
         return True
     if path == '/api/coding/jobs':
         handler._send_json(200, json.dumps({'jobs': list_jobs()}, ensure_ascii=False))
@@ -1346,14 +1705,40 @@ def route_post(handler):
     path = handler.path.split('?', 1)[0]
     preview_stop = False
     if path.startswith('/api/coding/repos/'):
-        name = urllib.parse.unquote(path[len('/api/coding/repos/'):])
+        rest = urllib.parse.unquote(path[len('/api/coding/repos/'):]).split('/')
+        name = rest[0]
         body = _read_json(handler)
+        sub = rest[1] if len(rest) > 1 else None
+        subsub = rest[2] if len(rest) > 2 else None
         try:
-            rtype = (body or {}).get('type', '')
-            info = _set_repo_type(name, rtype)
-            handler._send_json(200, json.dumps({'ok': True, 'repo': info}, ensure_ascii=False))
+            if sub is None:
+                rtype = (body or {}).get('type', '')
+                info = _set_repo_type(name, rtype)
+                handler._send_json(200, json.dumps({'ok': True, 'repo': info}, ensure_ascii=False))
+            elif sub == 'session':
+                if subsub == 'message':
+                    handler._send_json(200, json.dumps(
+                        repo_message(name, (body or {}).get('text'),
+                                     (body or {}).get('mode')), ensure_ascii=False))
+                elif subsub == 'mode':
+                    handler._send_json(200, json.dumps(
+                        repo_set_mode(name, (body or {}).get('mode')), ensure_ascii=False))
+                elif subsub == 'reset':
+                    handler._send_json(200, json.dumps(repo_reset(name), ensure_ascii=False))
+                elif subsub == 'stop':
+                    handler._send_json(200, json.dumps(repo_stop(name), ensure_ascii=False))
+                else:
+                    handler._send_json(404, json.dumps({'error': 'not found'}))
+            elif sub == 'permission':
+                handler._send_json(200, json.dumps(
+                    repo_answer_permission(name, (body or {}).get('permission_id'),
+                                           (body or {}).get('response')), ensure_ascii=False))
+            else:
+                handler._send_json(404, json.dumps({'error': 'not found'}))
         except ValueError as e:
             handler._send_json(400, json.dumps({'error': str(e)}))
+        except RuntimeError as e:
+            handler._send_json(409, json.dumps({'error': str(e)}))
         return True
     if path == '/api/coding/jobs':
         body = _read_json(handler)
