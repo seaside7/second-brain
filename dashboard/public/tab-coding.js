@@ -32,7 +32,7 @@ const CodingTab = (() => {
     building: 'warn', testing: 'warn', await_commit_approval: 'warn',
     awaiting_commit_approval: 'warn', testing_failed: 'critical',
     awaiting_push_approval: 'serious', pushed: 'ok', failed: 'critical',
-    cancelled: 'muted',
+    cancelled: 'muted', done: 'good',
   };
 
   async function load() {
@@ -54,7 +54,7 @@ const CodingTab = (() => {
     T.interval = setInterval(() => {
       const panel = $('tab-coding');
       if (!panel || !panel.classList.contains('is-active') || document.hidden) { stopPoll(); return; }
-      const hasActive = T.jobs.some(j => /planning|building|testing|pushing|running/.test(j.status));
+      const hasActive = T.jobs.some(j => ['planning','building','testing','awaiting_build_approval','awaiting_commit_approval','awaiting_push_approval','pushing','running'].includes(j.status));
       if (!hasActive) { stopPoll(); return; }
       refreshJobs();
     }, 10000);

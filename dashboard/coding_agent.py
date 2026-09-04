@@ -703,7 +703,26 @@ def _build_phase(job):
     _prompt(job, text, system=BUILD_SYSTEM, agent='build')
     job['status'] = 'testing'
     _refresh_jobs_state(job)
+    # A read-only task (e.g. "pull latest", "check X") produces no diff. Treat it
+    # as done: no install/lint/build (they'd fail on an empty worktree), no
+    # commit/push (nothing to commit). The agent's answer in the conversation
+    # already delivered the result.
+    if not _has_changes(job.get('directory')):
+        job['status'] = 'done'
+        job['completed_at'] = _now_iso()
+        _append_job_line(job, 'no code changes from this task - marking done (nothing to commit/push)')
+        _stop_server(job)
+        return
     _run_verification(job)
+
+
+def _has_changes(dir_):
+    """True if the git worktree at dir_ has any staged/unstaged/untracked change
+    relative to its checkout (i.e. the agent actually modified files)."""
+    if not dir_ or not Path(dir_).exists():
+        return False
+    r = _git(dir_, 'status', '--porcelain')
+    return bool((r.stdout or '').strip())
 
 
 def _approve_build(job):
