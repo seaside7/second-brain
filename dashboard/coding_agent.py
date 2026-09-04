@@ -67,6 +67,7 @@ _sessions = {}        # repo_name -> session record
 _sessions_lock = threading.Lock()
 _rep_pids = {}        # repo_name -> process object
 _rep_sse = {}         # repo_name -> SSE thread
+_rep_threads = {}     # repo_name -> worker thread (in-flight prompt)
 
 
 # ── small infra ────────────────────────────────────────────────────────
@@ -1499,13 +1500,48 @@ def repo_session_view(name):
     _ensure_repo_session(name)
     s = _sessions[name]
     info = _find_repo(name) or {}
+    busy = (s.get('in_flight') and
+            time.time() - (s.get('in_flight_at') or 0) < 3600) or False
     return {'repo': name,
             'mode': s.get('mode', 'build'),
             'session_id': s.get('session_id'),
             'active': bool(s.get('active')),
+            'busy': bool(busy),
             'messages': s.get('messages', []),
             'questions': [q for q in s.get('questions', []) if not q.get('answered')],
             'repo_info': info}
+
+
+def _repo_send_worker(name, text, mode):
+    """Background: POST the prompt to opencode, refresh messages, clear busy."""
+    s = _sessions.get(name)
+    if not s:
+        return
+    try:
+        sid = s.get('session_id')
+        if not sid:
+            return
+        if mode and mode in ('plan', 'build') and s.get('mode') != mode:
+            s['mode'] = mode
+            _save_sessions()
+        mode = s.get('mode', 'build')
+        system = PLAN_SYSTEM if mode == 'plan' else BUILD_SYSTEM
+        agent = 'plan' if mode == 'plan' else 'build'
+        r = _repo_oc(name, 'POST', f"/session/{sid}/message",
+                     json_body={'system': system, 'agent': agent,
+                                'parts': [{'type': 'text', 'text': text}]},
+                     timeout=(15, 3600))
+        if r.status_code >= 400:
+            s['last_error'] = f"opencode prompt failed ({r.status_code}): {r.text[:200]}"
+        else:
+            s['last_error'] = None
+            _repo_refresh_messages(name)
+    except Exception as e:
+        s['last_error'] = str(e)
+    finally:
+        s['in_flight'] = False
+        s['in_flight_at'] = 0
+        _save_sessions()
 
 
 def repo_message(name, text, mode=None):
@@ -1513,19 +1549,16 @@ def repo_message(name, text, mode=None):
         raise ValueError('empty prompt')
     _ensure_repo_session(name)
     s = _sessions[name]
-    if mode and mode in ('plan', 'build'):
-        s['mode'] = mode
-        _save_sessions()
-    mode = s['mode']
-    system = PLAN_SYSTEM if mode == 'plan' else BUILD_SYSTEM
-    agent = 'plan' if mode == 'plan' else 'build'
-    r = _repo_oc(name, 'POST', f"/session/{s['session_id']}/message",
-                  json_body={'system': system, 'agent': agent,
-                             'parts': [{'type': 'text', 'text': text}]},
-                  timeout=(15, 3600))
-    if r.status_code >= 400:
-        raise RuntimeError(f"opencode prompt failed ({r.status_code}): {r.text[:400]}")
-    _repo_refresh_messages(name)
+    # don't stack two prompts on the same repo session
+    if s.get('in_flight'):
+        raise RuntimeError('repo is already working on a prompt - wait for it to finish')
+    s['in_flight'] = True
+    s['in_flight_at'] = time.time()
+    s['last_error'] = None
+    _save_sessions()
+    t = threading.Thread(target=_repo_send_worker, args=(name, text, mode), daemon=True)
+    t.start()
+    _rep_threads[name] = t
     return repo_session_view(name)
 
 
@@ -1569,6 +1602,9 @@ def repo_reset(name):
         s['messages'] = []
         s['questions'] = []
         s['mode'] = 'build'
+        s['in_flight'] = False
+        s['in_flight_at'] = 0
+        s['last_error'] = None
         s['created_at'] = _now_iso()
     _save_sessions()
     return repo_session_view(name)
@@ -1576,6 +1612,10 @@ def repo_reset(name):
 
 def repo_stop(name):
     _repo_kill_server(name)
+    s = _sessions.get(name)
+    if s:
+        s['in_flight'] = False
+        s['in_flight_at'] = 0
     _save_sessions()
     return {'ok': True}
 
