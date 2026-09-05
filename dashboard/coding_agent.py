@@ -1808,7 +1808,10 @@ def repo_preview_start(name):
     env = os.environ.copy()
     env['PATH'] = os.path.join(info['path'], 'node_modules', '.bin') + os.pathsep + env['PATH']
     env['PORT'] = str(port)
+    # bind loopback-only: Next uses HOSTNAME (Vite/etc. use HOST); both set so
+    # the preview is never exposed on a public interface even if a port is open.
     env['HOST'] = '127.0.0.1'
+    env['HOSTNAME'] = '127.0.0.1'
     try:
         _PREVIEW_LOG.mkdir(parents=True, exist_ok=True)
     except Exception:
