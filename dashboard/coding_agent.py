@@ -1810,6 +1810,15 @@ def repo_preview_start(name):
         port = pv['port']
     if port is None:
         port = _free_port_in_range(_config(), prefer=cfg.get('port'))
+    # if another repo's preview owns this port, stop it first so the new
+    # dev server can bind (same dev port across projects is the common case).
+    for other in list(_sessions.keys()):
+        if other == name:
+            continue
+        opv = _sessions.get(other, {}).get('preview') or {}
+        if opv.get('active') and opv.get('port') == port:
+            _log(f"preview port {port}: stopping existing preview for {other} before starting {name}")
+            repo_preview_stop(other)
     # PATH so bare binaries (next, vite, tsx) resolve without `npm run`
     env = os.environ.copy()
     env['PATH'] = os.path.join(info['path'], 'node_modules', '.bin') + os.pathsep + env['PATH']
