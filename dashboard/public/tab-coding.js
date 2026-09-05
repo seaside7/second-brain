@@ -266,7 +266,7 @@ const CodingTab = (() => {
       if (pv.active) {
         pvBar.innerHTML = `<div class="coding-preview-bar">
           <span class="badge badge--good">● preview on :${esc(pv.port)}</span>
-          <a class="coding-link" href="${esc(pv.url)}" target="_blank">${esc(pv.url)}</a>
+          <a class="coding-link" href="${esc(pv.direct_url || pv.url)}" target="_blank">${esc(pv.direct_url || pv.url)}</a>
           <button class="coding-btn coding-btn--ghost" data-coding-action="preview-stop">■ Stop</button>
         </div>`;
       } else {

@@ -1730,10 +1730,16 @@ def _preview_view(name, pv):
     if pid and active and pv.get('proc') and pv['proc'].poll() is not None:
         active = False
         pv['active'] = False
+    public_host = os.environ.get('CODING_PREVIEW_PUBLIC_HOST', '').rstrip('/')
+    url = f"/api/coding/repos/{urllib.parse.quote(name)}/preview/" if active else None
+    direct_url = None
+    if active and pv.get('port') and public_host:
+        direct_url = f"{public_host}:{pv['port']}/"
     return {'repo': name,
             'active': active,
             'port': pv.get('port'),
-            'url': f"/api/coding/repos/{urllib.parse.quote(name)}/preview/" if active else None,
+            'url': url,
+            'direct_url': direct_url,
             'health': pv.get('health') or '/',
             'started_at': pv.get('started_at'),
             'log_tail': (pv.get('log_tail') or [])[-15:]}
