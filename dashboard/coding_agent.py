@@ -1870,8 +1870,37 @@ def repo_preview_touch(name):
         pv['touched_at'] = time.time()
 
 
-def _preview_proxy(handler, name, subpath):
-    """Stream a request to the repo's running dev server (authenticated proxy)."""
+_TEXT_CTYPES = {
+    'text/html', 'text/javascript', 'application/javascript', 'text/css',
+    'application/json', 'text/plain', 'image/svg+xml',
+}
+
+
+def _rewrite_preview_body(body, prefix, ctype):
+    """Rewrite host-relative asset refs so an app served under a dashboard sub-path
+    loads its JS/CSS/images. Next dev emits absolute /_next/... URLs + /favicon.ico;
+    these must point at the proxy sub-path (webpack public path is set in webpack.js).
+    Only applied to text-ish content types."""
+    ctype = ctype.split(';')[0].strip().lower()
+    if ctype not in _TEXT_CTYPES:
+        return None
+    try:
+        text = body.decode('utf-8')
+    except Exception:
+        try:
+            text = body.decode('latin-1')
+        except Exception:
+            return None
+    text = text.replace('/_next/', f'{prefix}/_next/')
+    text = text.replace('"/favicon.ico', f'"{prefix}/favicon.ico')
+    text = text.replace("'/favicon.ico", f"'{prefix}/favicon.ico")
+    return text.encode('utf-8')
+
+
+def _preview_proxy(handler, name, subpath, query=''):
+    """Stream a request to the repo's running dev server (authenticated proxy).
+    HTML/JS/CSS responses get host-relative asset URLs rewritten to the sub-path
+    so the app actually loads in the browser."""
     pv = _sessions.get(name, {}).get('preview') or {}
     if not pv.get('active') or not pv.get('port'):
         handler._send_json(409, json.dumps({'error': 'preview not running - start it first'}))
@@ -1887,16 +1916,28 @@ def _preview_proxy(handler, name, subpath):
         handler._send_json(410, json.dumps({'error': 'preview expired'}))
         return
     upstream = f"http://127.0.0.1:{pv['port']}/{subpath.lstrip('/')}"
+    if query:
+        upstream += ('&' if '?' in upstream else '?') + query
+    prefix = f"/api/coding/repos/{urllib.parse.quote(name)}/preview"
     try:
         r = requests.get(upstream, timeout=60, stream=True)
         handler.send_response(r.status_code)
-        for h in ('Content-Type', 'Content-Length'):
+        for h in ('Content-Type', 'Cache-Control', 'Content-Encoding'):
             if h in r.headers:
                 handler.send_header(h, r.headers[h])
-        handler.send_header('Access-Control-Allow-Origin', '*')
-        handler.end_headers()
-        for chunk in r.iter_content(64 * 1024):
-            handler.wfile.write(chunk)
+        rewrite = _rewrite_preview_body(r.content, prefix, r.headers.get('Content-Type') or '')
+        if rewrite is not None:
+            handler.send_header('Content-Length', str(len(rewrite)))
+            handler.send_header('Content-Encoding', 'identity')
+            handler.send_header('Access-Control-Allow-Origin', '*')
+            handler.end_headers()
+            handler.wfile.write(rewrite)
+        else:
+            body = r.content
+            handler.send_header('Content-Length', str(len(body)))
+            handler.send_header('Access-Control-Allow-Origin', '*')
+            handler.end_headers()
+            handler.wfile.write(body)
         repo_preview_touch(name)
     except Exception as e:
         handler._send_json(502, json.dumps({'error': 'preview proxy failed', 'details': str(e)}))
@@ -1959,11 +2000,12 @@ def route_get(handler):
                 handler._send_json(200, json.dumps(repo_diff(name), ensure_ascii=False))
             elif sub == 'preview':
                 subpath = '/'.join(parts[2:]).lstrip('/')
+                qs = handler.path.split('?', 1)[1] if '?' in handler.path else ''
                 if subpath == 'status':
                     handler._send_json(200, json.dumps(repo_preview(name), ensure_ascii=False))
                 else:
                     # '' (root) and any other subpath proxy to the upstream dev server
-                    _preview_proxy(handler, name, subpath)
+                    _preview_proxy(handler, name, subpath, qs)
             else:
                 handler._send_json(404, json.dumps({'error': 'not found'}))
         except ValueError as e:
