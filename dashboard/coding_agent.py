@@ -159,7 +159,8 @@ def _load_repo_config(repo_path):
     coding_json = Path(repo_path) / '.coding.json'
     if coding_json.exists():
         try:
-            cfg = json.loads(coding_json.read_text(encoding='utf-8')) or {}
+            txt = coding_json.read_text(encoding='utf-8-sig')
+            cfg = json.loads(txt) or {}
         except Exception:
             cfg = {}
     scripts, deps = {}, {}
@@ -213,7 +214,7 @@ def _set_repo_type(name, rtype):
     cfg = {}
     if coding_json.exists():
         try:
-            cfg = json.loads(coding_json.read_text(encoding='utf-8')) or {}
+            cfg = json.loads(coding_json.read_text(encoding='utf-8-sig')) or {}
         except Exception:
             cfg = {}
     if rtype == 'auto' or rtype in ('fe', 'be', 'cms', 'api', 'php', 'other'):
@@ -1580,6 +1581,7 @@ def repo_session_view(name):
             'progress': s.get('progress') or '',
             'messages': s.get('messages', []),
             'questions': [q for q in s.get('questions', []) if not q.get('answered')],
+            'preview': _preview_view(name, s.get('preview')),
             'repo_info': info}
 
 
@@ -1707,9 +1709,221 @@ def repo_diff(name):
     return {'diff': tracked[:80000], 'files': files}
 
 
+# ── per-repo preview (dev server in the real checkout) ─────────────────
+_PREVIEW_LOG = LOG_DIR / 'repo_preview'  # directory holding per-repo preview logs
+
+
+def _preview_state(name):
+    return _sessions.setdefault(name, {}).setdefault('preview', {})
+
+
+def repo_preview(name):
+    """Current preview status for a repo (no side effects)."""
+    pv = _preview_state(name)
+    return _preview_view(name, pv)
+
+
+def _preview_view(name, pv):
+    pv = pv or {}
+    pid = pv.get('pid')
+    active = bool(pv.get('active') and pid)
+    if pid and active and pv.get('proc') and pv['proc'].poll() is not None:
+        active = False
+        pv['active'] = False
+    return {'repo': name,
+            'active': active,
+            'port': pv.get('port'),
+            'url': f"/api/coding/repos/{urllib.parse.quote(name)}/preview/" if active else None,
+            'health': pv.get('health') or '/',
+            'started_at': pv.get('started_at'),
+            'log_tail': (pv.get('log_tail') or [])[-15:]}
+
+
+def _parse_dev_port(dev_command):
+    """Pull the port a dev command binds: -p 3042 / --port 3042 / PORT=3042 / :3042."""
+    if not dev_command:
+        return None
+    m = re.search(r'[\s-]-p\s+(\d{2,5})', dev_command)
+    if m:
+        return int(m.group(1))
+    m = re.search(r'--port\s*=\s*(\d{2,5})', dev_command)
+    if m:
+        return int(m.group(1))
+    m = re.search(r'--port\s+(\d{2,5})', dev_command)
+    if m:
+        return int(m.group(1))
+    m = re.search(r'PORT\s*=\s*(\d{2,5})', dev_command)
+    if m:
+        return int(m.group(1))
+    m = re.search(r'[?&:](\d{2,5})\b', dev_command)
+    if m:
+        return int(m.group(1))
+    return None
+
+
+def _free_port_in_range(cfg, prefer=None):
+    """Return prefer if free, else any free port from cfg port range."""
+    import socket
+    lo, hi = cfg['port_range']
+    candidates = ([prefer] if prefer else []) + list(range(lo, hi + 1))
+    for p in candidates:
+        if not p:
+            continue
+        s = socket.socket()
+        try:
+            s.bind(('127.0.0.1', p))
+            return p
+        except OSError:
+            pass
+        finally:
+            s.close()
+    raise RuntimeError('no free port in range')
+
+
+def repo_preview_start(name):
+    """Start the dev server for a repo's real checkout and return the preview link."""
+    info = _find_repo(name)
+    if not info:
+        raise ValueError('repo not found')
+    cfg = _load_repo_config(info['path'])
+    if cfg.get('type', '').lower() in BACKEND_TYPES or not cfg.get('previewEnabled', True):
+        raise ValueError('preview is not available for this repo (backend/api/cms repo type)')
+    dev_cmd = cfg.get('devCommand') or cfg.get('startCommand')
+    if not dev_cmd:
+        raise ValueError('no dev/start command for this repo - add one or install deps')
+    pv = _preview_state(name)
+    if pv.get('active') and pv.get('pid'):
+        proc = pv.get('proc')
+        if proc is None or proc.poll() is None:
+            return _preview_view(name, pv)  # already running
+    if pv.get('pid'):
+        _kill_proc(pv['pid'])
+    # resolve the port: script flag -> .coding.json port -> free port
+    port = _parse_dev_port(dev_cmd)
+    if port is None and pv.get('port') and pv['port'] not in (None, 0):
+        port = pv['port']
+    if port is None:
+        port = _free_port_in_range(_config(), prefer=cfg.get('port'))
+    # PATH so bare binaries (next, vite, tsx) resolve without `npm run`
+    env = os.environ.copy()
+    env['PATH'] = os.path.join(info['path'], 'node_modules', '.bin') + os.pathsep + env['PATH']
+    env['PORT'] = str(port)
+    env['HOST'] = '127.0.0.1'
+    try:
+        _PREVIEW_LOG.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+    log_fh = open(_PREVIEW_LOG / f'{name}.log', 'ab')
+    try:
+        proc = subprocess.Popen(dev_cmd, shell=True, cwd=info['path'], env=env,
+                                stdout=log_fh, stderr=subprocess.STDOUT,
+                                stdin=subprocess.DEVNULL, start_new_session=True)
+    finally:
+        log_fh.close()
+    health = cfg.get('healthPath') or '/'
+    deadline = time.time() + 120
+    ok = False
+    while time.time() < deadline:
+        if proc.poll() is not None:
+            break
+        try:
+            r = requests.get(f'http://127.0.0.1:{port}{health}', timeout=3)
+            if r.ok:
+                ok = True
+                break
+        except Exception:
+            pass
+        time.sleep(2)
+    if not ok:
+        _kill_proc(proc.pid)
+        raise RuntimeError(f'dev server did not become healthy on port {port} '
+                           f'(command: {dev_cmd}) - check preview log')
+    pv['port'] = port
+    pv['pid'] = proc.pid
+    pv['proc'] = proc
+    pv['active'] = True
+    pv['health'] = health
+    pv['started_at'] = _now_iso()
+    pv['touched_at'] = time.time()
+    pv['command'] = dev_cmd
+    pv['log_tail'] = pv.get('log_tail') or []
+    _save_sessions()
+    _log(f"preview started for {name} on 127.0.0.1:{port} (cmd: {dev_cmd})")
+    return _preview_view(name, pv)
+
+
+def repo_preview_stop(name):
+    pv = _preview_state(name)
+    pid = pv.pop('pid', None)
+    pv.pop('proc', None)
+    pv['active'] = False
+    if pid:
+        _kill_proc(pid)
+    _save_sessions()
+    return {'ok': True}
+
+
+def repo_preview_touch(name):
+    """Rebump a running preview's TTL (called on each proxy hit)."""
+    pv = _preview_state(name)
+    if pv.get('active'):
+        pv['touched_at'] = time.time()
+
+
+def _preview_proxy(handler, name, subpath):
+    """Stream a request to the repo's running dev server (authenticated proxy)."""
+    pv = _sessions.get(name, {}).get('preview') or {}
+    if not pv.get('active') or not pv.get('port'):
+        handler._send_json(409, json.dumps({'error': 'preview not running - start it first'}))
+        return
+    ttl = float(os.environ.get('CODING_PREVIEW_TTL_SECS', '1800'))
+    last = pv.get('touched_at') or pv.get('started_at')
+    try:
+        last_ts = datetime.fromisoformat(last).timestamp() if isinstance(last, str) else (last or 0)
+    except Exception:
+        last_ts = 0
+    if time.time() - last_ts > ttl:
+        repo_preview_stop(name)
+        handler._send_json(410, json.dumps({'error': 'preview expired'}))
+        return
+    upstream = f"http://127.0.0.1:{pv['port']}/{subpath.lstrip('/')}"
+    try:
+        r = requests.get(upstream, timeout=60, stream=True)
+        handler.send_response(r.status_code)
+        for h in ('Content-Type', 'Content-Length'):
+            if h in r.headers:
+                handler.send_header(h, r.headers[h])
+        handler.send_header('Access-Control-Allow-Origin', '*')
+        handler.end_headers()
+        for chunk in r.iter_content(64 * 1024):
+            handler.wfile.write(chunk)
+        repo_preview_touch(name)
+    except Exception as e:
+        handler._send_json(502, json.dumps({'error': 'preview proxy failed', 'details': str(e)}))
+
+
+def _repo_sweep_preview():
+    """Stop previews that have been idle past the preview TTL."""
+    now = time.time()
+    ttl = float(os.environ.get('CODING_PREVIEW_TTL_SECS', '1800'))
+    for name, s in list(_sessions.items()):
+        pv = s.get('preview') or {}
+        if not pv.get('active'):
+            continue
+        last = pv.get('touched_at') or pv.get('started_at')
+        try:
+            last_ts = datetime.fromisoformat(last).timestamp() if isinstance(last, str) else (last or 0)
+        except Exception:
+            last_ts = 0
+        if now - last_ts > ttl:
+            _log(f"preview idle-expired for {name} - stopping")
+            repo_preview_stop(name)
+
+
 def _repo_sweep():
     now = time.time()
     ttl = float(os.environ.get('CODING_REPO_SESSION_TTL_HOURS', '24')) * 3600
+    _repo_sweep_preview()
     with _sessions_lock:
         for name, s in list(_sessions.items()):
             if not s.get('active'):
@@ -1743,6 +1957,13 @@ def route_get(handler):
                 handler._send_json(200, json.dumps(repo_session_view(name), ensure_ascii=False))
             elif sub == 'diff':
                 handler._send_json(200, json.dumps(repo_diff(name), ensure_ascii=False))
+            elif sub == 'preview':
+                subpath = '/'.join(parts[2:]).lstrip('/')
+                if subpath == 'status':
+                    handler._send_json(200, json.dumps(repo_preview(name), ensure_ascii=False))
+                else:
+                    # '' (root) and any other subpath proxy to the upstream dev server
+                    _preview_proxy(handler, name, subpath)
             else:
                 handler._send_json(404, json.dumps({'error': 'not found'}))
         except ValueError as e:
@@ -1846,6 +2067,14 @@ def route_post(handler):
                 handler._send_json(200, json.dumps(
                     repo_answer_permission(name, (body or {}).get('permission_id'),
                                            (body or {}).get('response')), ensure_ascii=False))
+            elif sub == 'preview':
+                if subsub in (None, 'start'):
+                    handler._send_json(200, json.dumps(
+                        repo_preview_start(name), ensure_ascii=False))
+                elif subsub == 'stop':
+                    handler._send_json(200, json.dumps(repo_preview_stop(name), ensure_ascii=False))
+                else:
+                    handler._send_json(404, json.dumps({'error': 'not found'}))
             else:
                 handler._send_json(404, json.dumps({'error': 'not found'}))
         except ValueError as e:

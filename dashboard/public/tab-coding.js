@@ -201,6 +201,7 @@ const CodingTab = (() => {
           </div>
         </div>
         <div class="card-body">
+          <div id="coding-preview-bar"></div>
           <div id="coding-questions"></div>
           <div class="coding-field"><label>💬 Conversation</label>
             <div id="coding-stream" class="coding-stream"></div>
@@ -256,6 +257,21 @@ const CodingTab = (() => {
                 data-permission-id="${esc(q.id)}" data-response="denied">Deny</button>
             </div>
           </div>`).join('') + `</div>` : '';
+    }
+
+    // preview status bar
+    const pvBar = $('coding-preview-bar');
+    if (pvBar) {
+      const pv = s.preview || {};
+      if (pv.active) {
+        pvBar.innerHTML = `<div class="coding-preview-bar">
+          <span class="badge badge--good">● preview on :${esc(pv.port)}</span>
+          <a class="coding-link" href="${esc(pv.url)}" target="_blank">${esc(pv.url)}</a>
+          <button class="coding-btn coding-btn--ghost" data-coding-action="preview-stop">■ Stop</button>
+        </div>`;
+      } else {
+        pvBar.innerHTML = '';
+      }
     }
 
     // messages (stream gets updated in place; the textarea is NEVER touched here)
@@ -333,7 +349,8 @@ const CodingTab = (() => {
         else if (action === 'send') await sendPrompt();
         else if (action === 'permission') await permission(btn.dataset.permissionId, btn.dataset.response);
         else if (action === 'reset') { if (confirm('Forget this repo\'s session memory and start fresh?')) await resetRepo(); }
-        else if (action === 'preview') Comp.toast('Preview is not wired for per-repo sessions yet');
+        else if (action === 'preview') await startPreview();
+        else if (action === 'preview-stop') await stopPreview();
       } catch (err) {
         Comp.toast(`Gagal: ${err.message}`, false);
       } finally {
@@ -410,6 +427,36 @@ const CodingTab = (() => {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
     });
     T.lastMsgCount = 0;
+    await refreshSession(true);
+  }
+
+  async function startPreview() {
+    if (!T.active) return;
+    const btn = () => document.querySelector('[data-coding-action="preview"]');
+    if (btn()) btn().disabled = true;
+    try {
+      const res = await fetchJSON(`/api/coding/repos/${encodeURIComponent(T.active)}/preview`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+      });
+      if (res && res.error) throw new Error(res.error);
+      if (res && res.url) {
+        Comp.toast(`Preview up on port ${res.port} — opening…`);
+        window.open(res.url, '_blank');
+      } else {
+        Comp.toast(`Preview started but no URL yet (port ${res.port})`, false);
+      }
+      await refreshSession(true);
+    } finally {
+      if (btn()) btn().disabled = false;
+    }
+  }
+
+  async function stopPreview() {
+    if (!T.active) return;
+    await fetchJSON(`/api/coding/repos/${encodeURIComponent(T.active)}/preview/stop`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    });
+    Comp.toast('Preview stopped');
     await refreshSession(true);
   }
 
