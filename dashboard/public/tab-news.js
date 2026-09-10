@@ -21,7 +21,60 @@ window.Tabs = window.Tabs || {};
     data: null,
     dataError: null,
     generating: false,
+    aiChat: {},          // story_key -> [{role, content, model}]
+    storyById: {},       // story_key -> story (for chat lookups)
+    bound: false,
   };
+
+  function indexStories(data) {
+    const map = {};
+    if (data && data.categories) {
+      for (const catKey of Object.keys(data.categories)) {
+        for (const s of (data.categories[catKey].stories || [])) {
+          map[cardKey(s)] = s;
+        }
+      }
+    }
+    state.storyById = map;
+  }
+
+  function bindEvents() {
+    if (state.bound) return;
+    state.bound = true;
+    document.addEventListener('click', ev => {
+      const chip = ev.target.closest('[data-ask-chip]');
+      if (chip) {
+        ev.preventDefault();
+        const story = closestStory(chip);
+        if (story) askChat(story, ASK_PROMPTS[chip.dataset.askChip] || chip.dataset.askChip);
+        return;
+      }
+      const send = ev.target.closest('[data-ask-send]');
+      if (send) {
+        ev.preventDefault();
+        const story = closestStory(send);
+        const input = document.querySelector('[data-ask-input="' + send.dataset.askSend + '"]');
+        const msg = input && input.value.trim();
+        if (story && msg) { askChat(story, msg); if (input) input.value = ''; }
+        return;
+      }
+    }, true);
+    document.addEventListener('keydown', ev => {
+      if (ev.key !== 'Enter') return;
+      const input = ev.target.closest('[data-ask-input]');
+      if (!input) return;
+      ev.preventDefault();
+      const story = state.storyById[input.dataset.askInput];
+      const msg = input.value.trim();
+      if (story && msg) { askChat(story, msg); input.value = ''; }
+    }, true);
+  }
+
+  function closestStory(el) {
+    const details = el.closest('details[data-key^="ask:"]');
+    const key = details && details.dataset.key ? details.dataset.key.replace(/^ask:/, '') : '';
+    return key ? state.storyById[key] : null;
+  }
 
   async function load(cat) {
     if (cat) state.activeCat = cat;
@@ -37,11 +90,13 @@ window.Tabs = window.Tabs || {};
       const data = await U.fetchJSON('/api/intelligence?_=' + Date.now());
       state.data = data;
       state.dataError = null;
+      indexStories(data);
     } catch (err) {
       state.dataError = err.message || String(err);
       state.data = null;
     }
 
+    bindEvents();
     render();
     window.scrollTo(0, scrollY);
   }
@@ -62,6 +117,7 @@ window.Tabs = window.Tabs || {};
           clearInterval(poll);
           state.data = fresh;
           state.generating = false;
+          indexStories(fresh);
           render();
         }
       } catch (e) { /* keep polling */ }
@@ -75,6 +131,9 @@ window.Tabs = window.Tabs || {};
   function render() {
     const tab = document.getElementById('tab-news');
     if (!tab) return;
+
+    // Preserve reading position across re-renders (chat turns, refresh polling).
+    const scrollY = window.scrollY;
 
     if (state.dataError) {
       tab.innerHTML = '<div class="load-error">Failed to load: ' + U.esc(state.dataError) + '</div>';
@@ -128,6 +187,7 @@ window.Tabs = window.Tabs || {};
     }
 
     tab.innerHTML = parts.join('');
+    window.scrollTo(0, scrollY);
   }
 
   function refreshBtn() {
@@ -227,6 +287,7 @@ window.Tabs = window.Tabs || {};
       secs.push('<div class="intel-take"><span class="intel-label">\uD83D\uDCA1 My take</span>' +
         '<div class="intel-text">' + U.esc(story.my_take) + '</div></div>');
     }
+    secs.push(askAiBlock(story));
     return secs.join('');
   }
 
@@ -273,6 +334,88 @@ window.Tabs = window.Tabs || {};
     const picked = sentences.slice(0, 2).join('').trim();
     const out = picked || t;
     return out.length > 300 ? out.slice(0, 297).replace(/\s+\S*$/, '') + '…' : out;
+  }
+
+  /* ── Ask AI mini-chat (per story) ─────────────────────────────────
+     Sits below the "My take" section. Lets the reader ask follow-ups
+     about a story they don't understand. History is kept per story in
+     memory (not persisted). Opens when scrolled into view. */
+
+  function askAiBlock(story) {
+    const key = cardKey(story);
+    const askKey = 'ask:' + key;
+    const hist = (state.aiChat && state.aiChat[key]) || [];
+    const isOpen = (window.UI && typeof UI.isOpen === 'function') ? UI.isOpen(askKey, false) : false;
+    let inner;
+    if (hist.length === 0) {
+      inner = '<div class="intel-ask-empty">Select a question, or type your own below.</div>';
+    } else {
+      inner = hist.map(m => {
+        const cls = m.role === 'user' ? 'user' : 'ai';
+        return '<div class="intel-ask-msg intel-ask-msg--' + cls + '">' +
+          '<div class="intel-ask-body">' + U.mdToHtml(m.content) + '</div>' +
+          (m.model ? '<div class="intel-ask-meta">' + U.esc(m.model) + '</div>' : '') +
+          '</div>';
+      }).join('');
+    }
+    return '<details class="intel-ask" data-key="' + U.esc(askKey) + '"' + (isOpen ? ' open' : '') + '>' +
+      '<summary><span class="intel-label">\uD83D\uDCAC Ask AI about this</span>' +
+      '<span class="intel-ask-hint">don\u2019t get the news? ask here</span></summary>' +
+      '<div class="intel-ask-body-wrap">' +
+        '<div class="intel-ask-thread">' + inner + '</div>' +
+        '<div class="intel-ask-chips">' +
+          '<button class="intel-chip" data-ask-chip="summarize">\u2699\uFE0F TL;DR</button>' +
+          '<button class="intel-chip" data-ask-chip="explain">\uD83D\uDC47 Explain simply</button>' +
+          '<button class="intel-chip" data-ask-chip="impact">\uD83C\uDF0F Why does it matter?</button>' +
+        '</div>' +
+        '<div class="intel-ask-form">' +
+          '<input class="intel-ask-input" type="text" placeholder="Ask anything about this story\u2026" ' +
+            'data-ask-input="' + U.esc(key) + '">' +
+          '<button class="intel-btn" data-ask-send="' + U.esc(key) + '">\u27A1 Send</button>' +
+        '</div>' +
+      '</div>' +
+    '</details>';
+  }
+
+  const ASK_PROMPTS = {
+    summarize: 'Give me a TL;DR of this story in 3-4 bullet points.',
+    explain: 'Explain this story simply, like I am not a finance/industry expert. What actually happened and why should I care?',
+    impact: 'What is the real-world impact of this story, and does it matter for someone in AI engineering and digital transformation?',
+  };
+
+  async function askChat(story, message) {
+    const key = cardKey(story);
+    const hist = (state.aiChat && state.aiChat[key]) || [];
+    hist.push({ role: 'user', content: message });
+    if (!state.aiChat) state.aiChat = {};
+    state.aiChat[key] = hist;
+    requestRender();
+
+    let req;
+    try {
+      req = await U.fetchJSON('/api/intelligence/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ story_key: key, message: message, history: hist }),
+      });
+    } catch (e) {
+      hist.push({ role: 'ai', content: '⚠️ ' + (e.message || 'request failed'), model: 'error' });
+      requestRender();
+      return;
+    }
+
+    const modelTag = req.model ? (' · ' + req.model) : '';
+    hist.push({
+      role: 'ai',
+      content: req.reply || req.error || '(empty reply)',
+      model: (req.backend || 'ai') + modelTag,
+    });
+    requestRender();
+  }
+
+  /* Re-render the story cards WITHOUT losing scroll (used after a chat turn). */
+  function requestRender() {
+    render();
   }
 
   Tabs.news = { load: load, generate: generate };

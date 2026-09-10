@@ -3507,6 +3507,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_post_memory_note_edit()
         elif self.path == '/api/intelligence/generate':
             self._handle_post_intelligence_generate()
+        elif self.path == '/api/intelligence/chat':
+            self._handle_post_intelligence_chat()
         elif self.path == '/api/reminders/add':
             self._handle_post_reminders('add')
         elif self.path == '/api/reminders/close':
@@ -7363,6 +7365,126 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         t = threading.Thread(target=_run_generate, daemon=True)
         t.start()
         self._send_json(200, json.dumps({'status': 'generating'}))
+
+    def _handle_post_intelligence_chat(self):
+        """POST /api/intelligence/chat {story_key, message, history} �?" answer a
+        question about one news story. Grounds the answer in that story's full
+        briefing content (news text, why_it_matters, my_take, etc.), optional
+        prior turns, then DeepSeek -> OpenAI -> agy-bridge fallback (same chain
+        as /api/chat). story_key matches the cardKey used by the tab: the last
+        24 chars of the URL (or headline), same as tab-news.js."""
+        import sys as _sys
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+            message = (body.get('message') or '').strip()
+            story_key = (body.get('story_key') or '').strip()
+            history = body.get('history') or []
+            if not message:
+                self._send_json(400, json.dumps({'error': 'message is required'}))
+                return
+            if not story_key:
+                self._send_json(400, json.dumps({'error': 'story_key is required'}))
+                return
+
+            # Locate the story in the 7-day news store using the same key the
+            # UI computes (last 24 slug chars of URL, falling back to headline).
+            story = None
+            store_path = NEWS_BRIEFINGS_DIR / 'news_store.json'
+            if store_path.exists():
+                try:
+                    with open(store_path, 'r', encoding='utf-8') as f:
+                        store = json.load(f)
+                    for s in (store.get('stories') or []):
+                        key = (s.get('url') or '')[-24:] or (s.get('headline') or '')[:24]
+                        key = re.sub(r'[^\w-]', '', key)
+                        if key == story_key:
+                            story = s
+                            break
+                except Exception:
+                    story = None
+            if story is None:
+                self._send_json(404, json.dumps({'error': 'story not found in feed'}))
+                return
+
+            def _field(v):
+                return str(v or '').strip()
+
+            story_ctx = '\n'.join(filter(None, [
+                f'Headline: {_field(story.get("headline"))}',
+                f'Category: {_field(story.get("category"))}',
+                f'Source: {_field(story.get("source"))}',
+                f'Published/stored: {_field(story.get("published"))} {_field(story.get("stored_on"))}'.replace('  ', ' '),
+                f'News (the full briefing text):\n{_field(story.get("news"))}',
+                f'Market data: {_field(story.get("market_data"))}',
+                f'Why it matters: {_field(story.get("why_it_matters"))}',
+                f'Impact on Indonesia: {_field(story.get("impact_on_indonesia"))}',
+                f'How it can support my work: {_field(story.get("how_it_supports_work"))}',
+                f'What to watch next: {_field(story.get("what_to_watch"))}',
+                f'My take: {_field(story.get("my_take"))}',
+            ]))
+
+            conv_ctx = ''
+            if history:
+                turns = []
+                for t in history[-8:]:
+                    if isinstance(t, dict):
+                        turns.append(f"{t.get('role', 'user')}: {_field(t.get('content'))}")
+                if turns:
+                    conv_ctx = 'Previous turns of this conversation:\n' + '\n'.join(turns)
+
+            system = (
+                'You are an assistant helping the reader understand ONE news story from '
+                'their daily intelligence briefing. Be plain, honest, and useful.\n\n'
+                f'## THE STORY\n{story_ctx}\n\n'
+                'Ground every answer in THIS story text above. If the question needs '
+                'extra context (background, terminology, market mechanics), add a little '
+                'general knowledge - but label what is from the story versus general '
+                'background. Never invent facts or numbers that are not in the story.\n\n'
+                'Answer in the language the reader writes in (Indonesian or English), '
+                'casual and clear, as if explaining to a colleague. Keep replies under '
+                '~250 words unless the reader asks for more detail.\n\n'
+                '# Formatting\n'
+                'Use short paragraphs and bullet points. Where it helps, include a '
+                '"TL;DR" first line.\n\n'
+                + (f'{conv_ctx}\n' if conv_ctx else '')
+            )
+
+            ok, text, meta = False, '', {}
+            backend = None
+            if deepseek_call is not None:
+                ok, text, meta = deepseek_call.call(
+                    system + '\n\nQuestion: ' + message, max_tokens=1204,
+                    temperature=0.3, timeout=120)
+                backend = 'deepseek'
+            if not ok and openai_call is not None:
+                ok, text, meta = openai_call.call(message, system=system, tier='medium',
+                                                  max_tokens=1204, timeout=120)
+                backend = 'openai'
+            if not ok:
+                ok, text, meta = ai_call.run(system + '\n\nQuestion: ' + message,
+                                             task='draft', model='sonnet', timeout=120)
+                backend = meta.get('backend') or 'none'
+
+            if not ok:
+                reason = (meta.get('reason') or 'ai call failed').strip()
+                clean = ('I could not answer right now because no AI backend is '
+                         'available on this machine (no model API configured).')
+                self._send_json(200, json.dumps({
+                    'reply': clean,
+                    'error': 'AI backend unavailable',
+                    'backend': backend,
+                    'reason': reason[:300],
+                }, ensure_ascii=False))
+                return
+
+            self._send_json(200, json.dumps({
+                'reply': text,
+                'model': meta.get('model'),
+                'backend': backend,
+            }, ensure_ascii=False))
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': 'intelligence chat failed', 'details': str(e)}))
 
     def _home_news(self, cap=3):
         """Top stories from the newest intelligence feed — one best per
