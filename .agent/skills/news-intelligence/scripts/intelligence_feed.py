@@ -382,42 +382,22 @@ def format_market_data(prices):
     return '; '.join(parts) + ' | Live prices'
 
 
-def _openai_key():
-    env = REPO_ROOT / '.env'
-    if env.exists():
-        with open(env, 'r', encoding='utf-8') as fh:
-            for line in fh:
-                if line.strip().startswith('OPENAI_API_KEY='):
-                    return line.strip().split('=', 1)[1].strip()
-    return os.environ.get('OPENAI_API_KEY')
-
-
 def _llm_call(prompt, system='', max_tokens=4500):
-    api_key = _openai_key()
-    if not api_key:
-        return None
-    messages = []
-    if system:
-        messages.append({'role': 'system', 'content': system})
-    messages.append({'role': 'user', 'content': prompt})
-    payload = json.dumps({
-        'model': 'gpt-4o-mini',
-        'messages': messages,
-        'max_tokens': max_tokens,
-        'temperature': 0.3,
-    }).encode('utf-8')
-    req = urllib.request.Request(
-        'https://api.openai.com/v1/chat/completions',
-        data=payload,
-        headers={
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer %s' % api_key,
-        },
-    )
+    """One editorial-generation call routed through the model registry
+    (Settings → AI Models, module 'news_writer'). Returns text or None."""
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
-        return data['choices'][0]['message']['content']
+        _scripts = str(REPO_ROOT / '.agent' / 'scripts')
+        if _scripts not in sys.path:
+            sys.path.insert(0, _scripts)
+        import model_router as _mr
+        ok, text, meta = _mr.execute('news_writer', 'shared', prompt=prompt,
+                                     system=system, max_tokens=max_tokens,
+                                     temperature=0.3, timeout=120)
+        if not ok:
+            print('  [ERROR] LLM call failed: %s'
+                  % ((meta.get('reason') or 'unknown')[:300]), file=sys.stderr)
+            return None
+        return text
     except Exception as e:
         print('  [ERROR] LLM call failed: %s' % e, file=sys.stderr)
         return None

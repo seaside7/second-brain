@@ -283,8 +283,9 @@ Reply with ONLY a JSON object (no markdown fences, no explanation):
 
 If you cannot determine the action, reply: {{"skill": null, "action": null, "params": {{}}}}"""
 
-    from deepseek_call import call as deepseek_call
-    ok, output, meta = deepseek_call(prompt, max_tokens=200, temperature=0.1)
+    import model_router
+    ok, output, meta = model_router.execute('command_triage', 'shared', prompt=prompt,
+                                            max_tokens=200, temperature=0.1, timeout=60)
 
     if ok and output:
         try:
@@ -400,9 +401,9 @@ def extract_params_from_text(text, required_params):
 # ── LLM Processing (intermediate steps in chains) ──
 
 def llm_process(task_type, content, context=""):
-    """Use DeepSeek for intermediate processing (summarize, draft, generate subject).
-    Returns (ok, result_text)."""
-    from deepseek_call import call as deepseek_call
+    """Use the registry ('action_execute') for intermediate processing
+    (summarize, draft, generate subject). Returns (ok, result_text)."""
+    import model_router
 
     prompts = {
         "summarize": f"Summarize this concisely in 3-5 sentences:\n\n{content[:3000]}",
@@ -415,7 +416,8 @@ def llm_process(task_type, content, context=""):
     if not prompt:
         prompt = f"{task_type}:\n{content[:2000]}"
 
-    ok, text, meta = deepseek_call(prompt, max_tokens=500, temperature=0.3)
+    ok, text, meta = model_router.execute('action_execute', 'shared', prompt=prompt,
+                                          max_tokens=500, temperature=0.3, timeout=60)
     return ok, text.strip() if text else ""
 
 

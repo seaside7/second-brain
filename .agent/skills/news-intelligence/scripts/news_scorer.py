@@ -18,8 +18,7 @@ CONFIG_PATH = REPO_ROOT / "config" / "news_intelligence.json"
 
 SCRIPTS_DIR = REPO_ROOT / ".agent" / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
-from deepseek_call import call as deepseek_call
-from openai_call import call as openai_call
+import model_router
 
 WIB = timezone(timedelta(hours=7))
 
@@ -101,16 +100,9 @@ def score_candidates(articles, category):
 
     prompt = build_scoring_payload(articles, category)
 
-    ok, text, meta = deepseek_call(prompt, max_tokens=4096, temperature=0.2, timeout=90)
-    provider = "deepseek"
-    if not ok:
-        # Fallback to OpenAI (cheap tier) when DeepSeek is down/unconfigured.
-        # Mirrors model_routing fallback_chains: deepseek-chat -> gpt-5.6-luna.
-        print(f"[INFO] DeepSeek scoring failed ({meta.get('reason', 'unknown')}); "
-              f"falling back to OpenAI", file=sys.stderr)
-        ok, text, meta = openai_call(prompt, tier="low", max_tokens=4096,
-                                     temperature=0.2, timeout=120)
-        provider = "openai"
+    ok, text, meta = model_router.execute("news_scoring", "shared", prompt=prompt,
+                                          max_tokens=4096, temperature=0.2, timeout=120)
+    provider = meta.get("provider", "unknown")
 
     if not ok:
         print(f"[ERROR] {provider} scoring failed: {meta.get('reason', 'unknown')}",

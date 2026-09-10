@@ -386,15 +386,33 @@ def detect_extra_action_items(transcript, fathom_items):
         with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as tf:
             tf.write(prompt)
             tmp_path = tf.name
-        # Force GLM 5.2 (cheap + large context). Forcing a single model drops the fallback
-        # chain, so we retry once to ride out a transient blip (e.g. GLM peak-hour throttle).
+        # Model choice comes from the registry (module 'action_extract', Settings →
+        # AI Models). Default resolves to the bridge's own harvest chain; an explicit
+        # module override (claude alias or agy task) is honored -- never the retired
+        # glm-5.2/zai force. We retry once to ride out a transient blip.
+        task = 'harvest'
+        extra = []
+        try:
+            if str(REPO_ROOT / '.agent' / 'scripts') not in sys.path:
+                sys.path.insert(0, str(REPO_ROOT / '.agent' / 'scripts'))
+            import model_router as _mr
+            _s = _mr.resolve_module('action_extract', 'shared')
+            if _s.get('source') == 'module':
+                if _s.get('provider') == 'claude' and _s.get('model') in (
+                        'haiku', 'sonnet', 'opus'):
+                    extra = ['--model', _s['model']]
+                elif _s.get('provider') == 'agy' and _s.get('model') in (
+                        'harvest', 'draft', 'research', 'critic'):
+                    task = _s['model']
+        except Exception:
+            pass
+        bridge_args = [sys.executable, str(AGY_BRIDGE), "--task", task,
+                       "--prompt-file", tmp_path] + extra
         for attempt in range(2):
             try:
-                proc = subprocess.run(
-                    [sys.executable, str(AGY_BRIDGE), "--task", "harvest",
-                     "--model", "glm-5.2", "--backend", "zai", "--prompt-file", tmp_path],
-                    cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=240,
-                )
+                proc = subprocess.run(bridge_args, cwd=str(REPO_ROOT),
+                                      capture_output=True, text=True, timeout=240,
+                                      )
             except Exception as e:
                 if attempt == 1:
                     return [], f"_Transcript scan skipped (bridge error: {e})._"

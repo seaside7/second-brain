@@ -1,6 +1,32 @@
 {
   "default": "deepseek",
   "cost_limit_monthly_usd": 50,
+  "capability_defaults": {
+    "text_generation": {
+      "provider": "deepseek",
+      "model": "deepseek-chat",
+      "fallbackProvider": "openai",
+      "fallbackModel": "gpt-5.6-luna"
+    },
+    "embedding": {
+      "provider": "openai",
+      "model": "text-embedding-3-small"
+    },
+    "image": {
+      "provider": "gemini-image",
+      "model": "gemini-3-pro-image"
+    },
+    "audio_transcription": {
+      "provider": "openai",
+      "model": "whisper-1",
+      "fallbackProvider": "gemini",
+      "fallbackModel": "gemini-2.5-flash"
+    },
+    "coding": {
+      "provider": "opencode",
+      "model": ""
+    }
+  },
   "rules": {
     "simple_lookup": "local",
     "draft_boilerplate": "local",

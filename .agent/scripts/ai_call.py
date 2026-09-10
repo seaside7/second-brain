@@ -322,7 +322,7 @@ def sentinel(task, claude_fallback, note="", tried=None):
 
 def run(prompt, task=None, model=None, timeout=180, output_format=None,
         allowed_tools=None, cwd=None, env=None, pin_model=True,
-        grace=DEFAULT_GRACE, require_tools=False):
+        grace=DEFAULT_GRACE, require_tools=False, module=None, workspace=None):
     """Run one call synchronously. Returns (ok, text, meta); never raises.
 
     On ok the text is the model's answer (still wrapped when output_format is
@@ -337,6 +337,16 @@ def run(prompt, task=None, model=None, timeout=180, output_format=None,
     the hard ceiling regardless (evals do, so a scenario cannot run long).
 
     require_tools=True refuses a tool-less backend outright; see plan()."""
+    if task is None and model is None and module:
+        import model_router as mr
+        r = mr.resolve_module(module, workspace or "personal")
+        if r.get("provider") == "agy" and r.get("model") in ("harvest", "draft",
+                                                             "research", "critic"):
+            task = r["model"]
+        elif r.get("provider") == "claude":
+            model = r["model"]
+        else:
+            task = "draft"
     p = plan(prompt, task=task, model=model, output_format=output_format,
              allowed_tools=allowed_tools, timeout=timeout, pin_model=pin_model,
              require_tools=require_tools)

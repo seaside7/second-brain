@@ -28,10 +28,25 @@ DEFAULT_MODEL = "deepseek-chat"
 DEFAULT_TIMEOUT = 30
 
 
-def call(prompt, model=None, max_tokens=1024, temperature=0.3, timeout=DEFAULT_TIMEOUT):
-    """Call DeepSeek API. Returns (ok, text, meta)."""
+def call(prompt, model=None, module=None, workspace=None, max_tokens=1024,
+         temperature=0.3, timeout=DEFAULT_TIMEOUT):
+    """Call DeepSeek API. Returns (ok, text, meta).
+
+    When `model` is omitted and `module` is given, resolve the module's model
+    through model_router. If the module resolved to a different provider, this
+    adapter refuses with a clear reason (the fallback walk handles escalation)."""
     if not DEEPSEEK_API_KEY:
         return False, "", {"reason": "DEEPSEEK_API_KEY not set in .env"}
+
+    if not model and module:
+        import model_router as mr
+        r = mr.resolve_module(module, workspace or "personal")
+        if not r.get("provider"):
+            return False, "", {"reason": "module %s resolved no provider" % module}
+        if r.get("provider") != "deepseek":
+            return False, "", {"reason": "module %s resolved to provider %s (deepseek_call only)"
+                               % (module, r.get("provider"))}
+        model = r.get("model")
 
     body = json.dumps({
         "model": model or DEFAULT_MODEL,

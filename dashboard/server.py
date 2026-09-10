@@ -66,6 +66,11 @@ import workspace_resolver as ws_resolver  # noqa: E402
 # All /api/coding/* + /api/coding/preview/* traffic is delegated here.
 import coding_agent  # noqa: E402
 
+# Model registry (Settings → AI Models): single resolution service for every
+# module. resolve_module/list_modules/execute power /api/models*; provider
+# adapters delegate back here when called with module= instead of model=.
+import model_router as model_router  # noqa: E402
+
 DASHBOARD_PATH = BASE_DIR / 'Dashboard.md'
 PUBLIC_DIR = Path(__file__).resolve().parent / 'public'
 CLIENTS_DIR = BASE_DIR / 'Clients'
@@ -161,6 +166,8 @@ SAMUDERA_ALLOWED_GET = {
     '/api/memory-notes',
     # AI task runs
     '/api/ai-task',
+    # Model settings (per-workspace registry view; no secrets are returned)
+    '/api/models', '/api/models/catalog',
     # Home aggregation (samudera-scoped payload = news only)
     '/api/home',
 }
@@ -179,7 +186,9 @@ SAMUDERA_ALLOWED_POST = {'/api/chat', '/api/chat-conversations',
                          '/api/waiting-add', '/api/waiting-close',
                          '/api/commitment-close', '/api/commitment-link',
                          '/api/memory-note', '/api/memory-note/edit',
-                         '/api/intelligence/generate'}
+                         '/api/intelligence/generate',
+                         '/api/models/set', '/api/models/reset',
+                         '/api/models/bulk-apply', '/api/models/test'}
 
 # ── Chatbox: permanent (static) suggestion categories ──────────────────────
 # The same five categories for every workspace; the workspace-scoped context
@@ -942,6 +951,39 @@ def _ai_task_spec(kind, ref, instruction=None):
         return prompt, f'Read,Bash(python3 {enrich_script}:*)', 'haiku', None
 
     raise ValueError(f'unknown kind {kind!r}; allowed: {", ".join(AI_TASK_KINDS)}')
+
+
+# ai-task kind -> model-registry module id (for Settings → AI Models overrides).
+_AI_TASK_MODULE = {
+    'ping': 'ai_task_ping',
+    'commitment': 'ai_task_commitment',
+    'fix-job': 'ai_task_fix',
+    'verify-commitments': 'ai_task_commitment',
+    'inbox': 'ai_task_inbox',
+    'inbox-digest': 'ai_task_inbox_digest',
+    'premeeting-enrich': 'ai_task_premeeting',
+}
+
+
+def _ai_task_model(kind, default):
+    """Registry override for a detached ai-task worker, when the owner explicitly
+    set one (source == 'module'). Only claude-alias / agy-task backends that
+    ai_call.plan() understands are honored; everything else keeps the built-in
+    tier. Workspace-level defaults never apply here (they resolve to API model
+    ids that the plan() path cannot run)."""
+    mid = _AI_TASK_MODULE.get(kind)
+    if not mid:
+        return default
+    try:
+        r = model_router.resolve_module(mid, 'shared')
+        if r.get('source') == 'module' and r.get('provider') in ('claude', 'agy') \
+                and r.get('model'):
+            if r['model'] in ('haiku', 'sonnet', 'opus',
+                              'harvest', 'draft', 'research', 'critic'):
+                return r['model']
+    except Exception:
+        pass
+    return default
 
 def _ai_finalize_status(meta, rc):
     """Terminal status for a finished ai-task run. Returns (status, note_or_None).
@@ -2958,19 +3000,10 @@ def _chat_deep_dive(message, ctx, conv_id):
         'balasan obrolan santai - abaikan aturan gaya casual chat untuk output ini.'
     )
 
-    ok, text, meta = False, '', {}
-    backend = None
-    if deepseek_call is not None:
-        ok, text, meta = deepseek_call.call(system, max_tokens=4000,
-                                            temperature=0.3, timeout=240)
-        backend = 'deepseek'
-    if not ok and openai_call is not None:
-        ok, text, meta = openai_call.call(message, system=system, tier='medium',
-                                          max_tokens=4000, timeout=240)
-        backend = 'openai'
-    if not ok:
-        ok, text, meta = ai_call.run(system, task='draft', model='sonnet', timeout=240)
-        backend = meta.get('backend') or 'none'
+    ok, text, meta = model_router.execute('stock_deepdive', 'personal', prompt=message,
+                                          system=system, max_tokens=4000,
+                                          temperature=0.3, timeout=240)
+    backend = meta.get('provider') or 'none'
 
     stamp = time.strftime('%Y%m%d-%H%M')
     try:
@@ -3383,6 +3416,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_get_reminders()
         elif self.path.split('?')[0] == '/api/home':
             self._handle_get_home()
+        elif self.path.split('?')[0] == '/api/models':
+            self._handle_get_models()
+        elif self.path.split('?')[0] == '/api/models/catalog':
+            self._handle_get_models_catalog()
         elif self.path.split('?')[0] == '/api/finance':
             self._handle_get_finance()
         elif self.path.split('?')[0] == '/api/invoices':
@@ -3509,6 +3546,14 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_post_intelligence_generate()
         elif self.path == '/api/intelligence/chat':
             self._handle_post_intelligence_chat()
+        elif self.path == '/api/models/set':
+            self._handle_post_models_set()
+        elif self.path == '/api/models/reset':
+            self._handle_post_models_reset()
+        elif self.path == '/api/models/bulk-apply':
+            self._handle_post_models_bulk_apply()
+        elif self.path == '/api/models/test':
+            self._handle_post_models_test()
         elif self.path == '/api/reminders/add':
             self._handle_post_reminders('add')
         elif self.path == '/api/reminders/close':
@@ -5530,6 +5575,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             instruction = (body.get('instruction') or '').strip() or None
             try:
                 prompt, tools, model, expected_result = _ai_task_spec(kind, ref, instruction)
+                model = _ai_task_model(kind, model)
             except ValueError as ve:
                 self._send_json(400, json.dumps({'error': str(ve)}))
                 return
@@ -6237,26 +6283,15 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 'and never invent its contents, sections, entities, or numbers.'
             )
 
-            ok, text, meta = False, '', {}
-            backend = None
-            # DeepSeek first: cheapest backend, plenty for reading/summarizing
-            # simple tasks and words. OpenAI and agy-bridge are fallbacks only.
-            if deepseek_call is not None:
-                ok, text, meta = deepseek_call.call(
-                    system + '\n\nQuestion: ' + message, max_tokens=1024,
-                    temperature=0.3, timeout=120)
-                backend = 'deepseek'
-            if not ok and openai_call is not None:
-                ok, text, meta = openai_call.call(message, system=system, tier='medium',
-                                                  max_tokens=1024, timeout=120)
-                backend = 'openai'
-            if not ok:
-                ok, text, meta = ai_call.run(system + '\n\nQuestion: ' + message,
-                                             task='draft', model='sonnet', timeout=120)
-                backend = meta.get('backend') or 'none'
+            module_id = 'samudera_chat' if ctx.name == 'samudera' else 'personal_chat'
+            ok, text, meta = model_router.execute(module_id, ctx.name, prompt=message,
+                                                  system=system, max_tokens=1024,
+                                                  temperature=0.3, timeout=120)
+            backend = meta.get('provider') or 'none'
             if not ok:
                 reason = (meta.get('reason') or 'ai call failed').strip()
-                if reason == 'fallback_to_claude' or backend == 'none':
+                if reason == 'fallback_to_claude' or backend in (None, 'none') \
+                        or 'no backend' in reason.lower() or reason == 'no-backend':
                     clean = ('I could not answer because no AI backend is available '
                              'on this machine (no model CLI or API tokens configured). '
                              'This is an environment issue, not a problem with your question.')
@@ -7450,21 +7485,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 + (f'{conv_ctx}\n' if conv_ctx else '')
             )
 
-            ok, text, meta = False, '', {}
-            backend = None
-            if deepseek_call is not None:
-                ok, text, meta = deepseek_call.call(
-                    system + '\n\nQuestion: ' + message, max_tokens=1204,
-                    temperature=0.3, timeout=120)
-                backend = 'deepseek'
-            if not ok and openai_call is not None:
-                ok, text, meta = openai_call.call(message, system=system, tier='medium',
-                                                  max_tokens=1204, timeout=120)
-                backend = 'openai'
-            if not ok:
-                ok, text, meta = ai_call.run(system + '\n\nQuestion: ' + message,
-                                             task='draft', model='sonnet', timeout=120)
-                backend = meta.get('backend') or 'none'
+            ok, text, meta = model_router.execute('news_chat', 'shared', prompt=message,
+                                          system=system, max_tokens=1204,
+                                          temperature=0.3, timeout=120)
+            backend = meta.get('provider') or 'none'
 
             if not ok:
                 reason = (meta.get('reason') or 'ai call failed').strip()
@@ -7485,6 +7509,146 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             }, ensure_ascii=False))
         except Exception as e:
             self._send_json(500, json.dumps({'error': 'intelligence chat failed', 'details': str(e)}))
+
+    def _models_ws(self, body=None):
+        """Which workspace's model settings to read/write. An explicit
+        `workspace` body/param wins, else the requested view's workspace,
+        else personal (the root dashboard's default)."""
+        if body and body.get('workspace') in ('personal', 'samudera', 'catalyze', 'shared'):
+            return body['workspace']
+        if self.ws in ('personal', 'samudera', 'catalyze', 'shared'):
+            return self.ws
+        return 'personal'
+
+    def _handle_get_models(self):
+        """GET /api/models?workspace=... — per-module effective model settings."""
+        try:
+            qs = parse_qs(urlsplit(self.path).query)
+            body = {'workspace': (qs.get('workspace') or [None])[0]}
+            ws = self._models_ws(body)
+            payload = {
+                'workspace': ws,
+                'modules': model_router.list_modules(ws),
+                'settings': model_router.load_settings(ws),
+            }
+            self._send_json(200, json.dumps(payload, ensure_ascii=False))
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': 'models failed', 'details': str(e)}))
+
+    def _handle_get_models_catalog(self):
+        """GET /api/models/catalog — non-secret model/capability metadata."""
+        try:
+            cat = model_router.load_catalog()
+            for key in ('models', 'capabilities', 'agy_backends'):
+                cat.setdefault(key, {})
+            self._send_json(200, json.dumps(cat, ensure_ascii=False))
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': 'catalog failed', 'details': str(e)}))
+
+    def _handle_post_models_set(self):
+        """POST /api/models/set {workspace, module_id, provider, model,
+        fallback_provider?, fallback_model?, enabled?} — save one override."""
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+            ws = self._models_ws(body)
+            ok, detail = model_router.set_module(
+                ws,
+                (body.get('module_id') or '').strip(),
+                (body.get('provider') or '').strip(),
+                (body.get('model') or '').strip(),
+                (body.get('fallback_provider') or '').strip() or None,
+                (body.get('fallback_model') or '').strip() or None,
+                enabled=body.get('enabled', True))
+            if not ok:
+                self._send_json(400, json.dumps({
+                    'error': detail if isinstance(detail, str) else 'set failed'}))
+                return
+            self._send_json(200, json.dumps({'ok': True, 'module': detail},
+                                            ensure_ascii=False))
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': 'models set failed', 'details': str(e)}))
+
+    def _handle_post_models_reset(self):
+        """POST /api/models/reset {workspace, module_id?} — drop one override, or
+        all overrides when module_id is absent."""
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+            ws = self._models_ws(body)
+            r = model_router.reset_module(ws, (body.get('module_id') or '').strip() or None)
+            self._send_json(200, json.dumps(r, ensure_ascii=False))
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': 'models reset failed', 'details': str(e)}))
+
+    def _handle_post_models_bulk_apply(self):
+        """POST /api/models/bulk-apply {workspace, provider, model, module_ids?,
+        confirm?} — list the text_generation modules that a bulk switch would
+        change (no confirm), or apply it (confirm=true)."""
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+            ws = self._models_ws(body)
+            provider = (body.get('provider') or '').strip()
+            model = (body.get('model') or '').strip()
+            mids = [m for m in (body.get('module_ids') or [])
+                    if isinstance(m, str) and m.strip()]
+            r = model_router.bulk_apply(ws, provider, model, mids or None)
+            if not r.get('ok'):
+                self._send_json(400, json.dumps({'error': r.get('error')}))
+                return
+            if not body.get('confirm'):
+                self._send_json(200, json.dumps({'confirm': True, 'affected': r['affected']},
+                                                ensure_ascii=False))
+                return
+            applied = model_router.apply_bulk(ws, provider, model, r['affected'])
+            self._send_json(200, json.dumps(applied, ensure_ascii=False))
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': 'bulk apply failed', 'details': str(e)}))
+
+    def _handle_post_models_test(self):
+        """POST /api/models/test {workspace, module_id, prompt?} — one live call
+        (max_tokens capped, errors masked — never expose credentials)."""
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+            ws = self._models_ws(body)
+            module_id = (body.get('module_id') or '').strip()
+            spec = model_router.resolve_module(module_id, ws)
+            if not spec.get('provider'):
+                self._send_json(400, json.dumps({
+                    'error': 'module has no effective provider',
+                    'module': module_id,
+                    'source': spec.get('source')}))
+                return
+            if spec.get('capability') != 'text_generation':
+                self._send_json(400, json.dumps({
+                    'error': 'test is only available for text_generation modules',
+                    'module': module_id}))
+                return
+            prompt = body.get('prompt') or 'Reply with exactly the words: OK, you are working.'
+            ok, text, meta = model_router.execute(module_id, ws, prompt=prompt,
+                                                  max_tokens=96, temperature=0.1,
+                                                  timeout=60)
+            if not ok:
+                self._send_json(200, json.dumps({
+                    'ok': False,
+                    'workspace': ws, 'module': module_id,
+                    'provider': meta.get('provider'), 'model': meta.get('model'),
+                    'source': meta.get('source'), 'backend': meta.get('backend'),
+                    'error': 'availability or runtime failure',
+                    'detail': (meta.get('reason') or 'test call failed')[:300],
+                }, ensure_ascii=False))
+                return
+            self._send_json(200, json.dumps({
+                'ok': True,
+                'workspace': ws, 'module': module_id,
+                'provider': meta.get('provider'), 'model': meta.get('model'),
+                'source': meta.get('source') or spec.get('source'),
+                'reply': (text or '')[:200],
+            }, ensure_ascii=False))
+        except Exception as e:
+            self._send_json(500, json.dumps({'error': 'models test failed', 'details': str(e)}))
 
     def _home_news(self, cap=3):
         """Top stories from the newest intelligence feed — one best per

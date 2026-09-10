@@ -206,16 +206,7 @@ def _extract_project(text):
 
 
 def _llm_classify(text):
-    """DeepSeek LLM classification fallback."""
-    try:
-        import importlib
-        mod = importlib.import_module('ai_call')
-        deepseek_call = getattr(mod, 'deepseek_call', None)
-        openai_call = getattr(mod, 'openai_call', None)
-    except ImportError:
-        deepseek_call = None
-        openai_call = None
-
+    """LLM classification via the model registry ('memory_classify')."""
     system = """You are a memory classifier. Given a user note, classify it and extract structured data.
 
 Return ONLY valid JSON (no markdown, no explanation):
@@ -247,13 +238,9 @@ If uncertain, use confidence: "medium"."""
 
     prompt = f'Classify this note:\n\n"{text}"'
 
-    ok, raw, meta = False, '', {}
-    if deepseek_call is not None:
-        ok, raw, meta = deepseek_call.call(
-            system + '\n\n' + prompt, max_tokens=500, temperature=0.1, timeout=30)
-    if not ok and openai_call is not None:
-        ok, raw, meta = openai_call.call(prompt, system=system, tier='low',
-                                          max_tokens=500, timeout=30)
+    ok, raw, meta = model_router.execute('memory_classify', 'shared', prompt=prompt,
+                                         system=system, max_tokens=500,
+                                         temperature=0.1, timeout=30)
 
     if not ok:
         return None

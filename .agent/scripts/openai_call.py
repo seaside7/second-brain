@@ -49,11 +49,25 @@ def resolve_model(model=None, tier=None):
     return DEFAULT_MODEL
 
 
-def call(prompt, model=None, tier=None, max_tokens=1024, temperature=0.3,
-         timeout=DEFAULT_TIMEOUT, system=None):
-    """Call OpenAI API. Returns (ok, text, meta)."""
+def call(prompt, model=None, tier=None, module=None, workspace=None,
+         max_tokens=1024, temperature=0.3, timeout=DEFAULT_TIMEOUT, system=None):
+    """Call OpenAI API. Returns (ok, text, meta).
+
+    When `model` is omitted and `module` is given, resolve the module's model
+    through model_router. If the module resolved to a different provider this
+    adapter refuses with a clear reason (the fallback walk handles escalation)."""
     if not OPENAI_API_KEY:
         return False, "", {"reason": "OPENAI_API_KEY not set in .env"}
+
+    if not model and not tier and module:
+        import model_router as mr
+        r = mr.resolve_module(module, workspace or "personal")
+        if not r.get("provider"):
+            return False, "", {"reason": "module %s resolved no provider" % module}
+        if r.get("provider") != "openai":
+            return False, "", {"reason": "module %s resolved to provider %s (openai_call only)"
+                               % (module, r.get("provider"))}
+        model = r.get("model")
 
     messages = []
     if system:

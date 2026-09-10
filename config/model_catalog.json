@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "_comment": "Server-side model metadata catalog. Non-secret by design - the Settings API only ever returns this metadata plus a boolean 'available' per entry, never credentials. Providers/keys stay in .env. The registry (model_router.resolve_module) reads capability compatibility from this file and config/model_routing.json.",
+  "capabilities": {
+    "text_generation": {
+      "description": "Chat, summarization, drafting, scoring, classification, synthesis",
+      "models": ["deepseek-chat", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"],
+      "extra_backends": ["agy", "claude"]
+    },
+    "embedding": {
+      "description": "Vector embeddings for knowledge retrieval (FAISS)",
+      "models": ["text-embedding-3-small"]
+    },
+    "image": {
+      "description": "Image generation (gemini-image skill)",
+      "models": ["gemini-3-pro-image", "imagen-4.0"]
+    },
+    "audio_transcription": {
+      "description": "Speech-to-text (meeting-recorder / meetbot)",
+      "models": ["whisper-1", "gemini-2.5-flash"]
+    },
+    "coding": {
+      "description": "Code agent planning + building (opencode-managed)",
+      "models": []
+    }
+  },
+  "models": {
+    "deepseek-chat": {
+      "provider": "deepseek",
+      "displayName": "DeepSeek Chat",
+      "capabilities": ["text_generation"],
+      "enabled": true,
+      "notes": "Cheap default backend. API key from DEEPSEEK_API_KEY (.env)."
+    },
+    "gpt-5.6-luna": {
+      "provider": "openai",
+      "displayName": "GPT-5.6 Luna (low)",
+      "capabilities": ["text_generation"],
+      "enabled": true,
+      "notes": "Cheap OpenAI tier. Key from OPENAI_API_KEY; id overridable by OPENAI_MODEL_LUNA."
+    },
+    "gpt-5.6-terra": {
+      "provider": "openai",
+      "displayName": "GPT-5.6 Terra (medium)",
+      "capabilities": ["text_generation"],
+      "enabled": true,
+      "notes": "Medium OpenAI tier. Key from OPENAI_API_KEY; id overridable by OPENAI_MODEL_TERRA."
+    },
+    "gpt-5.6-sol": {
+      "provider": "openai",
+      "displayName": "GPT-5.6 Sol (high)",
+      "capabilities": ["text_generation"],
+      "enabled": true,
+      "notes": "High/strategic OpenAI tier. Key from OPENAI_API_KEY; id overridable by OPENAI_MODEL_SOL."
+    },
+    "text-embedding-3-small": {
+      "provider": "openai",
+      "displayName": "text-embedding-3-small (1536d)",
+      "capabilities": ["embedding"],
+      "enabled": true,
+      "notes": "Embedding model for the FAISS knowledge index. Key from OPENAI_API_KEY."
+    },
+    "gemini-3-pro-image": {
+      "provider": "gemini-image",
+      "displayName": "Gemini 3 Pro Image",
+      "capabilities": ["image"],
+      "enabled": true,
+      "notes": "Default image model ('Nano Banana', pro 3.1 tier). Token from gemini-image/token.env or GEMINI_API_KEY."
+    },
+    "imagen-4.0": {
+      "provider": "gemini-image",
+      "displayName": "Imagen 4.0",
+      "capabilities": ["image"],
+      "enabled": true,
+      "notes": "Used only when true aspect-ratio control is needed."
+    },
+    "whisper-1": {
+      "provider": "openai",
+      "displayName": "Whisper-1 (OpenAI)",
+      "capabilities": ["audio_transcription"],
+      "enabled": true,
+      "notes": "Cloud transcription. Managed by meeting-recorder/config.json engine=openai."
+    },
+    "gemini-2.5-flash": {
+      "provider": "gemini",
+      "displayName": "Gemini 2.5 Flash",
+      "capabilities": ["audio_transcription"],
+      "enabled": true,
+      "notes": "Cloud transcription with speaker labels. meeting-recorder config key gemini_model."
+    }
+  },
+  "agy_backends": {
+    "agy": { "displayName": "agy-bridge (Gemini via Antigravity)", "capabilities": ["text_generation"] },
+    "claude": { "displayName": "Claude CLI (CLAUDE.md tiers)", "capabilities": ["text_generation"] }
+  }
+}
