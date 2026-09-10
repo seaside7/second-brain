@@ -3279,8 +3279,11 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
 .settings-ws { display: inline-flex; align-items: center; gap: var(--sp-2);
   font-size: var(--fs-xs); color: var(--text-secondary); }
 .settings-ws select, .settings-bulk select, .settings-c select {
-  background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border);
-  border-radius: var(--radius-xs); padding: 4px 8px; font-size: var(--fs-xs); }
+  background: #000; color: #fff; border: 1px solid var(--border);
+  border-radius: var(--radius-xs); padding: 4px 8px; font-size: var(--fs-xs);
+  color-scheme: dark; }
+.settings-ws select option, .settings-bulk select option, .settings-c select option {
+  background: #000; color: #fff; }
 .settings-bulk { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
 .settings-bulk-info { font-size: var(--fs-xs); color: var(--text-secondary);
   font-family: var(--font-mono); }
