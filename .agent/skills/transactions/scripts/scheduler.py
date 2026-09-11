@@ -1,8 +1,9 @@
 """Scheduler for automatic Gmail sync.
 
-Runs at 23:59 WIB (Asia/Jakarta) daily via a daemon thread in the
-dashboard server. Also performs a catch-up sync on server start if
-the last sync was >25h ago.
+Runs on a fixed interval (default every 6 hours) via a daemon thread in the
+dashboard server. Sync is idempotent (already-processed message ids are
+skipped), so frequent runs are safe and cheap. The scheduler also performs a
+catch-up sync immediately on start, then on that same interval.
 """
 from __future__ import annotations
 
@@ -21,45 +22,40 @@ except ImportError:
 logger = logging.getLogger('transactions.scheduler')
 
 WIB = ZoneInfo('Asia/Jakarta')
-DEFAULT_SYNC_HOUR = 23
-DEFAULT_SYNC_MINUTE = 59
-SYNC_INTERVAL_SECS = 24 * 60 * 60  # 24h
-CATCHUP_THRESHOLD_SECS = 25 * 60 * 60  # 25h
+DEFAULT_SYNC_INTERVAL_SECS = 6 * 60 * 60  # every 6 hours
+MIN_INTERVAL_SECS = 60 * 60  # never sync more often than hourly
 
 
 class TransactionScheduler:
-    """Daemon scheduler for daily Gmail transaction sync."""
+    """Daemon scheduler for Gmail transaction sync on a fixed interval."""
 
     def __init__(self, sync_fn: Callable[[], dict],
-                 sync_hour: int = DEFAULT_SYNC_HOUR,
-                 sync_minute: int = DEFAULT_SYNC_MINUTE):
+                 interval_secs: int = DEFAULT_SYNC_INTERVAL_SECS):
         """
         Parameters
         ----------
         sync_fn : callable
             Function to call for sync (no args, returns dict with 'ok' key).
-        sync_hour, sync_minute : int
-            Time of day to run (WIB). Default 23:59.
+        interval_secs : int
+            Seconds between syncs. Clamped to >= MIN_INTERVAL_SECS.
         """
         self._sync_fn = sync_fn
-        self._sync_hour = sync_hour
-        self._sync_minute = sync_minute
+        self._interval_secs = max(int(interval_secs), MIN_INTERVAL_SECS)
         self._timer: Optional[threading.Timer] = None
         self._last_sync_at: Optional[float] = None
         self._running = False
 
     def start(self) -> None:
-        """Start the scheduler. Performs catch-up if needed, then schedules next run."""
+        """Start the scheduler. Runs an immediate catch-up, then schedules the next."""
         if self._running:
             return
         self._running = True
-        logger.info('Transaction scheduler starting (sync at %02d:%02d WIB)',
-                     self._sync_hour, self._sync_minute)
+        self._last_sync_at = None
+        logger.info('Transaction scheduler starting (sync every %ds)',
+                     self._interval_secs)
 
-        # Check if catch-up is needed
-        self._maybe_catchup()
-
-        # Schedule next run
+        # Immediate catch-up sync, then schedule the next run.
+        self._do_sync()
         self._schedule_next()
 
     def stop(self) -> None:
@@ -74,42 +70,17 @@ class TransactionScheduler:
         """Trigger an immediate sync (manual button)."""
         return self._do_sync()
 
-    def _maybe_catchup(self) -> None:
-        """Run a sync immediately if the last sync was >25h ago."""
-        if self._last_sync_at is None:
-            # No sync yet this session — trigger catch-up
-            logger.info('No previous sync recorded; running catch-up sync')
-            self._do_sync()
-            return
-
-        age = time.time() - self._last_sync_at
-        if age > CATCHUP_THRESHOLD_SECS:
-            logger.info('Last sync was %.1fh ago; running catch-up sync', age / 3600)
-            self._do_sync()
-
     def _schedule_next(self) -> None:
-        """Schedule the next sync at the configured time WIB."""
+        """Schedule the next sync `interval` seconds from now."""
         if not self._running:
             return
 
-        now_wib = datetime.now(WIB)
-        target_wib = now_wib.replace(
-            hour=self._sync_hour,
-            minute=self._sync_minute,
-            second=0, microsecond=0
-        )
-
-        # If target already passed today, schedule for tomorrow
-        if target_wib <= now_wib:
-            target_wib += timedelta(days=1)
-
-        delay_secs = (target_wib - now_wib).total_seconds()
-        logger.info('Next sync at %s WIB (%.0fs from now)',
-                     target_wib.strftime('%Y-%m-%d %H:%M'), delay_secs)
-
-        self._timer = threading.Timer(delay_secs, self._run_scheduled)
+        self._timer = threading.Timer(self._interval_secs, self._run_scheduled)
         self._timer.daemon = True
         self._timer.start()
+        next_utc = datetime.now() + timedelta(seconds=self._interval_secs)
+        logger.info('Next sync at %s (%.0fs from now)',
+                     next_utc.strftime('%Y-%m-%d %H:%M:%S'), self._interval_secs)
 
     def _run_scheduled(self) -> None:
         """Called by timer; runs sync and reschedules."""
@@ -132,7 +103,6 @@ class TransactionScheduler:
 
 
 def create_scheduler(sync_fn: Callable[[], dict],
-                     sync_hour: int = DEFAULT_SYNC_HOUR,
-                     sync_minute: int = DEFAULT_SYNC_MINUTE) -> TransactionScheduler:
+                     interval_secs: int = DEFAULT_SYNC_INTERVAL_SECS) -> TransactionScheduler:
     """Create and return a TransactionScheduler instance."""
-    return TransactionScheduler(sync_fn, sync_hour, sync_minute)
+    return TransactionScheduler(sync_fn, interval_secs)

@@ -8562,11 +8562,13 @@ def _intel_scheduler():
 
 
 def _start_transactions_scheduler():
-    """Start the personal Gmail transaction sync scheduler (23:59 WIB daily).
+    """Start the personal Gmail transaction sync scheduler (every 6h).
 
-    Only arms when the transactions modules imported cleanly AND the personal
-    Gmail token exists; otherwise it prints a status line and stays idle
-    (sync via the dashboard button still works regardless).
+    Runs an immediate catch-up on start, then every 6 hours. Only arms when the
+    transactions modules imported cleanly AND the personal Gmail token exists;
+    otherwise it prints a status line and stays idle (sync via the dashboard
+    button still works regardless). Sync is idempotent, so frequent runs never
+    insert duplicates.
     """
     try:
         if not getattr(transactions_api, '_IMPORTS_OK', False):
@@ -8579,7 +8581,7 @@ def _start_transactions_scheduler():
         tx_scheduler = transactions_api.TransactionScheduler(
             lambda: transactions_api.sync_gmail(transactions_api.connect()))
         threading.Thread(target=tx_scheduler.start, daemon=True).start()
-        print(f"  Transactions:  Gmail sync scheduler armed (daily 23:59 WIB)")
+        print(f"  Transactions:  Gmail sync scheduler armed (first sync now, then every 6h)")
     except Exception as e:
         print(f"  Transactions:  scheduler failed to start: {e}")
 
