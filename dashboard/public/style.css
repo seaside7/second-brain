@@ -3482,7 +3482,7 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
 
 /* ── transaction table ─────────────────────────────────────────── */
 .tx-table-wrap { overflow-x: auto; margin: 0 calc(var(--sp-3) * -1) calc(var(--sp-3) * -1); }
-.tx-table { width: 100%; min-width: 560px; border-collapse: separate; border-spacing: 0; font-size: var(--fs-sm); }
+.tx-table { width: 100%; min-width: 720px; border-collapse: separate; border-spacing: 0; font-size: var(--fs-sm); }
 .tx-table thead th {
   position: sticky; top: 0; z-index: 1; background: var(--bg-card);
   text-align: left; font-size: var(--fs-xs); font-weight: 600;
@@ -3496,6 +3496,20 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
 .tx-th-desc { min-width: 160px; }
 .tx-th-amount, .tx-td-amount { text-align: right; }
 .tx-th-status, .tx-td-status { text-align: right; white-space: nowrap; }
+.tx-th-cat { min-width: 150px; }
+.tx-td-cat { white-space: nowrap; }
+.tx-cat {
+  width: 100%; min-width: 140px; max-width: 190px;
+  padding: 4px 6px;
+  font-size: var(--fs-xs); font-weight: 550;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid transparent; border-radius: var(--radius);
+  cursor: pointer;
+}
+.tx-cat:hover { border-color: var(--border); background: var(--bg-input, rgba(255,255,255,.04)); }
+.tx-cat:focus { border-color: var(--accent); outline: none; }
+.tx-td-cat:has(.tx-cat) { padding-right: 4px; }
 .tx-td-date {
   white-space: nowrap; color: var(--text-secondary);
   font-variant-numeric: tabular-nums; font-size: var(--fs-xs);

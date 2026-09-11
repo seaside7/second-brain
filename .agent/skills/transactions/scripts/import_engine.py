@@ -213,10 +213,27 @@ def confirm_import(conn: sqlite3.Connection, batch_id: int,
         ext_ids.append(r['id'])
 
     if ledger_rows:
-        store.add_ledger_rows_batch(conn, ledger_rows)
+        ledger_ids = store.add_ledger_rows_batch(conn, ledger_rows)
 
     # Run categorization
-    cat_results = categorize_batch(conn, [e for e in store.list_extracted_by_batch(conn, batch_id) if e['dup_status'] != 'exact_dup'])
+    new_extracted = [e for e in store.list_extracted_by_batch(conn, batch_id) if e['dup_status'] != 'exact_dup']
+    cat_results = categorize_batch(conn, new_extracted)
+
+    # Apply the categorization results to the just-created ledger rows
+    # (matched by ext_id -> ledger row created in the same order).
+    applied = 0
+    for i, res in enumerate(cat_results):
+        if i >= len(ledger_ids):
+            break
+        if res.get('category_id'):
+            store.update_ledger(conn, ledger_ids[i],
+                category_id=res['category_id'],
+                nature=res['nature'],
+                confidence=res['confidence'],
+                confidence_reason=res['reason'],
+                review_status='ok' if res['confidence'] in ('high', 'medium') else 'uncategorized',
+                txn_status='confirmed' if res['confidence'] in ('high', 'medium') else 'needs_review')
+            applied += 1
 
     # Update batch state
     stats = {
@@ -224,6 +241,7 @@ def confirm_import(conn: sqlite3.Connection, batch_id: int,
         'new_rows': len(new_rows),
         'duplicate_rows': len(extracted) - len(new_rows),
         'categorized': sum(1 for r in cat_results if r.get('category_id')),
+        'applied': applied,
     }
     store.update_import_batch(conn, batch_id,
         state='committed',

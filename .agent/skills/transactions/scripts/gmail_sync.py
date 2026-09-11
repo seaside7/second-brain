@@ -193,7 +193,7 @@ def _process_message(conn: sqlite3.Connection, service, msg_id: str, stats: dict
     # Auto-create the ledger row so the transaction is visible immediately.
     amount = parsed.get('total_amount') or parsed.get('principal_amount') or 0
     if ext_ids:
-        store.add_ledger_row(
+        ledger_id = store.add_ledger_row(
             conn, ext_ids[0],
             amount=amount,
             direction=parsed.get('direction', 'out'),
@@ -202,6 +202,18 @@ def _process_message(conn: sqlite3.Connection, service, msg_id: str, stats: dict
             evidence_json=json.dumps({'msg_id': msg_id, 'provider': provider}),
             review_status='ok',
         )
+        # Deterministic categorization (no LLM): apply the first matching rule.
+        from categorize import categorize_batch, apply_categorization
+        results = categorize_batch(conn, [dict(parsed, id=ext_ids[0])])
+        if results and results[0].get('category_id'):
+            apply_categorization(conn, results[0], ledger_id)
+            store.update_source_document(conn, doc_id,
+                parser_version='2.1',
+                error='')
+        else:
+            store.update_source_document(conn, doc_id,
+                parser_version='2.1',
+                error='uncategorized')
 
     stats['synced'] += 1
 
@@ -310,8 +322,37 @@ def _parse_gopay(body: str, subject: str, occurred_at: str) -> Optional[dict]:
     if amount <= 0:
         return None
     direction = 'in' if any(k in body_l for k in ['refund', 'cashback', 'credit', 'masuk']) else 'out'
-    return _build_row('gopay', subject[:200] or 'GoPay transaction', direction, amount,
-                      _extract_txn_id(body), occurred_at)
+    row = _build_row('gopay', subject[:200] or 'GoPay transaction', direction, amount,
+                     _extract_txn_id(body), occurred_at)
+    # Biller name usually follows the GOBILLS tag, e.g. "GOBILLS PLN Token" /
+    # "GOBILLS Mandiri e-Money". Put it in `merchant` for categorization signal.
+    merchant = _extract_biller(body, subject)
+    if merchant:
+        row['merchant'] = merchant
+        if row['description'].lower() == subject[:200].lower() and \
+                not any(b in row['description'].lower() for b in ['pln', 'mandiri', 'pdam', 'indihome']):
+            row['description'] = f'{merchant} - {row["description"]}'[:200]
+    return row
+
+
+def _extract_biller(body: str, subject: str) -> str:
+    """Extract biller/merchant name from a GoPay receipt.
+
+    Prefers the GOBILLS tag ('GOBILLS PLN Token'), then explicit biller rows
+    like 'PLN Token - GoPay Receipt' in the subject, then 'To:' lines."""
+    m = re.search(r'GOBILLS\s+([A-Za-z0-9 .&\-]{2,40}?)\s+Rp\d', body, re.IGNORECASE)
+    if m:
+        return m.group(1).replace('  ', ' ').strip()
+    m = re.search(r'GOBILLS\s+([A-Za-z0-9 .&\-]{2,40})$', body, re.IGNORECASE)
+    if m:
+        return m.group(1).replace('  ', ' ').strip()
+    m = re.search(r'([A-Za-z0-9 .&\-]{2,40}?)\s*-\s*GoPay\s+Receipt', subject or '', re.IGNORECASE)
+    if m:
+        return m.group(1).replace('  ', ' ').strip()
+    m = re.search(r'\bTo:\s*([A-Za-z0-9 .\-]{2,40})', body, re.IGNORECASE)
+    if m:
+        return m.group(1).strip()
+    return ''
 
 
 def _build_row(provider: str, description: str, direction: str, amount: int,

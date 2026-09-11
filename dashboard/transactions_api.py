@@ -119,6 +119,8 @@ def route_get(handler) -> None:
                 _handle_accounts_list(handler)
             elif _id == 'review':
                 _handle_review_list(handler, qs)
+            elif _id == 'categories':
+                _handle_categories_list(handler)
             elif _id == 'imports':
                 _handle_imports_list(handler)
             elif _id == 'rules':
@@ -246,6 +248,17 @@ def _handle_imports_list(handler) -> None:
     try:
         batches = list_import_batches(conn, limit=50)
         _ok(handler, {'batches': batches})
+    finally:
+        conn.close()
+
+
+def _handle_categories_list(handler) -> None:
+    conn = _get_db(handler)
+    if not conn:
+        _err(handler, 403, 'Not available in samudera mode')
+        return
+    try:
+        _ok(handler, {'categories': list_categories(conn)})
     finally:
         conn.close()
 
@@ -421,40 +434,24 @@ def _handle_categorize(handler, body: dict) -> None:
         _err(handler, 403, 'Not available in samudera mode')
         return
     try:
-        # Run categorization on uncategorized rows
+        # Run categorization on uncategorized/needs-review rows.
         from store import list_ledger
-        from categorize import categorize_batch
-        rows = list_ledger(conn, review_status='uncategorized', limit=100)
+        from categorize import categorize_batch, apply_categorization
+        rows = list_ledger(conn, review_status='uncategorized', limit=200)
         if not rows:
-            _ok(handler, {'categorized': 0})
+            _ok(handler, {'categorized': 0, 'total': 0})
             return
 
-        # Get extracted data for each row
-        extracted = []
+        # Each ledger row already carries the extracted fields we need
+        # (description, merchant, recipient, provider, amounts); use its
+        # ext_id so categorize_batch returns results keyed by ext_id.
         for r in rows:
-            ext = conn.execute(
-                "SELECT * FROM extracted_txns WHERE id=?",
-                (r['ext_id'],)).fetchone()
-            if ext:
-                ext_dict = dict(ext)
-                ext_dict['ledger_id'] = r['id']
-                extracted.append(ext_dict)
-
-        results = categorize_batch(conn, extracted)
-
-        # Apply results
-        categorized = 0
-        for res in results:
+            res = categorize_batch(conn, [dict(r, id=r['ext_id'])])[0]
             if res.get('category_id'):
-                update_ledger(conn, res['ext_id'],
-                    category_id=res['category_id'],
-                    nature=res['nature'],
-                    confidence=res['confidence'],
-                    confidence_reason=res['reason'],
-                    review_status='ok' if res['confidence'] in ('high', 'medium') else 'uncategorized')
-                categorized += 1
+                apply_categorization(conn, res, r['id'])
 
-        _ok(handler, {'categorized': categorized, 'total': len(rows)})
+        _ok(handler, {'categorized': sum(
+            1 for r in rows if r.get('category_id')), 'total': len(rows)})
     finally:
         conn.close()
 
@@ -475,6 +472,10 @@ def _handle_edit(handler, txn_id: int, body: dict) -> None:
         for key in ['nature', 'category_id', 'notes', 'account_id', 'review_status']:
             if key in body:
                 fields[key] = body[key]
+
+        # Setting/clearing a category resolves review status automatically.
+        if 'category_id' in body:
+            fields['review_status'] = 'ok' if body['category_id'] else 'uncategorized'
 
         if fields:
             update_ledger(conn, txn_id, **fields)

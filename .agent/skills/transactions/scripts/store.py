@@ -263,10 +263,12 @@ def list_ledger(conn: sqlite3.Connection, *,
     where = ("WHERE " + " AND ".join(conds)) if conds else ""
     sql = (
         "SELECT l.*, a.alias as account_alias, a.masked as account_masked, "
+        "c.name as category_name, "
         "e.description, e.merchant, e.recipient, e.src_txn_id, e.provider, "
         "e.phone_suffix, e.bank_ref, e.occurred_at "
         "FROM ledger_txns l "
         "LEFT JOIN accounts a ON a.id=l.account_id "
+        "LEFT JOIN categories c ON c.id=l.category_id "
         "LEFT JOIN extracted_txns e ON e.id=l.ext_id "
         f"{where} ORDER BY e.occurred_at DESC, l.created_at DESC LIMIT ? OFFSET ?")
     params.extend([limit, offset])

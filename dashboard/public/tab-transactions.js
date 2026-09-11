@@ -49,6 +49,7 @@ const TransactionsTab = (() => {
   let _activeView = 'overview';
   let _period = 'current_month';
   let _uploadBusy = false;
+  let _categories = [];
 
   /* ── nav chips ──────────────────────────────────────────────────── */
   const VIEWS = [
@@ -98,11 +99,20 @@ const TransactionsTab = (() => {
         <th class="tx-th-date">Date</th>
         <th class="tx-th-desc">Description</th>
         <th class="tx-th-wallet">Wallet</th>
+        <th class="tx-th-cat">Category</th>
         <th class="tx-th-amount">Amount</th>
         <th class="tx-th-status">Status</th>
       </tr></thead>
       <tbody>${rows.map(r => _txTableRow(r)).join('')}</tbody>
     </table></div>`;
+  }
+
+  function _catSelect(r) {
+    const opts = ['<option value="">Uncategorized</option>']
+      .concat(_categories.map(c =>
+        `<option value="${c.id}" ${c.id === r.category_id ? 'selected' : ''}>${U.esc(c.name)}</option>`
+      )).join('');
+    return `<select class="tx-cat" data-id="${r.id}" aria-label="Category">${opts}</select>`;
   }
 
   function _txTableRow(r) {
@@ -118,6 +128,7 @@ const TransactionsTab = (() => {
       <td class="tx-td-date">${_fmtDate(r.occurred_at || r.created_at)}</td>
       <td class="tx-td-desc">${desc}</td>
       <td class="tx-td-wallet">${_walletHtml(r.provider)}</td>
+      <td class="tx-td-cat">${_catSelect(r)}</td>
       <td class="tx-td-amount ${dir}">${sign}${rp(amount)}</td>
       <td class="tx-td-status">${status}</td>
     </tr>`;
@@ -179,6 +190,13 @@ const TransactionsTab = (() => {
     _busy(true);
 
     try {
+      if (!_categories.length) {
+        try {
+          const c = await U.fetchJSON('/api/transactions/categories');
+          _categories = (c.categories || []).sort((a, b) =>
+            (a.group || a.name).localeCompare(b.group || b.name));
+        } catch (_) { /* categories stay cacheable-clean on failure */ }
+      }
       switch (_activeView) {
         case 'overview':  return await _renderOverview(body);
         case 'all':       return await _renderAll(body);
@@ -193,6 +211,24 @@ const TransactionsTab = (() => {
     } catch (err) {
       body.innerHTML = `<div class="tx-error">Error: ${U.esc(err.message)}</div>`;
       toast(err.message, false);
+    } finally {
+      _busy(false);
+    }
+    const cats = body.querySelectorAll('.tx-cat');
+    cats.forEach(sel => sel.addEventListener('change', () => _changeCategory(sel)));
+  }
+
+  async function _changeCategory(sel) {
+    const id = Number(sel.dataset.id);
+    const category_id = sel.value ? Number(sel.value) : null;
+    _busy(true);
+    try {
+      await _post(`/api/transactions/${id}/edit`, { category_id }, 15000);
+      toast(category_id ? 'Category updated' : 'Category cleared', true);
+      await refreshView();
+    } catch (e) {
+      toast(e.message, false);
+      sel.value = sel.dataset.was || '';
     } finally {
       _busy(false);
     }
@@ -277,10 +313,10 @@ const TransactionsTab = (() => {
         <td class="tx-td-date">${_fmtDate(r.occurred_at || r.created_at)}</td>
         <td class="tx-td-desc">${U.esc(r.description || r.merchant || r.notes || 'Unknown')}</td>
         <td class="tx-td-wallet">${_walletHtml(r.provider)}</td>
+        <td class="tx-td-cat">${_catSelect(r)}</td>
         <td class="tx-td-amount ${r.direction === 'in' ? 'tx-pos' : 'tx-neg'}">${r.direction === 'in' ? '+' : '-'}${rp(r.amount)}</td>
         <td class="tx-td-status tx-review-actions">
           <button class="btn tx-btn-sm tx-btn-skip" data-id="${r.id}">Skip</button>
-          <button class="btn tx-btn-sm tx-btn-cat" data-id="${r.id}">Categorize</button>
         </td>
       </tr>`).join('');
     el.innerHTML = `
@@ -290,16 +326,17 @@ const TransactionsTab = (() => {
                <th class="tx-th-date">Date</th>
                <th class="tx-th-desc">Description</th>
                <th class="tx-th-wallet">Wallet</th>
+               <th class="tx-th-cat">Category</th>
                <th class="tx-th-amount">Amount</th>
-               <th class="tx-th-status">Action</th>
+               <th class="tx-th-status">Status</th>
              </tr></thead><tbody>${rows}</tbody></table></div>`
           : '<div class="tx-empty">All clear! No transactions need review.</div>'}
       </div>
     `;
+    const cats = el.querySelectorAll('.tx-cat');
+    cats.forEach(sel => sel.addEventListener('change', () => _changeCategory(sel)));
     el.querySelectorAll('.tx-btn-skip').forEach(b =>
       b.addEventListener('click', () => _reviewSkip(b.dataset.id)));
-    el.querySelectorAll('.tx-btn-cat').forEach(b =>
-      b.addEventListener('click', () => _reviewCategorize(b.dataset.id)));
   }
 
   async function _reviewSkip(id) {
@@ -313,11 +350,6 @@ const TransactionsTab = (() => {
     } finally {
       _busy(false);
     }
-  }
-
-  async function _reviewCategorize(id) {
-    // TODO: open category picker drawer
-    toast('Category picker coming soon');
   }
 
   /* ── accounts ───────────────────────────────────────────────────── */
