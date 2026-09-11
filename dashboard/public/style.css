@@ -3423,6 +3423,10 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
 .tx-btn-outline { background: transparent; color: var(--text-primary); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 14px; font-size: var(--fs-sm); cursor: pointer; }
 .tx-btn-outline:hover { border-color: var(--accent); }
 .tx-body { display: flex; flex-direction: column; gap: var(--sp-3); }
+.tx-progress { width: 100%; height: 3px; border-radius: 2px; background: rgba(255,255,255,.06); overflow: hidden; }
+.tx-progress[hidden] { display: none; }
+.tx-progress-bar { width: 40%; height: 100%; background: var(--accent); border-radius: 2px; animation: tx-slide 1s ease-in-out infinite; }
+@keyframes tx-slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
 .tx-loading { color: var(--text-muted); padding: var(--sp-3); }
 .tx-error { color: var(--st-serious); padding: var(--sp-3); }
 .tx-empty { color: var(--text-muted); padding: var(--sp-2); font-style: italic; }

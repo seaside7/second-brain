@@ -9,7 +9,41 @@
 window.Tabs = window.Tabs || {};
 
 const TransactionsTab = (() => {
-  const { toast } = U;
+  /* toast lives on Comp (U has no toast) - route through it with a
+     safe fallback so a failure is never a silent/uncaught error */
+  const toast = (msg, ok) => {
+    try { Comp.toast(String(msg || 'Unknown error'), !!ok); }
+    catch (_) { alert(String(msg || 'Unknown error')); }
+  };
+
+  /* POST + parse JSON, throwing with the server's `error` field so the
+     popup shows the real reason instead of a bare "HTTP 400" */
+  async function _post(path, body, timeoutMs) {
+    const ctrl = new AbortController();
+    const timer = timeoutMs ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+    try {
+      const res = await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: body === undefined ? '{}' : JSON.stringify(body),
+        signal: ctrl.signal,
+      });
+      let data = null;
+      try { data = await res.json(); } catch (_) {}
+      if (!res.ok) {
+        throw new Error((data && data.error) || `HTTP ${res.status} on ${path}`);
+      }
+      return data;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  /* global in-tab progress bar (rides under the header) */
+  function _busy(on) {
+    const p = document.getElementById('tx-progress');
+    if (p) p.hidden = !on;
+  }
 
   /* ── state ──────────────────────────────────────────────────────── */
   let _activeView = 'overview';
@@ -61,6 +95,7 @@ const TransactionsTab = (() => {
             <button id="tx-upload-btn" class="btn tx-btn-primary">📄 Upload GoPay PDF</button>
           </div>
         </div>
+        <div id="tx-progress" class="tx-progress" hidden><div class="tx-progress-bar"></div></div>
         <div id="tx-body" class="tx-body"></div>
       </div>
     `;
@@ -83,6 +118,7 @@ const TransactionsTab = (() => {
     const body = document.getElementById('tx-body');
     if (!body) return;
     body.innerHTML = '<div class="tx-loading">Loading...</div>';
+    _busy(true);
 
     try {
       switch (_activeView) {
@@ -98,6 +134,9 @@ const TransactionsTab = (() => {
       }
     } catch (err) {
       body.innerHTML = `<div class="tx-error">Error: ${U.esc(err.message)}</div>`;
+      toast(err.message, false);
+    } finally {
+      _busy(false);
     }
   }
 
@@ -200,12 +239,16 @@ const TransactionsTab = (() => {
   }
 
   async function _reviewSkip(id) {
-    await U.fetchJSON('/api/transactions/review/respond', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({id: Number(id), action: 'skip'})
-    });
-    toast('Skipped');
-    refreshView();
+    _busy(true);
+    try {
+      await _post('/api/transactions/review/respond', { id: Number(id), action: 'skip' }, 15000);
+      toast('Skipped');
+      await refreshView();
+    } catch (e) {
+      toast(e.message, false);
+    } finally {
+      _busy(false);
+    }
   }
 
   async function _reviewCategorize(id) {
@@ -253,23 +296,19 @@ const TransactionsTab = (() => {
     const btn = ev.currentTarget;
     const batchId = btn.closest('.tx-row').dataset.batch;
     btn.disabled = true; btn.textContent = 'Confirming...';
+    _busy(true);
     try {
       const accts = await U.fetchJSON('/api/transactions/accounts');
       const acctId = (accts.accounts && accts.accounts[0] && accts.accounts[0].id) || null;
-      const res = await U.fetchJSON('/api/transactions/import/confirm', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({batch_id: Number(batchId), account_id: acctId})
-      });
-      if (res.ok) {
-        toast(`Batch confirmed: ${res.new_rows || 0} ledger rows`);
-        refreshView();
-      } else {
-        toast(res.error || 'Confirm failed', false);
-        btn.disabled = false; btn.textContent = 'Confirm';
-      }
+      const res = await _post('/api/transactions/import/confirm',
+        { batch_id: Number(batchId), account_id: acctId }, 20000);
+      toast(`Batch confirmed: ${res.new_rows || 0} ledger rows`);
+      await refreshView();
     } catch (e) {
       toast(e.message, false);
       btn.disabled = false; btn.textContent = 'Confirm';
+    } finally {
+      _busy(false);
     }
   }
 
@@ -300,21 +339,21 @@ const TransactionsTab = (() => {
       if (!file) return;
       if (_uploadBusy) return toast('Upload already in progress', false);
       _uploadBusy = true;
+      _busy(true);
       try {
         const b64 = await _fileToBase64(file);
-        const res = await U.fetchJSON('/api/transactions/upload', {
-          method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({filename: file.name, data: b64})
-        });
+        const res = await _post('/api/transactions/upload',
+          { filename: file.name, data: b64 }, 30000);
         if (res.ok) {
           toast(`Uploaded: ${res.row_count} rows parsed`);
-          refreshView();
+          await refreshView();
         } else {
           toast(res.error || 'Upload failed', false);
         }
       } catch (e) {
         toast(e.message, false);
       } finally {
+        _busy(false);
         _uploadBusy = false;
       }
     };
@@ -337,19 +376,19 @@ const TransactionsTab = (() => {
   async function _syncGmail() {
     const btn = document.getElementById('tx-sync-btn');
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Syncing...'; }
+    _busy(true);
     try {
-      const res = await U.fetchJSON('/api/transactions/sync/gmail', {
-        method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}'
-      });
+      const res = await _post('/api/transactions/sync/gmail', undefined, 60000);
       if (res.ok) {
         toast(`Synced: ${res.synced} new, ${res.skipped} skipped`);
-        refreshView();
+        await refreshView();
       } else {
         toast(res.error || 'Sync failed', false);
       }
     } catch (e) {
       toast(e.message, false);
     } finally {
+      _busy(false);
       if (btn) { btn.disabled = false; btn.textContent = '🔄 Sync Gmail'; }
     }
   }
