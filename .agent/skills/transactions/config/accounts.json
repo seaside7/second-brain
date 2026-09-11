@@ -1,0 +1,30 @@
+{
+  "verified_senders": [
+    {"domain": "klikbca.com", "provider": "bca"},
+    {"domain": "bca.co.id", "provider": "bca"},
+    {"domain": "bni.co.id", "provider": "bni"}
+  ],
+  "accounts": [
+    {
+      "type": "bank",
+      "provider": "bca",
+      "alias": "BCA Personal",
+      "masked": "",
+      "owner_name": "Said Iskandar"
+    },
+    {
+      "type": "bank",
+      "provider": "bni",
+      "alias": "BNI Personal",
+      "masked": "",
+      "owner_name": "Said Iskandar"
+    },
+    {
+      "type": "ewallet",
+      "provider": "gopay",
+      "alias": "GoPay",
+      "masked": "",
+      "owner_name": "Said Iskandar"
+    }
+  ]
+}

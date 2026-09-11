@@ -766,6 +766,15 @@ MODULES = {
         "defaults": {"provider": "claude", "model": "haiku"},
         "fallback": None, "emergency": False,
     },
+    "transaction_categorize": {
+        "label": "Transaction Categorize",
+        "purpose": "AI categorisation of ambiguous personal transactions",
+        "workspace": "personal",
+        "capability": CAP_TEXT,
+        "defaults": {"provider": "deepseek", "model": "deepseek-chat"},
+        "fallback": ("openai", "gpt-4o-mini"),
+        "emergency": False,
+    },
     "knowledge_embeddings": {
         "label": "Knowledge Embeddings",
         "purpose": "FAISS embedding index for memory recall",

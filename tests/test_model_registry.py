@@ -55,8 +55,8 @@ class ModelRouterTests(unittest.TestCase):
 
     # ── registry shape ──
 
-    def test_registry_has_34_modules(self):
-        self.assertEqual(len(mr.MODULES), 34)
+    def test_registry_has_35_modules(self):
+        self.assertEqual(len(mr.MODULES), 35)
         for mid, m in mr.MODULES.items():
             self.assertTrue(m.get("label"), mid)
             self.assertIn(m.get("capability"),

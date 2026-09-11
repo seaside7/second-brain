@@ -65,6 +65,7 @@ import workspace_resolver as ws_resolver  # noqa: E402
 # Coding Agent: OpenCode-backed per-job coding runs (repos under CODING_PROJECTS_ROOT).
 # All /api/coding/* + /api/coding/preview/* traffic is delegated here.
 import coding_agent  # noqa: E402
+import transactions_api  # noqa: E402
 
 # Model registry (Settings → AI Models): single resolution service for every
 # module. resolve_module/list_modules/execute power /api/models*; provider
@@ -3422,6 +3423,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_get_models_catalog()
         elif self.path.split('?')[0] == '/api/finance':
             self._handle_get_finance()
+        elif self.path.startswith('/api/transactions'):
+            transactions_api.route_get(self)
         elif self.path.split('?')[0] == '/api/invoices':
             self._handle_get_invoices()
         elif self.path.split('?')[0] == '/api/invoice/file':
@@ -3564,6 +3567,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_post_reminders('delete')
         elif self.path.split('?')[0] == '/api/invoice/generate':
             self._handle_post_invoice_generate()
+        elif self.path.startswith('/api/transactions'):
+            try:
+                transactions_api.route_post(self)
+            except Exception as e:
+                self._send_json(500, json.dumps({'error': f'transactions route failed: {e}'}))
         elif self.path == '/api/coding/jobs' or \
                 self.path.startswith('/api/coding/jobs/') or \
                 self.path.startswith('/api/coding/repos/'):
@@ -8553,6 +8561,29 @@ def _intel_scheduler():
         time.sleep(INTEL_CHECK_INTERVAL_S)
 
 
+def _start_transactions_scheduler():
+    """Start the personal Gmail transaction sync scheduler (23:59 WIB daily).
+
+    Only arms when the transactions modules imported cleanly AND the personal
+    Gmail token exists; otherwise it prints a status line and stays idle
+    (sync via the dashboard button still works regardless).
+    """
+    try:
+        if not getattr(transactions_api, '_IMPORTS_OK', False):
+            print(f"  Transactions:  modules missing ({getattr(transactions_api, '_IMPORT_ERR', '?')}), scheduler disabled")
+            return
+        token = Path(__file__).resolve().parent.parent / '.agent' / 'workspaces' / 'personal' / 'token_gmail.json'
+        if not token.exists():
+            print(f"  Transactions:  Gmail scheduler disabled (no personal token at .agent/workspaces/personal/token_gmail.json)")
+            return
+        tx_scheduler = transactions_api.TransactionScheduler(
+            lambda: transactions_api.sync_gmail(transactions_api.connect()))
+        threading.Thread(target=tx_scheduler.start, daemon=True).start()
+        print(f"  Transactions:  Gmail sync scheduler armed (daily 23:59 WIB)")
+    except Exception as e:
+        print(f"  Transactions:  scheduler failed to start: {e}")
+
+
 def main():
     # ThreadingHTTPServer: each request/connection gets its own thread, so one slow or
     # keep-alive browser connection can't freeze the whole dashboard (the old single-threaded
@@ -8561,6 +8592,7 @@ def main():
     server.daemon_threads = True
     coding_agent.start_background()
     threading.Thread(target=_intel_scheduler, daemon=True).start()
+    _start_transactions_scheduler()
     print(f"\n  [Dashboard] running at http://localhost:{PORT}\n")
     print(f"  Intel feed:  auto 07:00 + 13:00 WIB")
     print(f"  Reading from: {DASHBOARD_PATH}")
