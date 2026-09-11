@@ -65,6 +65,64 @@ const TransactionsTab = (() => {
   /* ── helpers ────────────────────────────────────────────────────── */
   const rp = n => n == null ? '-' : `Rp${Number(n).toLocaleString('id-ID')}`;
 
+  const _WALLET = {
+    bca:   { label: 'BCA',   color: '#00aaef' },
+    bni:   { label: 'BNI',   color: '#ed7b00' },
+    gopay: { label: 'GoPay', color: '#00aa13' },
+  };
+  function _walletHtml(p) {
+    const w = _WALLET[p] || { label: p || '-', color: 'var(--text-muted)' };
+    return `<span class="tx-wallet"><span class="tx-wallet-dot" style="background:${w.color}"></span>${w.label}</span>`;
+  }
+  function _fmtDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d)) return U.esc(iso);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const txn  = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const diff = Math.round((today - txn) / 86400000);
+    const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    if (diff === 0) return `Today ${time}`;
+    if (diff === 1) return `Yesterday ${time}`;
+    if (d.getFullYear() === now.getFullYear()) {
+      return d.toLocaleDateString('en-GB', { month: 'short', day: 'numeric' }) + ' ' + time;
+    }
+    return d.toLocaleDateString('en-GB', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' + time;
+  }
+
+  function _txTable(rows) {
+    if (!rows.length) return '<div class="tx-empty">No transactions yet. Upload a GoPay PDF or sync Gmail to start.</div>';
+    return `<div class="tx-table-wrap"><table class="tx-table">
+      <thead><tr>
+        <th class="tx-th-date">Date</th>
+        <th class="tx-th-desc">Description</th>
+        <th class="tx-th-wallet">Wallet</th>
+        <th class="tx-th-amount">Amount</th>
+        <th class="tx-th-status">Status</th>
+      </tr></thead>
+      <tbody>${rows.map(r => _txTableRow(r)).join('')}</tbody>
+    </table></div>`;
+  }
+
+  function _txTableRow(r) {
+    const desc    = U.esc(r.description || r.merchant || r.notes || 'Unknown');
+    const amount  = r.amount || r.total_amount || 0;
+    const dir     = r.direction === 'in' ? 'tx-pos' : 'tx-neg';
+    const sign    = r.direction === 'in' ? '+' : '-';
+    const nature  = r.nature || 'needs_review';
+    const status  = r.review_status === 'review' ? '<span class="tx-badge tx-badge-warn">review</span>' :
+                    r.review_status === 'uncategorized' ? '<span class="tx-badge tx-badge-muted">uncategorized</span>' :
+                    nature === 'needs_review' ? '<span class="tx-badge tx-badge-muted">review</span>' : '';
+    return `<tr class="tx-tr" data-id="${r.id}">
+      <td class="tx-td-date">${_fmtDate(r.occurred_at || r.created_at)}</td>
+      <td class="tx-td-desc">${desc}</td>
+      <td class="tx-td-wallet">${_walletHtml(r.provider)}</td>
+      <td class="tx-td-amount ${dir}">${sign}${rp(amount)}</td>
+      <td class="tx-td-status">${status}</td>
+    </tr>`;
+  }
+
   /* ── load ───────────────────────────────────────────────────────── */
   async function load(filter) {
     const panel = document.getElementById('tab-transactions');
@@ -162,10 +220,8 @@ const TransactionsTab = (() => {
   }
 
   function _renderRecent(rows) {
-    if (!rows.length) return '<div class="tx-empty">No transactions yet. Upload a GoPay PDF or sync Gmail to start.</div>';
-    return `<div class="tx-card"><h3 class="tx-card-title">Recent</h3>${
-      rows.map(r => _txRow(r)).join('')
-    }</div>`;
+    if (!rows.length) return '<div class="tx-card"><div class="tx-empty">No transactions yet. Upload a GoPay PDF or sync Gmail to start.</div></div>';
+    return `<div class="tx-card"><h3 class="tx-card-title">Recent</h3>${_txTable(rows)}</div>`;
   }
 
   /* ── all transactions ───────────────────────────────────────────── */
@@ -174,7 +230,7 @@ const TransactionsTab = (() => {
     el.innerHTML = `
       <div class="tx-card">
         <div class="tx-card-header"><h3 class="tx-card-title">All Transactions (${d.total || 0})</h3></div>
-        ${d.rows && d.rows.length ? d.rows.map(r => _txRow(r)).join('') : '<div class="tx-empty">No transactions yet.</div>'}
+        ${_txTable(d.rows || [])}
       </div>
     `;
   }
@@ -216,20 +272,28 @@ const TransactionsTab = (() => {
   /* ── review queue ───────────────────────────────────────────────── */
   async function _renderReview(el) {
     const d = await U.fetchJSON('/api/transactions/review');
+    const rows = (d.rows || []).map(r => `
+      <tr class="tx-tr" data-id="${r.id}">
+        <td class="tx-td-date">${_fmtDate(r.occurred_at || r.created_at)}</td>
+        <td class="tx-td-desc">${U.esc(r.description || r.merchant || r.notes || 'Unknown')}</td>
+        <td class="tx-td-wallet">${_walletHtml(r.provider)}</td>
+        <td class="tx-td-amount ${r.direction === 'in' ? 'tx-pos' : 'tx-neg'}">${r.direction === 'in' ? '+' : '-'}${rp(r.amount)}</td>
+        <td class="tx-td-status tx-review-actions">
+          <button class="btn tx-btn-sm tx-btn-skip" data-id="${r.id}">Skip</button>
+          <button class="btn tx-btn-sm tx-btn-cat" data-id="${r.id}">Categorize</button>
+        </td>
+      </tr>`).join('');
     el.innerHTML = `
       <div class="tx-card"><h3 class="tx-card-title">Review Queue (${d.count || 0})</h3>
-        ${d.rows && d.rows.length ? d.rows.map(r => `
-          <div class="tx-row tx-review-row" data-id="${r.id}">
-            <div class="tx-review-info">
-              <span>${U.esc(r.description || r.merchant || r.notes || 'Unknown')}</span>
-              <span class="tx-amount">${rp(r.amount)}</span>
-            </div>
-            <div class="tx-review-actions">
-              <button class="btn tx-btn-sm tx-btn-skip" data-id="${r.id}">Skip</button>
-              <button class="btn tx-btn-sm tx-btn-cat" data-id="${r.id}">Categorize</button>
-            </div>
-          </div>
-        `).join('') : '<div class="tx-empty">All clear! No transactions need review.</div>'}
+        ${d.rows && d.rows.length
+          ? `<div class="tx-table-wrap"><table class="tx-table"><thead><tr>
+               <th class="tx-th-date">Date</th>
+               <th class="tx-th-desc">Description</th>
+               <th class="tx-th-wallet">Wallet</th>
+               <th class="tx-th-amount">Amount</th>
+               <th class="tx-th-status">Action</th>
+             </tr></thead><tbody>${rows}</tbody></table></div>`
+          : '<div class="tx-empty">All clear! No transactions need review.</div>'}
       </div>
     `;
     el.querySelectorAll('.tx-btn-skip').forEach(b =>
@@ -391,29 +455,6 @@ const TransactionsTab = (() => {
       _busy(false);
       if (btn) { btn.disabled = false; btn.textContent = '🔄 Sync Gmail'; }
     }
-  }
-
-  /* ── single transaction row ─────────────────────────────────────── */
-  function _txRow(r) {
-    const desc = U.esc(r.description || r.merchant || r.notes || 'Unknown');
-    const amount = r.amount || r.total_amount || 0;
-    const dir = r.direction === 'in' ? 'tx-pos' : 'tx-neg';
-    const sign = r.direction === 'in' ? '+' : '-';
-    const nature = r.nature || 'needs_review';
-    const statusBadge = r.review_status === 'review' ? '<span class="tx-badge tx-badge-warn">review</span>' :
-                        r.review_status === 'uncategorized' ? '<span class="tx-badge tx-badge-muted">uncategorized</span>' : '';
-    return `
-      <div class="tx-row" data-id="${r.id}">
-        <div class="tx-row-main">
-          <span class="tx-row-desc">${desc}</span>
-          <span class="tx-row-amount ${dir}">${sign}${rp(amount)}</span>
-        </div>
-        <div class="tx-row-meta">
-          <span class="tx-row-nature">${nature}</span>
-          <span class="tx-row-date">${U.esc(r.occurred_at || r.created_at || '')}</span>
-          ${statusBadge}
-        </div>
-      </div>`;
   }
 
   return { load, _confirmImport };

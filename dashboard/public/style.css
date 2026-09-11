@@ -3480,6 +3480,36 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
 .tx-count { color: var(--text-muted); font-size: var(--fs-xs); }
 .tx-amount { font-family: var(--font-mono); font-weight: 600; }
 
+/* ── transaction table ─────────────────────────────────────────── */
+.tx-table-wrap { overflow-x: auto; margin: 0 calc(var(--sp-3) * -1) calc(var(--sp-3) * -1); }
+.tx-table { width: 100%; min-width: 560px; border-collapse: separate; border-spacing: 0; font-size: var(--fs-sm); }
+.tx-table thead th {
+  position: sticky; top: 0; z-index: 1; background: var(--bg-card);
+  text-align: left; font-size: var(--fs-xs); font-weight: 600;
+  text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted);
+  padding: 10px 12px 8px; border-bottom: 1px solid var(--border);
+}
+.tx-table td { padding: 9px 12px; border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,.06)); vertical-align: middle; }
+.tx-table tbody tr:last-child td { border-bottom: none; }
+.tx-table tbody tr:hover td { background: var(--bg-hover); }
+
+.tx-th-desc { min-width: 160px; }
+.tx-th-amount, .tx-td-amount { text-align: right; }
+.tx-th-status, .tx-td-status { text-align: right; white-space: nowrap; }
+.tx-td-date {
+  white-space: nowrap; color: var(--text-secondary);
+  font-variant-numeric: tabular-nums; font-size: var(--fs-xs);
+}
+.tx-td-desc { min-width: 0; max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tx-td-wallet { white-space: nowrap; }
+.tx-td-amount { font-family: var(--font-mono); font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tx-wallet {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: var(--fs-xs); font-weight: 650; letter-spacing: .02em;
+  color: var(--text-secondary);
+}
+.tx-wallet-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px rgba(255,255,255,.07); }
+
 @media (max-width: 760px) {
   .tx-header { flex-direction: column; align-items: stretch; }
   .tx-actions { flex-wrap: wrap; }
@@ -3487,4 +3517,6 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
   .tx-row-main { flex-direction: column; align-items: flex-start; gap: 2px; }
   .tx-review-row { padding: 10px 0; }
   .tx-btn-sm { padding: 10px 16px; font-size: var(--fs-sm); }
+  .tx-table thead th, .tx-table td { padding: 8px; }
+  .tx-td-desc { max-width: 42vw; }
 }
