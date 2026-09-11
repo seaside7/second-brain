@@ -219,7 +219,7 @@ def _process_message(conn: sqlite3.Connection, service, msg_id: str, stats: dict
 
 
 def _extract_body(payload: dict) -> str:
-    """Recursively extract text from Gmail payload."""
+    """Recursively extract text from Gmail payload, stripping CSS/script noise."""
     import base64
     text = ''
     if payload.get('mimeType') == 'text/plain' and payload.get('body', {}).get('data'):
@@ -228,6 +228,12 @@ def _extract_body(payload: dict) -> str:
     elif payload.get('mimeType') == 'text/html' and payload.get('body', {}).get('data'):
         data = base64.urlsafe_b64decode(payload['body']['data'])
         html = data.decode('utf-8', errors='replace')
+        # Drop <style>/<script> blocks first so CSS doesn't pollute the text
+        # (BNI/wondr emails embed a long style block before the real content).
+        html = re.sub(r'<\s*style[^>]*>.*?<\s*/\s*style\s*>', ' ', html,
+                      flags=re.IGNORECASE | re.DOTALL)
+        html = re.sub(r'<\s*script[^>]*>.*?<\s*/\s*script\s*>', ' ', html,
+                      flags=re.IGNORECASE | re.DOTALL)
         text = re.sub(r'<[^>]+>', ' ', html)
         text = re.sub(r'\s+', ' ', text).strip()
     else:
@@ -291,13 +297,23 @@ def _parse_bni(body: str, subject: str, occurred_at: str) -> Optional[dict]:
     body_l = body.lower()
     subject_l = (subject or '').lower()
 
-    if 'top-up berhasil' in subject_l:
-        # wondr top-up: money left the BNI account into the wallet.
+    # celebratory / data emails and non-topup transfers
+    if 'top-up' in subject_l or 'top up' in subject_l or 'topup' in subject_l:
+        # wondr top-up: money left the BNI account into a wallet.
         amount = _extract_amount(body)
+        if amount <= 0:
+            # maybe the amount label is "Nominal"
+            amount = _amount_after(body, ['nominal', 'amount'])
         if amount <= 0:
             return None
         desc = ' '.join((subject or '').split())[:160] or 'BNI top-up'
-        return _build_row('bni', desc, 'out', amount, _extract_txn_id(body), occurred_at)
+        row = _build_row('bni', desc, 'out', amount, _extract_txn_id(body), occurred_at)
+        # Pull the destination wallet from the "Penerima" section:
+        #   Penerima
+        #   SAID ISKANDAR
+        #   GoPay • 62*******6707
+        row['recipient'] = _bni_recipient(body)
+        return row
 
     amount = _extract_amount(body)
     if amount <= 0:
@@ -305,8 +321,34 @@ def _parse_bni(body: str, subject: str, occurred_at: str) -> Optional[dict]:
     if not any(k in body_l for k in ['nominal', 'amount', 'jumlah', 'transaksi', 'debet', 'kredit']):
         return None
     direction = 'in' if any(k in body_l for k in ['credit', 'masuk', 'received']) else 'out'
-    return _build_row('bni', subject[:200] or 'BNI transaction', direction, amount,
-                      _extract_txn_id(body), occurred_at)
+    row = _build_row('bni', subject[:200] or 'BNI transaction', direction, amount,
+                     _extract_txn_id(body), occurred_at)
+    row['recipient'] = _bni_recipient(body)
+    return row
+
+
+def _bni_recipient(body: str) -> str:
+    """Extract the counterparty info from a BNI/wondr email.
+
+    BNI/wondr layout (newlines collapsed by _extract_body):
+        Penerima SAID ISKANDAR GoPay • 62*******6707 Sumber dana ...
+    Return the wallet/counterparty token before a bullet or masked number
+    (e.g. 'GoPay'). Returns '' when not found.
+    """
+    m = re.search(r'penerima(?::)?\s+.*?\b([A-Za-z0-9&.\-]+)\s*[•|]\s*\S+',
+                  body, re.IGNORECASE | re.DOTALL)
+    if m:
+        name = m.group(1).strip()
+        if len(name) >= 2 and name.lower() not in ('penerima', 'sumber', 'dana'):
+            return name[:40]
+    # Fallback: the token right before 'Sumber dana' (end of the Penerima block).
+    m = re.search(r'penerima(?::)?\s+[A-Za-z ]*?\s*\b([A-Za-z0-9&.\-]+)\s+sumber dana',
+                  body, re.IGNORECASE | re.DOTALL)
+    if m:
+        name = m.group(1).strip()
+        if len(name) >= 2:
+            return name[:40]
+    return ''
 
 
 def _parse_gopay(body: str, subject: str, occurred_at: str) -> Optional[dict]:

@@ -22,7 +22,7 @@ import store
 # ── own-account / e-wallet registry (for internal-move detection) ─────────
 # A top-up debit counts as an internal transfer only when the row text names
 # a wallet/account we actually hold (registered in `accounts`).
-_EWALLET_PROVIDERS = {'gopay', 'ovo', 'dana', 'shopeepay', 'wondr', 'bni'}
+_EWALLET_PROVIDERS = {'gopay', 'ovo', 'dana', 'shopeepay', 'wondr'}
 
 # ── category taxonomy (names created on first use via get_or_create) ──────
 _CAT = {
@@ -100,9 +100,9 @@ def _is_own_wallet_topup(conn: sqlite3.Connection, row: dict) -> bool:
 
     Bank -> e-wallet top-ups are treated as internal *by default* so a top-up
     (out of BNI) plus the later wallet spends (GoPay receipts) do not
-    double-count as two expenses. The only escape hatch: a wallet we do NOT
-    hold is named in the text (e.g. 'OVO' when we never registered OVO), which
-    falls through to 'Top Up (3rd party)' for review instead.
+    double-count as two expenses. The only escape hatch: the debit is an
+    e-wallet itself (GoPay -> GoPay, not a bank topping up a wallet), which
+    falls through to normal categorization instead.
     """
     desc = ((row.get('description', '') + ' ' + row.get('merchant', '')
              + ' ' + row.get('recipient', ''))).lower()
@@ -111,19 +111,13 @@ def _is_own_wallet_topup(conn: sqlite3.Connection, row: dict) -> bool:
     if not any(_has(desc, kw) for kw in _TOPUP_KEYWORDS):
         return False
 
-    our = {a['provider'].lower() for a in store.list_accounts(conn, active_only=True)}
     provider = (row.get('provider', '') or '').lower()
 
-    # E-wallet -> bank is a withdrawal, not a top-up (shouldn't land here).
+    # E-wallet -> anything is a wallet payment, not a bank-driven top-up.
     if provider in _EWALLET_PROVIDERS:
         return False
 
-    # A wallet we don't hold explicitly named -> not ours.
-    named = [p for p in _EWALLET_PROVIDERS if _has(desc, p)]
-    if named and not all(p in our for p in named):
-        return False
-
-    # Default: bank debit + top-up wording = funding our own wallet.
+    # Bank debit + top-up wording = funding one of our own wallets.
     return provider in {'bca', 'bni', 'bri', 'mandiri'}
 
 
