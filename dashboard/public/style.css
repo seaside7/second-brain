@@ -18,6 +18,10 @@
   --h-amber: 40;
   --h-rose: 350;
 
+  /* Shared accent (used by .tx-* etc.) */
+  --accent: hsl(var(--h-indigo), 70%, 55%);
+  --bg-hover: hsla(var(--h-indigo), 20%, 14%, 0.8);
+
   /* Backgrounds */
   --bg-primary: hsl(var(--h-indigo), 30%, 4%);
   --bg-secondary: hsl(var(--h-indigo), 25%, 7%);
@@ -3408,13 +3412,14 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
   transition: background .12s, border-color .12s;
 }
 .tx-chip:hover { background: var(--bg-hover); }
-.tx-chip.is-active { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 600; }
-.tx-actions { display: flex; gap: 8px; align-items: center; }
+.tx-chip.is-active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.tx-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .tx-select {
   background: #000; color: #fff; border: 1px solid var(--border); border-radius: var(--radius);
   padding: 5px 10px; font-size: var(--fs-sm);
 }
-.tx-btn-primary { background: var(--accent); color: #000; border: none; border-radius: var(--radius); padding: 6px 14px; font-size: var(--fs-sm); font-weight: 600; cursor: pointer; }
+.tx-btn-primary { background: var(--accent); color: #fff; border: none; border-radius: var(--radius); padding: 6px 14px; font-size: var(--fs-sm); font-weight: 600; cursor: pointer; }
+.tx-btn-primary:hover { filter: brightness(1.15); }
 .tx-btn-outline { background: transparent; color: var(--text-primary); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 14px; font-size: var(--fs-sm); cursor: pointer; }
 .tx-btn-outline:hover { border-color: var(--accent); }
 .tx-body { display: flex; flex-direction: column; gap: var(--sp-3); }
