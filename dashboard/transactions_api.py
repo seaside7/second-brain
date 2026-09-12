@@ -35,6 +35,7 @@ try:
     from reports import overview, spending_breakdown, cashflow, fees_total
     from gmail_sync import sync_gmail
     from scheduler import TransactionScheduler
+    from reprocess import reprocess as reprocess_engine
     _IMPORTS_OK = True
 except ImportError as exc:
     _IMPORTS_OK = False
@@ -313,6 +314,8 @@ def route_post(handler) -> None:
             _handle_delete(handler, batch_id)
         elif path == '/api/transactions/sync/gmail':
             _handle_sync_gmail(handler)
+        elif path == '/api/transactions/reprocess':
+            _handle_reprocess(handler, body)
         elif path == '/api/transactions/categorize':
             _handle_categorize(handler, body)
         elif path.startswith('/api/transactions/') and path.endswith('/edit'):
@@ -424,6 +427,20 @@ def _handle_sync_gmail(handler) -> None:
             _ok(handler, result)
         else:
             _err(handler, 400, result.get('error', 'Sync failed'))
+    finally:
+        conn.close()
+
+
+def _handle_reprocess(handler, body: dict) -> None:
+    conn = _get_db(handler)
+    if not conn:
+        _err(handler, 403, 'Not available in samudera mode')
+        return
+    try:
+        provider = body.get('provider') or None
+        dry_run = bool(body.get('dry_run', False))
+        result = reprocess_engine(conn, provider=provider, dry_run=dry_run)
+        _ok(handler, result)
     finally:
         conn.close()
 

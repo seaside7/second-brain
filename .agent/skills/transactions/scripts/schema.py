@@ -55,7 +55,7 @@ def connect(path: Path | str | None = None, *,
 # Schema – idempotent
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _DDL = """
 -- accounts: one row per bank/e-wallet/account
@@ -111,6 +111,8 @@ CREATE TABLE IF NOT EXISTS extracted_txns (
     provider         TEXT    NOT NULL DEFAULT '',
     src_txn_id       TEXT    NOT NULL DEFAULT '',
     description      TEXT    NOT NULL DEFAULT '',
+    raw_description  TEXT    NOT NULL DEFAULT '',
+    transaction_type TEXT    NOT NULL DEFAULT '',
     merchant         TEXT    NOT NULL DEFAULT '',
     recipient        TEXT    NOT NULL DEFAULT '',
     phone_suffix     TEXT    NOT NULL DEFAULT '',
@@ -234,9 +236,28 @@ CREATE TABLE IF NOT EXISTS _meta (
 """
 
 
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Apply idempotent column migrations for pre-existing databases."""
+    cols = {r['name'] for r in conn.execute("PRAGMA table_info(extracted_txns)").fetchall()}
+    if not cols:
+        return
+    if 'raw_description' not in cols:
+        conn.execute("ALTER TABLE extracted_txns ADD COLUMN raw_description "
+                     "TEXT NOT NULL DEFAULT ''")
+    if 'transaction_type' not in cols:
+        conn.execute("ALTER TABLE extracted_txns ADD COLUMN transaction_type "
+                     "TEXT NOT NULL DEFAULT ''")
+    if cols and 'transaction_type' in cols and 'raw_description' in cols:
+        conn.execute(
+            "INSERT OR REPLACE INTO _meta(key, value) VALUES (?, ?)",
+            ('schema_version', str(SCHEMA_VERSION)),
+        )
+
+
 def ensure_tables(conn: sqlite3.Connection) -> None:
     """Create all tables if they do not already exist (idempotent)."""
     conn.executescript(_DDL)
+    _migrate(conn)
     conn.execute(
         "INSERT OR REPLACE INTO _meta(key, value) VALUES (?, ?)",
         ('schema_version', str(SCHEMA_VERSION)),

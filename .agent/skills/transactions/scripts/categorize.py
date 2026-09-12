@@ -1,15 +1,21 @@
 """Categorization engine: deterministic keyword + lookup-table rules. No LLM.
 
-Implements the decision tree from finance-notification-categorization-rules.md.
-First match wins; most specific rules first. Reads only normalised extracted
-fields (description, merchant, recipient, direction, amount, provider) - never
-raw bank-specific format, so new sources only need a Step-0 parser.
+Implements the decision tree agreed for the Personal Finance dashboard. First
+match wins; most specific rules first. Reads only normalised extracted fields
+(description, merchant, recipient, direction, amount, provider,
+transaction_type) - never raw bank-specific format, so new sources only need a
+Step-0 parser.
 
 Natures map to the ledger_txns CHECK constraint:
     internal_transfer -> excluded from spend/net (your own wallet moves)
     transfer_to_person -> tracked, not personal expense (family)
     top_up / fee / cashback / refund / income -> distinct stats
     expense -> the spending that lands in the dashboard's numbers
+    needs_review -> ambiguous / no rule matched; user picks manually
+
+Taxonomy is two-level: category = categories.group, subcategory =
+categories.name (e.g. Utilities > Electricity (PLN), Food & Dining > Warung /
+Snacks, Transport > Fuel).
 """
 from __future__ import annotations
 
@@ -20,65 +26,83 @@ from typing import Any, Optional
 import store
 
 # ── own-account / e-wallet registry (for internal-move detection) ─────────
-# A top-up debit counts as an internal transfer only when the row text names
-# a wallet/account we actually hold (registered in `accounts`).
 _EWALLET_PROVIDERS = {'gopay', 'ovo', 'dana', 'shopeepay', 'wondr'}
+_BANK_PROVIDERS = {'bca', 'bni', 'bri', 'mandiri'}
 
-# ── category taxonomy (names created on first use via get_or_create) ──────
+# ── category taxonomy (group, name); get_or_create adds rows on first use ──
 _CAT = {
-    'income':         'Income',
-    'internal':       'Internal Transfer',
-    'family':         'Family Transfer',
-    'topup_3rd':      'Top Up (3rd party)',
-    'bills_elec':     'Bills - Electricity',
-    'bills_water':    'Bills - Water',
-    'bills_internet': 'Bills - Internet',
-    'bills_phone':    'Bills - Phone',
-    'bills_insure':   'Bills - Insurance',
-    'bills_cc':       'Bills - Credit Card',
-    'groceries':      'Groceries',
-    'food':           'Food & Transport',
-    'shopping':       'Online Shopping',
-    'cash':           'Cash Withdrawal',
-    'fee':            'Bank fee',
-    'cashback':       'Cashback/Reward',
-    'refund':         'Refund',
-    'uncategorized':  'Uncategorized',
+    'income':         ('Income', 'Income'),
+    'internal':       ('Transfers', 'Internal Transfer'),
+    'family':         ('Transfers', 'Family Transfer'),
+    'topup_3rd':      ('Transfers', 'Top Up (3rd party)'),
+    'bills_elec':     ('Utilities', 'Electricity (PLN)'),
+    'bills_water':    ('Utilities', 'Water (PDAM)'),
+    'bills_internet': ('Utilities', 'Internet'),
+    'bills_phone':    ('Utilities', 'Mobile & Data'),
+    'bills_insure':   ('Utilities', 'Insurance (BPJS)'),
+    'bills_cc':       ('Utilities', 'Credit Card'),
+    'groceries':      ('Groceries', 'Groceries'),
+    'food_warung':    ('Food & Dining', 'Warung / Snacks'),
+    'food_resto':     ('Food & Dining', 'Restaurants'),
+    'food_cafe':      ('Food & Dining', 'Cafe'),
+    'food_delivery':  ('Food & Dining', 'Food Delivery'),
+    'transport_fuel': ('Transport', 'Fuel'),
+    'transport_toll': ('Transport', 'Toll'),
+    'transport_parking': ('Transport', 'Parking'),
+    'transport_ride': ('Transport', 'Ride Sharing'),
+    'shopping':       ('Shopping', 'Online Shopping'),
+    'cash':           ('Cash', 'Cash Withdrawal'),
+    'fee':            ('Fees', 'Bank Fee'),
+    'cashback':       ('Income', 'Cashback & Rewards'),
+    'refund':         ('Income', 'Refund'),
+    'uncategorized':  ('Uncategorized', 'Uncategorized'),
 }
 
 # ── keyword maps (the "muscle" - extend these as new merchants appear) ────
 
-# Billers: keyword -> (taxonomy key, subtype used in the category name)
+# Billers: keyword -> taxonomy key. Order matters (most specific first).
 _BILLERS = [
     ('token listrik', 'bills_elec'), ('pln', 'bills_elec'),
     ('pdam', 'bills_water'), ('aetra', 'bills_water'), ('palyja', 'bills_water'),
-    ('indihome', 'bills_internet'), ('first media', 'bills_internet'), ('biznet', 'bills_internet'),
-    ('telkomsel', 'bills_phone'), ('indosat', 'bills_phone'), ('pulsa', 'bills_phone'),
-    ('paket data', 'bills_phone'),
+    ('indihome', 'bills_internet'), ('first media', 'bills_internet'),
+    ('biznet', 'bills_internet'),
+    ('telkomsel', 'bills_phone'), ('indosat', 'bills_phone'),
+    ('pulsa', 'bills_phone'), ('paket data', 'bills_phone'),
     ('bpjs kesehatan', 'bills_insure'), ('bpjs ketenagakerjaan', 'bills_insure'),
     ('kartu kredit', 'bills_cc'), ('payment cc', 'bills_cc'),
 ]
 
 _GROCERIES = ['indomaret', 'alfamart', 'superindo', 'hypermart', 'transmart',
-              'ranch market']
-_FOOD_TRANSPORT = ['gojek', 'gofood', 'grab', 'grabfood', 'shopeefood',
-                   'mandiri e-money', 'emoney', 'e-money', 'toll', 'tol',
-                   'flazz']
-_ECOMMERCE = ['tokopedia', 'shopee', 'lazada', 'blibli']
+              'ranch market', 'sembako', 'belanja sayur', 'sayur']
+_FOOD_DELIVERY = ['gofood', 'grabfood', 'shopeefood', 'go food', 'delivery']
+_FOOD_RIDE = ['gojek', 'grab']
+_FOOD_RESTAURANT = ['restoran', 'restaurant', 'rm ', 'warung makan', 'rumah makan']
+_FOOD_CAFE = ['cafe', 'kopi', 'café', 'kafé']
+_ECOMMERCE = ['tokopedia', 'shopee', 'lazada', 'blibli', 'forumer', ' marketplace']
+
+# "warung" is ambiguous on its own: combine it with food words, else -> Review.
+_WARUNG_MARKERS = ['warung', 'warkop']
+_FOOD_WORDS = ['gorengan', 'nasi', 'soto', 'bakso', 'mie', 'mihun', 'kopi',
+               'restoran', 'cafe', 'padang', 'ayam', 'rendang', 'rujak',
+               'pecel', 'ikan bak', 'seafood', 'gado-gado', 'penyet', 'sate']
+
+_TRANSPORT_FUEL = ['pertamina', 'bensin', 'solar', 'spbu', 'shell']
+_TRANSPORT_TOLL = ['tol', 'toll', 'jalan tol', 'flazz', 'e-money', 'emoney',
+                   'mandiri e-money']
+_TRANSPORT_PARKING = ['parkir', 'parkmen']
 _ATM_CASH = ['tarik tunai', 'withdrawal', 'penarikan tunai']
 _INCOME_HINTS = ['gaji', 'salary', 'payroll', 'invoice', 'honor', 'dana masuk',
-                 'transfer masuk', 'terima', 'received']
-
+                 'transfer masuk', 'terima', 'received', 'freelance', 'upah']
 _FEE_KEYWORDS = ['administrasi', 'admin fee', 'biaya admin', 'fee',
                  'service charge', 'biaya transfer', 'transfer fee',
                  'biaya layanan', 'biaya adm']
 _TOPUP_KEYWORDS = ['top up', 'topup', 'top-up', 'isi ulang', 'isi saldo',
-                   'add balance', 'beli saldo', 'isi gojek', 'purchase']
+                   'add balance', 'beli saldo', 'purchase']
 _CASHBACK_KEYWORDS = ['cashback', 'reward', 'coin', 'bonus', 'promo']
 _REFUND_KEYWORDS = ['refund', 'kembalian', 'cancelled refund']
 
 # Short tokens need whole-word matching to avoid false positives (e.g. "xl").
-_WORD_BOUNDED = {'pln', 'grab', 'shopee', 'xl'}
+_WORD_BOUNDED = {'pln', 'grab', 'shopee', 'xl', 'sate', 'kopi', 'tol'}
 
 
 def _has(text: str, token: str) -> bool:
@@ -95,30 +119,66 @@ def _match_table(text: str, entries: list[tuple]) -> Optional[str]:
     return None
 
 
-def _is_own_wallet_topup(conn: sqlite3.Connection, row: dict) -> bool:
-    """True when a top-up debit moves money into one of OUR own wallets.
-
-    Bank -> e-wallet top-ups are treated as internal *by default* so a top-up
-    (out of BNI) plus the later wallet spends (GoPay receipts) do not
-    double-count as two expenses. The only escape hatch: the debit is an
-    e-wallet itself (GoPay -> GoPay, not a bank topping up a wallet), which
-    falls through to normal categorization instead.
-    """
-    desc = ((row.get('description', '') + ' ' + row.get('merchant', '')
+def _text(row: dict) -> str:
+    return ((row.get('description', '') + ' ' + row.get('raw_description', '')
+             + ' ' + row.get('merchant', '')
              + ' ' + row.get('recipient', ''))).lower()
-    if row.get('direction', 'out') != 'out':
-        return False
+
+
+def _clean_text(row: dict) -> str:
+    """Clean-only text (no raw body): used for fee detection so a split
+    principal row containing 'Biaya Admin' in raw doesn't classify as Fee."""
+    return ((row.get('description', '') + ' ' + row.get('merchant', '')
+             + ' ' + row.get('recipient', ''))).lower()
+
+
+def _is_own_wallet_topup(conn: sqlite3.Connection, row: dict) -> bool:
+    """True when a top-up moves money between OUR own wallet and a bank.
+
+    Bank -> e-wallet (out) and e-wallet <- bank (in) are treated as internal
+    transfers by default so the same money is not double-counted as two
+    expenses (bank side + wallet side). E-wallet -> e-wallet or a wallet
+    out-spend falls through to normal categorization.
+    """
+    desc = _text(row)
     if not any(_has(desc, kw) for kw in _TOPUP_KEYWORDS):
         return False
-
     provider = (row.get('provider', '') or '').lower()
+    direction = row.get('direction', 'out')
 
-    # E-wallet -> anything is a wallet payment, not a bank-driven top-up.
-    if provider in _EWALLET_PROVIDERS:
+    if direction == 'out':
+        # Bank debit funding one of our own wallets.
+        return provider in _BANK_PROVIDERS
+    # Money in: e-wallet received funding from a bank.
+    return provider in _EWALLET_PROVIDERS
+
+
+def _own_person_transfer(conn: sqlite3.Connection, row: dict) -> bool:
+    """True when a transfer's counterparty is one of OUR registered accounts.
+
+    Checks the `recipient` (and merchant fallback) against the accounts
+    registry (alias, owner_name, provider) so BNI -> BCA (same owner) is an
+    internal transfer, not an expense.
+    """
+    # Only the parsed counterparty values are evidence of OUR account - the
+    # raw text always mentions the provider ('wondr by BNI', 'BI-FAST') and
+    # matching on it would mark every BNI transfer as an internal move.
+    cand = ((row.get('recipient', '') or '').strip() + ' ' +
+            (row.get('merchant', '') or '').strip()).strip().lower()
+    if not cand:
         return False
-
-    # Bank debit + top-up wording = funding one of our own wallets.
-    return provider in {'bca', 'bni', 'bri', 'mandiri'}
+    for acc in store.list_accounts(conn, active_only=True):
+        hay = ' '.join([acc.get('alias', ''), acc.get('owner_name', ''),
+                        acc.get('provider', ''), acc.get('masked', '')]).lower()
+        tokens = [t for t in acc.get('alias', '').lower().split()
+                  if len(t) > 2]
+        if acc.get('owner_name') and acc.get('owner_name').lower() in cand:
+            return True
+        if any(t and t in cand for t in tokens if len(t) > 2):
+            return True
+        if acc.get('provider') and acc.get('provider').lower() in cand:
+            return True
+    return False
 
 
 def categorize_batch(conn: sqlite3.Connection, rows: list[dict]) -> list[dict]:
@@ -131,11 +191,11 @@ def categorize_batch(conn: sqlite3.Connection, rows: list[dict]) -> list[dict]:
 
 def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
     ext_id = row.get('id')
-    desc = ((row.get('description', '') + ' ' + row.get('merchant', ''))).lower()
-    recipient = (row.get('recipient', '') or '').lower()
+    desc = _text(row)
     direction = row.get('direction', 'out')
     total = row.get('total_amount', 0) or row.get('principal_amount', 0) or 0
     fee = row.get('fee_amount', 0) or 0
+    tx_type = (row.get('transaction_type', '') or '').lower()
 
     hit = {
         'ext_id': ext_id,
@@ -144,13 +204,21 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
     }
 
     def set_cat(key, nature, confidence, reason):
-        hit['category_id'] = store.get_or_create_category(conn, _CAT[key])
+        group, name = _CAT[key]
+        hit['category_id'] = store.get_or_create_category(conn, name, group=group)
         hit['nature'] = nature
         hit['confidence'] = confidence
         hit['reason'] = reason
 
+    def set_fallback(reason='No rule matched'):
+        hit['category_id'] = store.get_or_create_category(
+            conn, _CAT['uncategorized'][1], group=_CAT['uncategorized'][0])
+        hit['nature'] = 'needs_review'
+        hit['confidence'] = 'none'
+        hit['reason'] = reason
+
     # 0. Remembered rule wins over everything (highest specificity)
-    rule = _match_rule(conn, desc + ' ' + recipient)
+    rule = _match_rule(conn, desc)
     if rule:
         store.increment_rule_usage(conn, rule['id'])
         hit['category_id'] = rule['category_id']
@@ -159,24 +227,61 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
         hit['reason'] = f'Rule: {rule["merchant_or_recipient"]}'
         return hit
 
-    # 1. INTERNAL MOVE (own BNI/BCA -> own wallet). Excluded from spend.
+    # 0.5 Explicit fee rows (parser split an admin fee) are always Fees.
+    if tx_type == 'fee':
+        set_cat('fee', 'fee', 'high', 'Explicit admin fee')
+        return hit
+    if any(_has(_clean_text(row), kw) for kw in _FEE_KEYWORDS):
+        set_cat('fee', 'fee', 'high', 'Fee keyword')
+        return hit
+
+    # 1. INTERNAL MOVE (own bank <-> own wallet / own account). Excluded from spend.
     if _is_own_wallet_topup(conn, row):
         set_cat('internal', 'internal_transfer', 'medium',
                 'Top-up to own wallet')
         return hit
 
-    text = desc + ' ' + recipient
+    text = desc
 
-    # 2. MONEY-IN with specific identity beats the merchant tree.
-    #    A "SHOPEE REFUND" credit is a refund, NOT an e-commerce expense.
-    #    Order matters: these keywords can overlap with merchant names.
-    if direction == 'in':
-        if any(_has(desc, kw) for kw in _REFUND_KEYWORDS):
+    # 1.5 MONEY-IN specific identity beats the merchant tree (also honours the
+    #     parser's transaction_type: a 'refund'/'cashback' credit stays that).
+    if tx_type in ('refund',) or any(_has(desc, kw) for kw in _REFUND_KEYWORDS):
+        if direction == 'in':
             set_cat('refund', 'refund', 'high', 'Refund')
             return hit
-        if any(_has(desc, kw) for kw in _CASHBACK_KEYWORDS):
+    if tx_type in ('cashback',) or any(_has(desc, kw) for kw in _CASHBACK_KEYWORDS):
+        if direction == 'in':
             set_cat('cashback', 'cashback', 'high', 'Cashback/reward')
             return hit
+
+    # 2. TRANSFER detection (bank out / person transfer) - do NOT auto-treat
+    #    the sign or subject as income/expense. Transfer to own account is
+    #    internal; to another person it is a tracked, non-spend transfer.
+    if direction == 'out' and _is_transfer_desc(desc):
+        if _own_person_transfer(conn, row):
+            set_cat('internal', 'internal_transfer', 'medium',
+                    'Transfer to own account')
+            return hit
+        # Transfer to a person, optionally with a categorizable note.
+        if 'belanja' in desc or any(_has(desc, m) for m in _GROCERIES):
+            set_cat('groceries', 'expense', 'medium',
+                    'Transfer with grocery note')
+            return hit
+        name = (row.get('recipient', '') or '').strip()
+        if name:
+            group, name_cat = ('Transfers', f'Transfer - {name[:40]}')
+            hit['category_id'] = store.get_or_create_category(conn, name_cat, group=group)
+            hit['nature'] = 'transfer_to_person'
+            hit['confidence'] = 'medium'
+            hit['reason'] = 'Transfer to person'
+            return hit
+        set_fallback('Transfer without counterparty details')
+        return hit
+
+    # 2.5 MONEY-IN transfer (credit) - not income by sign alone.
+    if direction == 'in' and _is_transfer_desc(desc):
+        set_fallback('Inbound transfer - verify income vs person')
+        return hit
 
     # 3. INCOME (credit + clear income hints)
     if direction == 'in' and (_match_table(text, [(k, 'income')
@@ -191,43 +296,80 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
         return hit
 
     # 5. GROCERIES / retail
-    if any(_has(desc, m) or _has(recipient, m) for m in _GROCERIES):
+    if any(_has(desc, m) or _has((row.get('recipient', '')), m) for m in _GROCERIES):
         set_cat('groceries', 'expense', 'high', 'Retail merchant')
         return hit
 
-    # 6. FOOD & TRANSPORT (common on GoPay)
-    if any(_has(desc, m) or _has(recipient, m) for m in _FOOD_TRANSPORT):
-        set_cat('food', 'expense', 'high', 'Food/transport merchant')
+    # 6. FOOD & DINING - warung needs a food word, otherwise -> Review.
+    if any(_has(desc, m) for m in _WARUNG_MARKERS):
+        if any(_has(desc, m) for m in _FOOD_WORDS):
+            set_cat('food_warung', 'expense', 'medium',
+                    'Warung + food word')
+            return hit
+        set_fallback('Warung without food context - verify')
+        return hit
+    if any(_has(desc, m) for m in _FOOD_RESTAURANT):
+        set_cat('food_resto', 'expense', 'high', 'Restaurant')
+        return hit
+    if any(_has(desc, m) for m in _FOOD_CAFE):
+        set_cat('food_cafe', 'expense', 'high', 'Cafe / coffee')
+        return hit
+    if any(_has(desc, m) for m in _FOOD_DELIVERY):
+        set_cat('food_delivery', 'expense', 'high', 'Food delivery')
         return hit
 
-    # 7. E-COMMERCE
-    if any(_has(desc, m) or _has(recipient, m) for m in _ECOMMERCE):
+    # 7. TRANSPORT
+    if any(_has(desc, m) for m in _TRANSPORT_FUEL):
+        set_cat('transport_fuel', 'expense', 'high', 'Fuel')
+        return hit
+    if any(_has(desc, m) for m in _TRANSPORT_TOLL):
+        set_cat('transport_toll', 'expense', 'high', 'Toll / e-money')
+        return hit
+    if any(_has(desc, m) for m in _TRANSPORT_PARKING):
+        set_cat('transport_parking', 'expense', 'high', 'Parking')
+        return hit
+    if any(_has(desc, m) for m in _FOOD_RIDE):
+        set_cat('transport_ride', 'expense', 'high', 'Ride sharing')
+        return hit
+
+    # 8. E-COMMERCE
+    if any(_has(desc, m) or _has((row.get('recipient', '') or ''), m) for m in _ECOMMERCE):
         set_cat('shopping', 'expense', 'high', 'E-commerce merchant')
         return hit
 
-    # 8. ATM / CASH WITHDRAWAL
+    # 9. ATM / CASH WITHDRAWAL
     if any(_has(text, k) for k in _ATM_CASH):
         set_cat('cash', 'expense', 'high', 'Cash withdrawal')
         return hit
 
-    # 9. TOP-UP (external / not our own wallet -> real outflow)
+    # 10. TOP-UP (external / not our own wallet -> real outflow)
     if any(_has(desc, kw) for kw in _TOPUP_KEYWORDS):
         set_cat('topup_3rd', 'top_up', 'medium', '3rd-party top-up')
         return hit
 
-    # 10. Fees (fee-only rows)
-    if any(_has(desc, kw) for kw in _FEE_KEYWORDS) or (fee > 0 and total == fee):
-        set_cat('fee', 'fee', 'high', 'Bank fee')
+    # 11. Fee-only rows (fee == total)
+    if fee > 0 and total == fee:
+        set_cat('fee', 'fee', 'high', 'Fee-only row')
         return hit
 
-    # 11. Credit with no other signal -> income (low confidence)
+    # 12. Credit with no other signal -> needs review (user picks), NOT income.
     if direction == 'in':
-        set_cat('income', 'income', 'low', 'Money in, no specific pattern')
+        set_fallback('Money in, no clear pattern - verify')
         return hit
 
-    # 12. FALLBACK -> uncategorized, needs review
-    set_cat('uncategorized', 'needs_review', 'none', 'No rule matched')
+    # 13. FALLBACK -> uncategorized, needs review
+    set_fallback('No rule matched')
     return hit
+
+
+def _is_transfer_desc(desc: str) -> bool:
+    """Whether a description clearly represents a person-to-person / bank
+    transfer (as opposed to a merchant purchase)."""
+    for kw in ['transfer', 'trf', 'trsf', 'pengiriman', 'kirim uang',
+               'bi-fast', 'bifast', 'antar rekening']:
+        if _has(desc, kw):
+            return True
+    return False
 
 
 def _match_rule(conn: sqlite3.Connection, text: str) -> Optional[dict]:

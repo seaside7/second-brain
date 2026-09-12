@@ -142,14 +142,16 @@ def add_extracted_rows(conn: sqlite3.Connection, batch_id: int, doc_id: int,
             ext = i
         cur = conn.execute(
             "INSERT INTO extracted_txns"
-            "(doc_id,batch_id,ext_index,provider,src_txn_id,description,merchant,"
+            "(doc_id,batch_id,ext_index,provider,src_txn_id,description,"
+            "raw_description,transaction_type,merchant,"
             "recipient,phone_suffix,direction,principal_amount,fee_amount,total_amount,"
             "currency,occurred_at,bank_ref,source_page,raw1,raw2,parser_version,"
             "dup_status,duplicate_of) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (doc_id, batch_id, ext,
              row.get('provider',''), row.get('src_txn_id',''),
-             row.get('description',''), row.get('merchant',''),
+             row.get('description',''), row.get('raw_description',''),
+             row.get('transaction_type',''), row.get('merchant',''),
              row.get('recipient',''), row.get('phone_suffix',''),
              row.get('direction','out'),
              row.get('principal_amount', 0), row.get('fee_amount', 0),
@@ -162,6 +164,23 @@ def add_extracted_rows(conn: sqlite3.Connection, batch_id: int, doc_id: int,
         ids.append(cur.lastrowid)
     conn.commit()
     return ids
+
+def update_extracted(conn: sqlite3.Connection, ext_id: int, **fields) -> bool:
+    """Update a normalised extracted row in place (reprocess path). Frozen
+    identity fields (doc_id, batch_id, src_txn_id, ext_index) are not editable."""
+    allowed = {'provider','description','raw_description','transaction_type',
+               'merchant','recipient','phone_suffix','direction',
+               'principal_amount','fee_amount','total_amount','currency',
+               'occurred_at','bank_ref','source_page','raw1','raw2',
+               'parser_version','dup_status'}
+    sets = {k: v for k, v in fields.items() if k in allowed}
+    if not sets:
+        return False
+    conn.execute(
+        f"UPDATE extracted_txns SET {', '.join(f'{k}=?' for k in sets)} WHERE id=?",
+        (*sets.values(), ext_id))
+    conn.commit()
+    return True
 
 def list_extracted_by_batch(conn: sqlite3.Connection, batch_id: int) -> list[dict]:
     return [dict(r) for r in conn.execute(
@@ -234,6 +253,38 @@ def update_ledger(conn: sqlite3.Connection, ledger_id: int, **fields) -> bool:
     conn.commit()
     return True
 
+
+def has_manual_correction(conn: sqlite3.Connection, ledger_id: int,
+                          fields: tuple[str, ...] = ('category_id', 'nature')) -> bool:
+    """True if a user has manually corrected any of the given fields on this
+    ledger row. Reprocess must never overwrite those fields."""
+    marks = ', '.join('?' for _ in fields)
+    r = conn.execute(
+        f"SELECT COUNT(*) FROM corrections WHERE ledger_id=? AND field IN ({marks})",
+        (ledger_id, *fields)).fetchone()
+    return r[0] > 0
+
+
+def add_ledger_row_ext(conn: sqlite3.Connection, ext_id: int, *,
+                       account_id: int | None = None,
+                       amount: int = 0, direction: str = 'out',
+                       nature: str = 'needs_review',
+                       category_id: int | None = None,
+                       notes: str = '', confidence: str = 'none',
+                       confidence_reason: str = '',
+                       evidence_json: str = '{}',
+                       review_status: str = 'ok',
+                       txn_status: str = 'confirmed',
+                       parse_conf_src: str = '') -> int:
+    """Like add_ledger_row but wraps in a caller-managed transaction so a
+    reprocess batch (principal row + optional fee row) is atomic."""
+    return add_ledger_row(conn, ext_id,
+        account_id=account_id, amount=amount, direction=direction,
+        nature=nature, category_id=category_id, notes=notes,
+        confidence=confidence, confidence_reason=confidence_reason,
+        evidence_json=evidence_json, review_status=review_status,
+        txn_status=txn_status)
+
 def list_ledger(conn: sqlite3.Connection, *,
                 nature: str | None = None,
                 review_status: str | None = None,
@@ -263,13 +314,16 @@ def list_ledger(conn: sqlite3.Connection, *,
     where = ("WHERE " + " AND ".join(conds)) if conds else ""
     sql = (
         "SELECT l.*, a.alias as account_alias, a.masked as account_masked, "
-        "c.name as category_name, "
-        "e.description, e.merchant, e.recipient, e.src_txn_id, e.provider, "
-        "e.phone_suffix, e.bank_ref, e.occurred_at "
+        "c.name as category_name, c.\"group\" as category_group, "
+        "e.description, e.raw_description, e.transaction_type, e.merchant, "
+        "e.recipient, e.src_txn_id, e.provider, "
+        "e.phone_suffix, e.bank_ref, e.occurred_at, "
+        "s.email_subject "
         "FROM ledger_txns l "
         "LEFT JOIN accounts a ON a.id=l.account_id "
         "LEFT JOIN categories c ON c.id=l.category_id "
         "LEFT JOIN extracted_txns e ON e.id=l.ext_id "
+        "LEFT JOIN source_documents s ON s.id=e.doc_id "
         f"{where} ORDER BY e.occurred_at DESC, l.created_at DESC LIMIT ? OFFSET ?")
     params.extend([limit, offset])
     return [dict(r) for r in conn.execute(sql, params).fetchall()]

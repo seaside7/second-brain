@@ -107,16 +107,41 @@ const TransactionsTab = (() => {
     </table></div>`;
   }
 
+  function _descHtml(r) {
+    const main = U.esc(r.description || r.merchant || r.notes || 'Unknown');
+    const sub = (r.email_subject && r.email_subject !== (r.description || r.email_subject))
+      ? `<div class="tx-desc-sub">${U.esc(r.email_subject)}</div>` : '';
+    const srcTitle = r.raw_description ? ` title="raw: ${U.esc(r.raw_description.slice(0, 200))}"` : '';
+    return `<div class="tx-desc-main"${srcTitle}>${main}${sub}</div>`;
+  }
+
+  function _confDot(r) {
+    const level = r.confidence || 'none';
+    const reason = U.esc((r.confidence_reason || (level === 'none' ? 'No rule matched' : '')).slice(0, 140));
+    return `<span class="tx-conf tx-conf-${level}" title="${level} confidence${reason ? ' - ' + reason : ''}"></span>`;
+  }
+
   function _catSelect(r) {
-    const opts = ['<option value="">Uncategorized</option>']
-      .concat(_categories.map(c =>
-        `<option value="${c.id}" ${c.id === r.category_id ? 'selected' : ''}>${U.esc(c.name)}</option>`
-      )).join('');
-    return `<select class="tx-cat" data-id="${r.id}" aria-label="Category">${opts}</select>`;
+    const wantedCatId = r.category_id ? Number(r.category_id) : null;
+    const groups = {};
+    (_categories || []).forEach(c => {
+      const g = c.group || 'Other';
+      (groups[g] = groups[g] || []).push(c);
+    });
+    const opts = ['<option value="">Uncategorized</option>'];
+    Object.keys(groups).sort().forEach(g => {
+      let inner = groups[g].map(c =>
+        `<option value="${c.id}" ${c.id === wantedCatId ? 'selected' : ''}>${U.esc(c.name)}</option>`
+      ).join('');
+      opts.push(`<optgroup label="${U.esc(g)}">${inner}</optgroup>`);
+    });
+    if (wantedCatId != null && !_categories.some(c => c.id === wantedCatId)) {
+      opts.push(`<option value="${wantedCatId}" selected>Category ${wantedCatId}</option>`);
+    }
+    return `<select class="tx-cat" data-id="${r.id}" aria-label="Category">${opts.join('')}</select>`;
   }
 
   function _txTableRow(r) {
-    const desc    = U.esc(r.description || r.merchant || r.notes || 'Unknown');
     const amount  = r.amount || r.total_amount || 0;
     const dir     = r.direction === 'in' ? 'tx-pos' : 'tx-neg';
     const sign    = r.direction === 'in' ? '+' : '-';
@@ -126,9 +151,9 @@ const TransactionsTab = (() => {
                     nature === 'needs_review' ? '<span class="tx-badge tx-badge-muted">review</span>' : '';
     return `<tr class="tx-tr" data-id="${r.id}">
       <td class="tx-td-date">${_fmtDate(r.occurred_at || r.created_at)}</td>
-      <td class="tx-td-desc">${desc}</td>
+      <td class="tx-td-desc">${_descHtml(r)}</td>
       <td class="tx-td-wallet">${_walletHtml(r.provider)}</td>
-      <td class="tx-td-cat">${_catSelect(r)}</td>
+      <td class="tx-td-cat">${_confDot(r)}${_catSelect(r)}</td>
       <td class="tx-td-amount ${dir}">${sign}${rp(amount)}</td>
       <td class="tx-td-status">${status}</td>
     </tr>`;
@@ -161,6 +186,7 @@ const TransactionsTab = (() => {
               <option value="all" ${_period==='all'?'selected':''}>All Time</option>
             </select>
             <button id="tx-sync-btn" class="btn tx-btn-outline">🔄 Sync Gmail</button>
+            <button id="tx-reprocess-btn" class="btn tx-btn-outline" title="Re-fetch imported emails and re-run the v3 parser + deterministic categorizer in place">♻️ Reprocess</button>
             <button id="tx-upload-btn" class="btn tx-btn-primary">📄 Upload GoPay PDF</button>
           </div>
         </div>
@@ -179,6 +205,7 @@ const TransactionsTab = (() => {
       refreshView();
     });
     panel.querySelector('#tx-sync-btn').addEventListener('click', _syncGmail);
+    panel.querySelector('#tx-reprocess-btn').addEventListener('click', _reprocess);
     panel.querySelector('#tx-upload-btn').addEventListener('click', _uploadPDF);
   }
 
@@ -311,9 +338,9 @@ const TransactionsTab = (() => {
     const rows = (d.rows || []).map(r => `
       <tr class="tx-tr" data-id="${r.id}">
         <td class="tx-td-date">${_fmtDate(r.occurred_at || r.created_at)}</td>
-        <td class="tx-td-desc">${U.esc(r.description || r.merchant || r.notes || 'Unknown')}</td>
+        <td class="tx-td-desc">${_descHtml(r)}</td>
         <td class="tx-td-wallet">${_walletHtml(r.provider)}</td>
-        <td class="tx-td-cat">${_catSelect(r)}</td>
+        <td class="tx-td-cat">${_confDot(r)}${_catSelect(r)}</td>
         <td class="tx-td-amount ${r.direction === 'in' ? 'tx-pos' : 'tx-neg'}">${r.direction === 'in' ? '+' : '-'}${rp(r.amount)}</td>
         <td class="tx-td-status tx-review-actions">
           <button class="btn tx-btn-sm tx-btn-skip" data-id="${r.id}">Skip</button>
@@ -466,6 +493,33 @@ const TransactionsTab = (() => {
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
+  }
+
+  /* ── reprocess (in-place v3 re-parse + re-categorize) ────────────── */
+  async function _reprocess() {
+    const okBtn = window.confirm(
+      'Re-fetch all imported emails and re-run the v3 parser + deterministic ' +
+      'categorizer in place?\n\nExisting manual corrections are preserved. ' +
+      'This can take a minute.');
+    if (!okBtn) return;
+    const btn = document.getElementById('tx-reprocess-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '♻️ Reprocessing...'; }
+    _busy(true);
+    try {
+      const res = await _post('/api/transactions/reprocess', { provider: null }, 120000);
+      if (res.ok) {
+        toast(`Reprocessed ${res.processed} docs (${res.updated_ext} updated, ` +
+              `${res.added_ledger} fee rows, ${res.uncategorized} still need review)`);
+        await refreshView();
+      } else {
+        toast(res.error || 'Reprocess failed', false);
+      }
+    } catch (e) {
+      toast(e.message, false);
+    } finally {
+      _busy(false);
+      if (btn) { btn.disabled = false; btn.textContent = '♻️ Reprocess'; }
+    }
   }
 
   /* ── sync Gmail ─────────────────────────────────────────────────── */
