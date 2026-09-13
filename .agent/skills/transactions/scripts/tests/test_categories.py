@@ -380,5 +380,91 @@ class ManualEntryTestCase(unittest.TestCase):
         self.assertIsNone(store.find_category(self._conn, 'Does Not Exist'))
 
 
+class InternalTransferRuleTestCase(unittest.TestCase):
+    """Bank transfer to an account under our own name is an Internal Transfer.
+
+    Named rule (no accounts registry needed): a transfer whose counterparty is
+    'Said Iskandar' at any bank is money moving between our own accounts - it
+    must be excluded from both income and spending totals. VA payments are
+    never internal (a VA always belongs to a real biller).
+    """
+
+    def setUp(self):
+        self._tmp = Path(tempfile.mkdtemp())
+        self._conn = schema.connect(str(self._tmp / 't.db'))
+        schema.ensure_tables(self._conn)
+        self._conn.commit()
+
+    def tearDown(self):
+        self._conn.close()
+        shutil.rmtree(self._tmp, ignore_errors=True)
+
+    def _cat(self, **row):
+        base = {'direction': 'out', 'principal_amount': 0, 'fee_amount': 0,
+                'total_amount': 0, 'transaction_type': '', 'description': '',
+                'raw_description': '', 'merchant': '', 'recipient': '',
+                'provider': 'bni'}
+        base.update(row)
+        res = categorize.categorize_batch(self._conn, [base])[0]
+        return dict(res, group=_q_cat(self._conn, res['category_id'])[0],
+                    name=_q_cat(self._conn, res['category_id'])[1])
+
+    def test_transfer_out_to_own_name_internal(self):
+        r = self._cat(description='Transfer', transaction_type='transfer',
+                      recipient='SAID ISKANDAR', direction='out',
+                      total_amount=1802500)
+        self.assertEqual(r['nature'], 'internal_transfer')
+        self.assertEqual(r['confidence'], 'high')
+        self.assertEqual(r['group'], 'Transfers')
+        self.assertEqual(r['name'], 'Internal Transfer')
+
+    def test_transfer_in_from_own_name_internal(self):
+        r = self._cat(description='Transfer Masuk', transaction_type='transfer',
+                      recipient='SAID ISKANDAR', direction='in',
+                      total_amount=200000)
+        self.assertEqual(r['nature'], 'internal_transfer')
+        self.assertEqual(r['group'], 'Transfers')
+
+    def test_transfer_to_other_person_is_tracked_transfer(self):
+        r = self._cat(description='Transfer', transaction_type='transfer',
+                      recipient='BUDI SANTOSO', direction='out',
+                      total_amount=50000)
+        self.assertEqual(r['nature'], 'transfer_to_person')
+        self.assertNotEqual(r['name'], 'Internal Transfer')
+
+    def test_transfer_note_does_not_override_own_name(self):
+        r = self._cat(description='Belanja Sayur', transaction_type='transfer',
+                      raw_description='Transfer berhasil Rp300.000 via BI-FAST',
+                      recipient='SAID ISKANDAR', direction='out',
+                      total_amount=300000)
+        self.assertEqual(r['nature'], 'internal_transfer')
+
+    def test_va_payment_to_own_name_never_internal(self):
+        r = self._cat(description='VA - SAID ISKANDAR PDAM', transaction_type='va_payment',
+                      recipient='SAID ISKANDAR PDAM', direction='out',
+                      total_amount=250000)
+        self.assertNotEqual(r['nature'], 'internal_transfer')
+
+    def test_own_name_transfer_excluded_from_income_and_spend(self):
+        import import_engine
+        # a real expense to prove only the internal rows are excluded
+        import_engine.add_manual_tx(
+            self._conn, direction='out', amount=50000,
+            occurred_at='2026-09-13T12:00', description='Beli makan')
+        import_engine.add_manual_tx(
+            self._conn, direction='out', amount=1802500,
+            occurred_at='2026-09-13T11:00', description='Transfer',
+            category_id=None)
+        self._conn.execute(
+            "UPDATE ledger_txns SET nature='internal_transfer' "
+            "WHERE ext_id IN (SELECT id FROM extracted_txns "
+            "                 WHERE description='Transfer')")
+        self._conn.commit()
+        s = store.spending_summary(self._conn)
+        self.assertNotIn(1802500, (s['expense'], s['income'], s['fee']))
+        self.assertEqual(s['internal_transfer'], 1802500)
+        self.assertTrue(s['expense'] > 0)  # the real expense is still counted
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

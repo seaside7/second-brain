@@ -29,6 +29,9 @@ import store
 _EWALLET_PROVIDERS = {'gopay', 'ovo', 'dana', 'shopeepay', 'wondr'}
 _BANK_PROVIDERS = {'bca', 'bni', 'bri', 'mandiri'}
 
+# Our own names: transfer to an account under these -> internal move.
+_OWN_NAMES = ['said iskandar']
+
 # ── category taxonomy (group, name); get_or_create adds rows on first use ──
 _CAT = {
     'income':         ('Income', 'Income'),
@@ -184,6 +187,27 @@ def _own_person_transfer(conn: sqlite3.Connection, row: dict) -> bool:
     return False
 
 
+def _is_own_name_transfer(row: dict) -> bool:
+    """True when a bank transfer's counterparty is one of OUR names.
+
+    A transfer to an account under our own name (Said Iskandar) at any bank is
+    money moving between our own accounts, so it is an internal transfer and
+    must stay out of both income and spending totals. The expense is recorded
+    later from the destination account when the money is actually used.
+
+    Virtual Account payments are excluded: a VA belongs to a real biller
+    (never ourselves), and the VA parser already sets transaction_type
+    'va_payment' with the biller as recipient.
+    """
+    if (row.get('transaction_type', '') or '').lower() == 'va_payment':
+        return False
+    if 'virtual account' in _text(row):
+        return False
+    cand = ((row.get('recipient', '') or '') + ' ' +
+            (row.get('merchant', '') or '')).lower()
+    return any(name in cand for name in _OWN_NAMES)
+
+
 def categorize_batch(conn: sqlite3.Connection, rows: list[dict]) -> list[dict]:
     """Run deterministic rules on a batch of extracted rows.
 
@@ -261,9 +285,13 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
     #    the sign or subject as income/expense. Transfer to own account is
     #    internal; to another person it is a tracked, non-spend transfer.
     if direction == 'out' and _is_transfer_desc(desc):
+        if _is_own_name_transfer(row):
+            set_cat('internal', 'internal_transfer', 'high',
+                    'Transfer to own account')
+            return hit
         if _own_person_transfer(conn, row):
             set_cat('internal', 'internal_transfer', 'medium',
-                    'Transfer to own account')
+                    'Transfer to own (registered) account')
             return hit
         # Transfer to a person, optionally with a categorizable note.
         if 'belanja' in desc or any(_has(desc, m) for m in _GROCERIES):
@@ -284,6 +312,10 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
 
     # 2.5 MONEY-IN transfer (credit) - not income by sign alone.
     if direction == 'in' and _is_transfer_desc(desc):
+        if _is_own_name_transfer(row):
+            set_cat('internal', 'internal_transfer', 'high',
+                    'Transfer from own account')
+            return hit
         set_fallback('Inbound transfer - verify income vs person')
         return hit
 
