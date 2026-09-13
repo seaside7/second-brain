@@ -85,11 +85,12 @@ class CategorizerTestCase(unittest.TestCase):
         self.assertEqual(r['nature'], 'internal_transfer')
         self.assertEqual(r['group'], 'Transfers')
 
-    def test_05_cashback_credit(self):
+    def test_05_cashback_credit_goes_to_review(self):
+        # No cashback category: cashback credits fall to Review for manual
+        # filing instead of auto-categorizing.
         r = self._cat(description='Cashback reward', direction='in',
                       transaction_type='cashback')
-        self.assertEqual(r['nature'], 'cashback')
-        self.assertEqual(r['group'], 'Income')
+        self.assertEqual(r['nature'], 'needs_review')
 
     def test_06_warung_with_food_word(self):
         r = self._cat(description='Warung Gorengan Bahari', transaction_type='qris')

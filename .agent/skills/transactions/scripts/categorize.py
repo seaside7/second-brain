@@ -9,7 +9,7 @@ Step-0 parser.
 Natures map to the ledger_txns CHECK constraint:
     internal_transfer -> excluded from spend/net (your own wallet moves)
     transfer_to_person -> tracked, not personal expense (family)
-    top_up / fee / cashback / refund / income -> distinct stats
+    top_up / fee / refund / income -> distinct stats
     expense -> the spending that lands in the dashboard's numbers
     needs_review -> ambiguous / no rule matched; user picks manually
 
@@ -66,10 +66,8 @@ _CAT = {
     'family':         ('Transfers', 'Family Transfer'),
     'topup_3rd':      ('Transfers', 'Top Up (3rd party)'),
     'bills_elec':     ('Utilities', 'Electricity (PLN)'),
-    'bills_water':    ('Utilities', 'Water (PDAM)'),
     'bills_internet': ('Utilities', 'Internet'),
     'bills_phone':    ('Utilities', 'Mobile & Data'),
-    'bills_insure':   ('Utilities', 'Insurance (BPJS)'),
     'bills_cc':       ('Utilities', 'Credit Card'),
     'groceries':      ('Groceries', 'Groceries'),
     'food':            ('Food & Dining', 'Food & Dining'),
@@ -84,7 +82,6 @@ _CAT = {
     'fee':            ('Fees', 'Bank Fee'),
     'loan_payment':   ('Loans', 'Loan Payment'),
     'online_credit':  ('Loans', 'Online Credit'),
-    'cashback':       ('Income', 'Cashback & Rewards'),
     'refund':         ('Income', 'Refund'),
     'uncategorized':  ('Uncategorized', 'Uncategorized'),
 }
@@ -94,12 +91,10 @@ _CAT = {
 # Billers: keyword -> taxonomy key. Order matters (most specific first).
 _BILLERS = [
     ('token listrik', 'bills_elec'), ('pln', 'bills_elec'),
-    ('pdam', 'bills_water'), ('aetra', 'bills_water'), ('palyja', 'bills_water'),
     ('indihome', 'bills_internet'), ('first media', 'bills_internet'),
     ('biznet', 'bills_internet'),
     ('telkomsel', 'bills_phone'), ('indosat', 'bills_phone'),
     ('pulsa', 'bills_phone'), ('paket data', 'bills_phone'),
-    ('bpjs kesehatan', 'bills_insure'), ('bpjs ketenagakerjaan', 'bills_insure'),
     ('kartu kredit', 'bills_cc'), ('payment cc', 'bills_cc'),
 ]
 
@@ -134,7 +129,6 @@ _FEE_KEYWORDS = ['administrasi', 'admin fee', 'biaya admin', 'fee',
                  'biaya layanan', 'biaya adm']
 _TOPUP_KEYWORDS = ['top up', 'topup', 'top-up', 'isi ulang', 'isi saldo',
                    'add balance', 'beli saldo']
-_CASHBACK_KEYWORDS = ['cashback', 'reward', 'coin', 'bonus', 'promo']
 _REFUND_KEYWORDS = ['refund', 'kembalian', 'cancelled refund']
 
 # Short tokens need whole-word matching to avoid false positives (e.g. "xl").
@@ -357,15 +351,12 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
 
     text = desc
 
-    # 1.5 MONEY-IN specific identity beats the merchant tree (also honours the
-    #     parser's transaction_type: a 'refund'/'cashback' credit stays that).
+    # 1.5 MONEY-IN specific identity beats the merchant tree (also honours
+    #     the parser's 'refund' transaction_type). Cashback credits have no
+    #     category - they fall to Review for manual filing.
     if tx_type in ('refund',) or any(_has(desc, kw) for kw in _REFUND_KEYWORDS):
         if direction == 'in':
             set_cat('refund', 'refund', 'high', 'Refund')
-            return hit
-    if tx_type in ('cashback',) or any(_has(desc, kw) for kw in _CASHBACK_KEYWORDS):
-        if direction == 'in':
-            set_cat('cashback', 'cashback', 'high', 'Cashback/reward')
             return hit
 
     # 2. TRANSFER detection (bank out / person transfer) - do NOT auto-treat
