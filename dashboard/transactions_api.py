@@ -34,6 +34,7 @@ try:
     from categorize import apply_correction
     from reconcile import (find_transfer_candidates, confirm_transfer,
                            suggest_transfer, reject_transfer, unlink_transfer)
+    import reports
     from reports import overview, spending_breakdown, cashflow, fees_total
     from gmail_sync import sync_gmail
     from scheduler import TransactionScheduler
