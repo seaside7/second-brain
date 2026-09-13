@@ -330,14 +330,23 @@ def list_ledger(conn: sqlite3.Connection, *,
 
 def count_ledger(conn: sqlite3.Connection, *,
                  txn_status: str | None = None,
-                 review_status: str | None = None) -> int:
+                 review_status: str | None = None,
+                 from_date: str | None = None,
+                 to_date: str | None = None) -> int:
     conds, params = [], []
     if txn_status:
-        conds.append("txn_status=?"); params.append(txn_status)
+        conds.append("l.txn_status=?"); params.append(txn_status)
     if review_status:
-        conds.append("review_status=?"); params.append(review_status)
+        conds.append("l.review_status=?"); params.append(review_status)
+    if from_date:
+        conds.append("e.occurred_at>=?"); params.append(from_date)
+    if to_date:
+        conds.append("e.occurred_at<=?"); params.append(to_date)
     where = ("WHERE " + " AND ".join(conds)) if conds else ""
-    r = conn.execute(f"SELECT COUNT(*) FROM ledger_txns {where}", params).fetchone()
+    join = ""
+    if from_date or to_date:
+        join = " JOIN extracted_txns e ON e.id=l.ext_id"
+    r = conn.execute(f"SELECT COUNT(*) FROM ledger_txns l{join} {where}", params).fetchone()
     return r[0] if r else 0
 
 # ── transfers ────────────────────────────────────────────────────────────

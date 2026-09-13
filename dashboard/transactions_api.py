@@ -12,7 +12,7 @@ import os
 import sys
 import traceback
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 from urllib.parse import parse_qs, urlsplit
 
 # Add the skill scripts to sys.path so we can import the transactions package
@@ -139,14 +139,29 @@ def route_get(handler) -> None:
         _err(handler, 500, f'Server error: {e}')
 
 
+def _range_from_qs(qs: dict) -> tuple[Optional[str], Optional[str]]:
+    """Resolve an effective (from_date, to_date) from query params.
+
+    Explicit ?from= / ?to= win. Otherwise a named ?period= is expanded to
+    its bounds ('all' / unknown -> unbounded)."""
+    f = qs.get('from', [None])[0]
+    t = qs.get('to', [None])[0]
+    if not f and not t:
+        period = qs.get('period', [None])[0]
+        if period and period != 'all':
+            f, t = reports.period_bounds(period)
+    return f or None, t or None
+
+
 def _handle_overview(handler, qs: dict) -> None:
     conn = _get_db(handler)
     if not conn:
         _err(handler, 403, 'Not available in samudera mode')
         return
     period = qs.get('period', ['current_month'])[0]
+    from_date, to_date = _range_from_qs(qs)
     try:
-        data = overview(conn, period=period)
+        data = overview(conn, period=period, from_date=from_date, to_date=to_date)
         _ok(handler, data)
     finally:
         conn.close()
@@ -160,17 +175,18 @@ def _handle_list(handler, qs: dict) -> None:
     try:
         limit = int(qs.get('limit', ['200'])[0])
         offset = int(qs.get('offset', ['0'])[0])
+        from_date, to_date = _range_from_qs(qs)
         rows = list_ledger(conn,
             nature=qs.get('nature', [None])[0],
             review_status=qs.get('review', [None])[0],
             txn_status=qs.get('status', [None])[0],
             account_id=int(qs['account'][0]) if 'account' in qs else None,
-            from_date=qs.get('from', [None])[0],
-            to_date=qs.get('to', [None])[0],
+            from_date=from_date,
+            to_date=to_date,
             search=qs.get('q', [None])[0],
             limit=min(limit, 500),
             offset=offset)
-        total = count_ledger(conn)
+        total = count_ledger(conn, from_date=from_date, to_date=to_date)
         _ok(handler, {'rows': rows, 'total': total, 'limit': limit, 'offset': offset})
     finally:
         conn.close()
@@ -198,9 +214,8 @@ def _handle_spending(handler, qs: dict) -> None:
         _err(handler, 403, 'Not available in samudera mode')
         return
     try:
-        data = spending_breakdown(conn,
-            from_date=qs.get('from', [None])[0],
-            to_date=qs.get('to', [None])[0])
+        from_date, to_date = _range_from_qs(qs)
+        data = spending_breakdown(conn, from_date=from_date, to_date=to_date)
         _ok(handler, data)
     finally:
         conn.close()

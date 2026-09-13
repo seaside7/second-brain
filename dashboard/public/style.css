@@ -3418,6 +3418,10 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
   background: #000; color: #fff; border: 1px solid var(--border); border-radius: var(--radius);
   padding: 5px 10px; font-size: var(--fs-sm);
 }
+.tx-date { color-scheme: dark; }
+.tx-dates { display: inline-flex; align-items: center; gap: 6px; }
+.tx-dates[hidden] { display: none; }
+.tx-range-hint { color: var(--text-muted); font-size: var(--fs-sm); padding: 0 0 var(--sp-2); }
 .tx-btn-primary { background: var(--accent); color: #fff; border: none; border-radius: var(--radius); padding: 6px 14px; font-size: var(--fs-sm); font-weight: 600; cursor: pointer; }
 .tx-btn-primary:hover { filter: brightness(1.15); }
 .tx-btn-outline { background: transparent; color: var(--text-primary); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 14px; font-size: var(--fs-sm); cursor: pointer; }

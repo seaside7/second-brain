@@ -29,6 +29,10 @@ import store
 _EWALLET_PROVIDERS = {'gopay', 'ovo', 'dana', 'shopeepay', 'wondr'}
 _BANK_PROVIDERS = {'bca', 'bni', 'bri', 'mandiri'}
 
+# VA billers that are loan facilities (owner categorizes the biller, the
+# categorizer never guesses). Everything else falls through to Review.
+_VA_LOAN_BILLERS = ('spaylater', 'pegadaian', 'gadai')
+
 # Our own names: transfer to an account under these -> internal move.
 _OWN_NAMES = ['said iskandar']
 
@@ -57,6 +61,7 @@ _CAT = {
     'shopping':       ('Shopping', 'Online Shopping'),
     'cash':           ('Cash', 'Cash Withdrawal'),
     'fee':            ('Fees', 'Bank Fee'),
+    'loan_payment':   ('Loans', 'Loan Payment'),
     'cashback':       ('Income', 'Cashback & Rewards'),
     'refund':         ('Income', 'Refund'),
     'uncategorized':  ('Uncategorized', 'Uncategorized'),
@@ -157,6 +162,23 @@ def _is_own_wallet_topup(conn: sqlite3.Connection, row: dict) -> bool:
         return provider in _BANK_PROVIDERS
     # Money in: e-wallet received funding from a bank.
     return provider in _EWALLET_PROVIDERS
+
+
+def _is_own_wallet_withdrawal(conn: sqlite3.Connection, row: dict) -> bool:
+    """True when a BANK credit is a withdrawal from one of OUR own e-wallets.
+
+    The statement shows the money IN on the bank side; the e-wallet side will
+    later record the actual spend. Keeping this as an internal transfer avoids
+    double-counting the wallet's balance as income.
+    """
+    if row.get('direction') != 'in':
+        return False
+    provider = (row.get('provider', '') or '').lower()
+    if provider not in _BANK_PROVIDERS:
+        return False
+    text = (_text(row) + ' ' + (row.get('recipient', '') or '')).lower()
+    return any(m in text for m in ('dompet anak bangsa', 'gopay wallet',
+                                   'gopay bank transfer', 'gopay withdrawal'))
 
 
 def _own_person_transfer(conn: sqlite3.Connection, row: dict) -> bool:
@@ -316,7 +338,19 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
             set_cat('internal', 'internal_transfer', 'high',
                     'Transfer from own account')
             return hit
+        if _is_own_wallet_withdrawal(conn, row):
+            set_cat('internal', 'internal_transfer', 'medium',
+                    'Withdrawal from own wallet')
+            return hit
         set_fallback('Inbound transfer - verify income vs person')
+        return hit
+
+    # 2.6 VIRTUAL ACCOUNT loan payments (SPayLater / Pegadaian) - the owner
+    #     pays down a loan facility through a VA. Never guessed.
+    if (direction == 'out' and tx_type == 'va_payment'
+            and any(_has(_text(row), m) for m in _VA_LOAN_BILLERS)):
+        set_cat('loan_payment', 'expense', 'high',
+                'VA loan facility payment')
         return hit
 
     # 3. INCOME (credit + clear income hints)

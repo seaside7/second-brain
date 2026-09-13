@@ -143,7 +143,7 @@ def sync_gmail(conn: sqlite3.Connection, *,
     if not service:
         return {'ok': False, 'error': 'Gmail not configured (token missing or invalid)'}
 
-    stats = {'synced': 0, 'skipped': 0, 'failed': 0, 'errors': []}
+    stats = {'synced': 0, 'skipped': 0, 'failed': 0, 'matched': 0, 'errors': []}
 
     try:
         results = service.users().messages().list(
@@ -196,6 +196,22 @@ def _process_message(conn: sqlite3.Connection, service, msg_id: str, stats: dict
     if not parsed:
         stats['skipped'] += 1
         return
+
+    # Cross-source dedup: rows already imported by the BCA statement backfill
+    # are merged (provenance only) instead of duplicated; pending statement
+    # rows get finalized when the confirmed email lands.
+    import bca_backfill
+    unmatched = []
+    for p in parsed:
+        m = bca_backfill.finalize_gmail_match(conn, p)
+        if m is None:
+            unmatched.append(p)
+        else:
+            stats['matched'] = stats.get('matched', 0) + 1
+    if not unmatched:
+        stats['skipped'] += 1
+        return
+    parsed = unmatched
 
     # Create source document (+ batch) and extracted row
     doc_id = store.add_source_document(conn,

@@ -48,6 +48,19 @@ const TransactionsTab = (() => {
   /* ── state ──────────────────────────────────────────────────────── */
   let _activeView = 'overview';
   let _period = 'current_month';
+  let _from = '';
+  let _to = '';
+
+  /* Build the period/date-range query string for overview/../list calls. */
+  function _rangeQS() {
+    if (_period === 'custom') {
+      const p = [];
+      if (_from) p.push(`from=${encodeURIComponent(_from + 'T00:00:00')}`);
+      if (_to) p.push(`to=${encodeURIComponent(_to + 'T23:59:59')}`);
+      return p.length ? p.join('&') : 'period=all';
+    }
+    return `period=${_period}`;
+  }
   let _uploadBusy = false;
   let _categories = [];
   let _accounts = [];
@@ -202,7 +215,13 @@ const rpSigned = n => {
               <option value="last_month" ${_period==='last_month'?'selected':''}>Last Month</option>
               <option value="current_year" ${_period==='current_year'?'selected':''}>This Year</option>
               <option value="all" ${_period==='all'?'selected':''}>All Time</option>
+              <option value="custom" ${_period==='custom'?'selected':''}>Custom Dates…</option>
             </select>
+            <span class="tx-dates" id="tx-dates" ${_period==='custom' ? '' : 'hidden'}>
+              <input id="tx-from" class="tx-select tx-date" type="date" value="${_from}" title="From">
+              <input id="tx-to" class="tx-select tx-date" type="date" value="${_to}" title="To">
+              <button id="tx-dates-clear" class="btn tx-btn-outline" title="Reset to This Month">✕</button>
+            </span>
             <button id="tx-sync-btn" class="btn tx-btn-outline">🔄 Sync Gmail</button>
             <button id="tx-reprocess-btn" class="btn tx-btn-outline" title="Re-fetch imported emails and re-run the v3 parser + deterministic categorizer in place">♻️ Reprocess</button>
             <button id="tx-add-btn" class="btn tx-btn-primary" title="Record income/expense by hand (emails can be missed)">➕ Add</button>
@@ -221,6 +240,28 @@ const rpSigned = n => {
       }));
     panel.querySelector('#tx-period').addEventListener('change', e => {
       _period = e.target.value;
+      const dates = panel.querySelector('#tx-dates');
+      if (_period === 'custom') {
+        dates.hidden = false;
+        if (!_from && !_to) {
+          const today = new Date();
+          _to = today.toISOString().slice(0, 10);
+          _from = today.toISOString().slice(0, 8) + '01';
+          panel.querySelector('#tx-from').value = _from;
+          panel.querySelector('#tx-to').value = _to;
+        }
+      } else {
+        _from = ''; _to = '';
+        dates.hidden = true;
+      }
+      refreshView();
+    });
+    panel.querySelector('#tx-from').addEventListener('change', e => { _from = e.target.value; refreshView(); });
+    panel.querySelector('#tx-to').addEventListener('change', e => { _to = e.target.value; refreshView(); });
+    panel.querySelector('#tx-dates-clear').addEventListener('click', () => {
+      _period = 'current_month'; _from = ''; _to = '';
+      panel.querySelector('#tx-period').value = 'current_month';
+      panel.querySelector('#tx-dates').hidden = true;
       refreshView();
     });
     panel.querySelector('#tx-sync-btn').addEventListener('click', _syncGmail);
@@ -300,11 +341,15 @@ const rpSigned = n => {
     input.className = 'tx-cat tx-cat-new';
     input.placeholder = 'Type new category… Enter ↵ saves';
     input.maxLength = 80;
-    sel.replaceWith(input);
-    input.focus();
 
     let finished = false;
     const finish = () => { if (finished) return; finished = true; refreshView(); };
+
+    requestAnimationFrame(() => {
+      if (finished || !sel.isConnected) return;
+      sel.replaceWith(input);
+      input.focus();
+    });
 
     const apply = async () => {
       if (finished) return;
@@ -341,14 +386,11 @@ const rpSigned = n => {
       if (e.key === 'Enter') { e.preventDefault(); apply(); }
       else if (e.key === 'Escape') { finish(); }
     });
-    input.addEventListener('blur', () => {
-      if (!finished && !(input.value || '').trim()) finish();
-    });
   }
 
   /* ── overview ───────────────────────────────────────────────────── */
   async function _renderOverview(el) {
-    const d = await U.fetchJSON(`/api/transactions/overview?period=${_period}`);
+    const d = await U.fetchJSON(`/api/transactions/overview?${_rangeQS()}`);
     el.innerHTML = `
       <div class="tx-stats">
         <div class="tx-stat"><div class="tx-stat-label">Expense</div><div class="tx-stat-value tx-neg">${rp(d.expense)}</div></div>
@@ -363,6 +405,7 @@ const rpSigned = n => {
         ${d.suggested_transfers ? `<span class="tx-badge tx-badge-info">${d.suggested_transfers} transfer suggestions</span>` : ''}
         ${d.uncategorized ? `<span class="tx-badge tx-badge-muted">${d.uncategorized} uncategorized</span>` : ''}
       </div>
+      ${_period === 'custom' && d.from_date ? `<div class="tx-range-hint">${d.from_date.slice(0, 10)} – ${(d.to_date || '').slice(0, 10)}</div>` : ''}
       ${_renderRecent(d.recent || [])}
     `;
   }
@@ -375,7 +418,7 @@ const rpSigned = n => {
   /* ── all transactions ───────────────────────────────────────────── */
   async function _renderAll(el) {
     const size = _allPageSize;
-    let d = await U.fetchJSON(`/api/transactions/list?limit=${size}&offset=${_allPage * size}`);
+    let d = await U.fetchJSON(`/api/transactions/list?limit=${size}&offset=${_allPage * size}&${_rangeQS()}`);
     const total = d.total || 0;
     const pages = Math.max(1, Math.ceil(total / size));
     if (_allPage >= pages) {
@@ -417,7 +460,7 @@ const rpSigned = n => {
 
   /* ── spending ───────────────────────────────────────────────────── */
   async function _renderSpending(el) {
-    const d = await U.fetchJSON(`/api/transactions/spending?period=${_period}`);
+    const d = await U.fetchJSON(`/api/transactions/spending?${_rangeQS()}`);
     const cats = d.by_category || [];
     el.innerHTML = `
       <div class="tx-card"><h3 class="tx-card-title">Spending by Category</h3>

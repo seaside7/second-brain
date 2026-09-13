@@ -12,13 +12,24 @@ from typing import Any, Optional
 import store
 
 
+def period_bounds(period: str) -> tuple[Optional[str], Optional[str]]:
+    """Public wrapper for named ranges ('current_month' | 'last_month' |
+    'current_year' | 'all'). Returns (from_date, to_date) ISO strings; a
+    None means unbounded. Unknown periods fall back to unbounded."""
+    return _period_bounds(period)
+
+
 def overview(conn: sqlite3.Connection, *,
-             period: str = 'current_month') -> dict:
+             period: str = 'current_month',
+             from_date: str | None = None,
+             to_date: str | None = None) -> dict:
     """Return dashboard overview data.
 
     period: 'current_month' | 'last_month' | 'current_year' | 'all'
+    Explicit from_date/to_date (ISO strings) override the named period.
     """
-    from_date, to_date = _period_bounds(period)
+    if from_date is None and to_date is None:
+        from_date, to_date = _period_bounds(period)
 
     summary = store.spending_summary(conn, from_date=from_date, to_date=to_date)
 
