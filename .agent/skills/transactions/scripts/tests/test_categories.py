@@ -177,6 +177,25 @@ class CategorizerTestCase(unittest.TestCase):
                       provider='bca')
         self.assertNotEqual(r['nature'], 'internal_transfer')
 
+    def test_19_shopeepay_airpay_va_is_not_own_wallet(self):
+        # ShopeePay top-up via AirPay VA for someone else's account: the
+        # description says "Top Up" but the money leaves to a third party.
+        r = self._cat(
+            description='ShopeePay Top Up',
+            raw_description='Transfer Type : Transfer to BCA Virtual Account '
+                            'Name : DINX LUTXXXXX Company/Product Name : '
+                            'PT AIRPAY INTERNATIONAL INDONE / SHOPEEPAY',
+            transaction_type='top_up', provider='bca')
+        self.assertEqual(r['nature'], 'needs_review')
+        self.assertNotEqual(r['group'], 'Transfers')
+
+    def test_20_bni_gopay_topup_to_owner_stays_internal(self):
+        r = self._cat(
+            description='GoPay Top Up',
+            raw_description='Penerima SAID ISKANDAR GoPay Top-up e-Wallet',
+            transaction_type='top_up', provider='bni', recipient='GoPay')
+        self.assertEqual(r['nature'], 'internal_transfer')
+
 
 class ReprocessTestCase(unittest.TestCase):
     """reprocess._reprocess_doc: idempotency + manual-correction preservation."""

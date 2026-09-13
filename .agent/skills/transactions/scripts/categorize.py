@@ -47,6 +47,15 @@ _VA_ONLINE_CREDIT = ('spaylater', 'gopay later', 'golater', 'paylater',
 _WALLET_KEYWORDS = ('gopay', 'go-pay', 'ovo', 'shopeepay', 'shopee pay',
                     'e-wallet', 'ewallet', 'dompet')
 
+# VA acquirers that are never our own wallet (ShopeePay via AirPay, ...). A
+# bank debit into one of these VAs is money out to a third party - it goes
+# to Review, never internal, even when the description says "Top Up".
+_THIRD_PARTY_ACQUIRERS = ('airpay',)
+
+# Our own wallet companies (GoPay's PT): a VA debit naming one of these is
+# still ours, never third-party.
+_OWN_WALLET_COMPANIES = ('dompet anak bangsa',)
+
 # Our own names: transfer to an account under these -> internal move.
 _OWN_NAMES = ['said iskandar']
 
@@ -212,6 +221,25 @@ def _is_own_wallet_withdrawal(conn: sqlite3.Connection, row: dict) -> bool:
                                    'gopay bank transfer', 'gopay withdrawal'))
 
 
+def _is_third_party_topup(row: dict) -> bool:
+    """True when a BANK debit pays a Virtual Account of a known third-party
+    acquirer (ShopeePay via AirPay for someone else's account, ...).
+
+    The description may still say "Top Up" - but the money leaves to a third
+    party, so it must go to Review, never internal_transfer.
+    """
+    if row.get('direction', 'out') != 'out':
+        return False
+    if (row.get('provider', '') or '').lower() not in _BANK_PROVIDERS:
+        return False
+    text = _text(row)
+    if 'virtual account' not in text:
+        return False
+    if any(c in text for c in _OWN_WALLET_COMPANIES):
+        return False
+    return any(a in text for a in _THIRD_PARTY_ACQUIRERS)
+
+
 def _own_person_transfer(conn: sqlite3.Connection, row: dict) -> bool:
     """True when a transfer's counterparty is one of OUR registered accounts.
 
@@ -313,6 +341,12 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
         return hit
     if any(_has(_clean_text(row), kw) for kw in _FEE_KEYWORDS):
         set_cat('fee', 'fee', 'high', 'Fee keyword')
+        return hit
+
+    # 0.7 Bank debit into a third-party acquirer VA (ShopeePay via AirPay
+    #     for someone else's account, ...) is NOT our wallet - Review it.
+    if _is_third_party_topup(row):
+        set_fallback('Top-up to unverified recipient - verify')
         return hit
 
     # 1. INTERNAL MOVE (own bank <-> own wallet / own account). Excluded from spend.
