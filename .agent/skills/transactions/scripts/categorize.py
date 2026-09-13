@@ -35,7 +35,7 @@ _VA_LOAN_BILLERS = ('pegadaian', 'gadai')
 
 # Buy-now-pay-later / online credit facilities (owner categorizes the biller,
 # the categorizer never guesses). -> Online Credit.
-_VA_ONLINE_CREDIT = ('spaylater', 'gopay later', 'golater', 'paylater',
+_VA_ONLINE_CREDIT = ('spaylater', 'spinjam', 'gopay later', 'golater', 'paylater',
                      'shopee pinjam', 'kredivo', 'akulaku', 'indodana',
                      'ada kredit')
 

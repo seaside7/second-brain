@@ -154,6 +154,12 @@ class CategorizerTestCase(unittest.TestCase):
         self.assertEqual(r['name'], 'Online Credit')
         self.assertEqual(r['confidence'], 'high')
 
+    def test_15b_spinjam_va_is_online_credit(self):
+        r = self._cat(description='VA - Spinjam', transaction_type='va_payment')
+        self.assertEqual(r['nature'], 'expense')
+        self.assertEqual(r['group'], 'Loans')
+        self.assertEqual(r['name'], 'Online Credit')
+
     def test_16_pegadaian_va_is_loan_payment(self):
         r = self._cat(description='VA 19008/P Gadai Indo', transaction_type='va_payment')
         self.assertEqual(r['group'], 'Loans')
