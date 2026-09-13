@@ -39,6 +39,14 @@ _VA_ONLINE_CREDIT = ('spaylater', 'gopay later', 'golater', 'paylater',
                      'shopee pinjam', 'kredivo', 'akulaku', 'indodana',
                      'ada kredit')
 
+# Wallet providers that can be OUR OWN wallet. A bank debit only counts as an
+# own-wallet top-up when the parsed counterparty (recipient/merchant - never
+# the raw email body) names one of these, or the row is an explicit wallet
+# top-up. 'purchase' is deliberately absent: BCA payment emails all say
+# "Transaction Type: PURCHASE", which used to swallow real bill payments.
+_WALLET_KEYWORDS = ('gopay', 'go-pay', 'ovo', 'shopeepay', 'shopee pay',
+                    'e-wallet', 'ewallet', 'dompet')
+
 # Our own names: transfer to an account under these -> internal move.
 _OWN_NAMES = ['said iskandar']
 
@@ -55,10 +63,7 @@ _CAT = {
     'bills_insure':   ('Utilities', 'Insurance (BPJS)'),
     'bills_cc':       ('Utilities', 'Credit Card'),
     'groceries':      ('Groceries', 'Groceries'),
-    'food_warung':    ('Food & Dining', 'Warung / Snacks'),
-    'food_resto':     ('Food & Dining', 'Restaurants'),
-    'food_cafe':      ('Food & Dining', 'Cafe'),
-    'food_delivery':  ('Food & Dining', 'Food Delivery'),
+    'food':            ('Food & Dining', 'Food & Dining'),
     'transport_fuel': ('Transport', 'Fuel'),
     'transport_toll': ('Transport', 'Toll'),
     'transport_parking': ('Transport', 'Parking'),
@@ -119,7 +124,7 @@ _FEE_KEYWORDS = ['administrasi', 'admin fee', 'biaya admin', 'fee',
                  'service charge', 'biaya transfer', 'transfer fee',
                  'biaya layanan', 'biaya adm']
 _TOPUP_KEYWORDS = ['top up', 'topup', 'top-up', 'isi ulang', 'isi saldo',
-                   'add balance', 'beli saldo', 'purchase']
+                   'add balance', 'beli saldo']
 _CASHBACK_KEYWORDS = ['cashback', 'reward', 'coin', 'bonus', 'promo']
 _REFUND_KEYWORDS = ['refund', 'kembalian', 'cancelled refund']
 
@@ -161,16 +166,31 @@ def _is_own_wallet_topup(conn: sqlite3.Connection, row: dict) -> bool:
     transfers by default so the same money is not double-counted as two
     expenses (bank side + wallet side). E-wallet -> e-wallet or a wallet
     out-spend falls through to normal categorization.
+
+    The top-up keyword is matched against the CLEAN text (parsed description /
+    merchant / recipient) - never the raw email body, which contains generic
+    words like "purchase". A bank debit additionally needs wallet evidence:
+    the counterparty names one of our wallets, or the row is an explicit
+    wallet top-up.
     """
-    desc = _text(row)
-    if not any(_has(desc, kw) for kw in _TOPUP_KEYWORDS):
+    clean = _clean_text(row)
+    if not any(_has(clean, kw) for kw in _TOPUP_KEYWORDS):
         return False
     provider = (row.get('provider', '') or '').lower()
     direction = row.get('direction', 'out')
 
     if direction == 'out':
         # Bank debit funding one of our own wallets.
-        return provider in _BANK_PROVIDERS
+        if provider not in _BANK_PROVIDERS:
+            return False
+        counterparty = ((row.get('recipient', '') or '') + ' ' +
+                        (row.get('merchant', '') or '')).lower()
+        if any(w in counterparty for w in _WALLET_KEYWORDS):
+            return True
+        tx_type = (row.get('transaction_type', '') or '').lower()
+        if tx_type == 'top_up' and any(w in clean for w in _WALLET_KEYWORDS):
+            return True
+        return False
     # Money in: e-wallet received funding from a bank.
     return provider in _EWALLET_PROVIDERS
 
@@ -394,22 +414,23 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
         set_cat('home_upkeep', 'expense', 'high', 'Home repair / tukang')
         return hit
 
-    # 6. FOOD & DINING - warung needs a food word, otherwise -> Review.
+    # 6. FOOD & DINING - one flat category. Warung needs a food word,
+    #    otherwise -> Review.
     if any(_has(desc, m) for m in _WARUNG_MARKERS):
         if any(_has(desc, m) for m in _FOOD_WORDS):
-            set_cat('food_warung', 'expense', 'medium',
+            set_cat('food', 'expense', 'medium',
                     'Warung + food word')
             return hit
         set_fallback('Warung without food context - verify')
         return hit
     if any(_has(desc, m) for m in _FOOD_RESTAURANT):
-        set_cat('food_resto', 'expense', 'high', 'Restaurant')
+        set_cat('food', 'expense', 'high', 'Restaurant')
         return hit
     if any(_has(desc, m) for m in _FOOD_CAFE):
-        set_cat('food_cafe', 'expense', 'high', 'Cafe / coffee')
+        set_cat('food', 'expense', 'high', 'Cafe / coffee')
         return hit
     if any(_has(desc, m) for m in _FOOD_DELIVERY):
-        set_cat('food_delivery', 'expense', 'high', 'Food delivery')
+        set_cat('food', 'expense', 'high', 'Food delivery')
         return hit
 
     # 7. TRANSPORT

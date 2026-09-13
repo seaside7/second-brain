@@ -159,6 +159,24 @@ class CategorizerTestCase(unittest.TestCase):
         self.assertEqual(r['group'], 'Loans')
         self.assertEqual(r['name'], 'Loan Payment')
 
+    def test_17_bca_purchase_email_not_own_wallet(self):
+        # BCA "Internet Transaction Journal" payment emails all say
+        # "Transaction Type: PURCHASE" - that must not mark a bill payment
+        # (here PLN prepaid for someone else) as an own-wallet top-up.
+        r = self._cat(description='Internet Transaction Journal',
+                      raw_description='Transaction Type : PURCHASE Product : '
+                                      'PLN PREPAID Customer Name : MOCHHERDINI '
+                                      'Total Payment : RP 103.000',
+                      transaction_type='payment', provider='bca')
+        self.assertEqual(r['nature'], 'expense')
+        self.assertEqual(r['group'], 'Utilities')
+        self.assertIn('Electricity', r['name'])
+
+    def test_18_topup_without_wallet_evidence_not_internal(self):
+        r = self._cat(description='Top Up Saldo', transaction_type='top_up',
+                      provider='bca')
+        self.assertNotEqual(r['nature'], 'internal_transfer')
+
 
 class ReprocessTestCase(unittest.TestCase):
     """reprocess._reprocess_doc: idempotency + manual-correction preservation."""
