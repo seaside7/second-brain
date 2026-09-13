@@ -111,6 +111,8 @@ class CategorizerTestCase(unittest.TestCase):
                       transaction_type='transfer', recipient='DINDA FITRI NURUL AINI')
         self.assertEqual(r['nature'], 'transfer_to_person')
         self.assertEqual(r['group'], 'Transfers')
+        # No per-recipient category - just a shared 'Transfer' (owner notes names).
+        self.assertEqual(r['name'], 'Transfer')
 
     def test_10_explicit_admin_fee(self):
         r = self._cat(description='GoPay Top Up - Admin Fee', transaction_type='fee')

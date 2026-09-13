@@ -352,6 +352,16 @@ def _bca_clean(method: str, subject: str, body: str) -> tuple[str, str]:
 
     if 'qris' in body_l or 'qris' in m:
         merchant = _label_value(body, 'To') or _label_value(body, 'Merchant')
+        # BCA QRIS emails append 'Merchant Location : <area>, Id Acquirer :
+        # <name>, Merchant Pan : <digits>' right after the merchant name - never
+        # leak that technical data into the clean description.
+        for cut in (' Merchant Location', ' Merch Location', ' Id Acquirer',
+                    ' Acquirer', ' Merchant Pan', ' Pan ', ' PAN'):
+            i = merchant.lower().find(cut.lower())
+            if i > 0:
+                merchant = merchant[:i]
+                break
+        merchant = merchant.strip(' .,:;|•').strip()
         if not merchant:
             mm = re.search(r'qris[:\s]+([A-Za-z0-9 .&\-]{2,60})', body, re.IGNORECASE)
             merchant = mm.group(1).strip() if mm else ''
@@ -459,7 +469,7 @@ def _parse_bni(body: str, subject: str, occurred_at: str) -> list[dict]:
         # Notes like 'Belanja Sayur' read as the transfer purpose.
         clean = _display_case(note)
     elif recipient:
-        clean = f'Transfer - {_display_case(recipient)}'
+        clean = 'Transfer'
     elif direction == 'in':
         clean = 'Transfer Masuk'
     elif bank:

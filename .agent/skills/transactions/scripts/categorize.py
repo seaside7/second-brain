@@ -267,9 +267,10 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
             set_cat('groceries', 'expense', 'medium',
                     'Transfer with grocery note')
             return hit
-        name = (row.get('recipient', '') or '').strip()
-        if name:
-            group, name_cat = ('Transfers', f'Transfer - {name[:40]}')
+        # Transfer to a person - one shared category, no per-recipient name
+        # (the owner annotates the recipient themselves).
+        if (row.get('recipient', '') or '').strip():
+            group, name_cat = ('Transfers', 'Transfer')
             hit['category_id'] = store.get_or_create_category(conn, name_cat, group=group)
             hit['nature'] = 'transfer_to_person'
             hit['confidence'] = 'medium'

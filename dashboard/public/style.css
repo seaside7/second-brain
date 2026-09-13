@@ -3431,10 +3431,10 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
 .tx-error { color: var(--st-serious); padding: var(--sp-3); }
 .tx-empty { color: var(--text-muted); padding: var(--sp-2); font-style: italic; }
 
-.tx-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
-.tx-stat { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; text-align: center; }
-.tx-stat-label { font-size: var(--fs-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
-.tx-stat-value { font-size: 1.3rem; font-weight: 700; margin-top: 4px; font-family: var(--font-mono); }
+.tx-stats { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+.tx-stat { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; text-align: left; min-width: 0; }
+.tx-stat-label { font-size: var(--fs-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; }
+.tx-stat-value { font-size: clamp(1rem, 1.4vw, 1.25rem); font-weight: 700; margin-top: 3px; font-family: var(--font-mono); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .tx-pos { color: var(--st-good); }
 .tx-neg { color: var(--st-serious); }
 
@@ -3463,7 +3463,8 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
 
 .tx-review-row { display: flex; flex-direction: column; gap: 6px; }
 .tx-review-info { display: flex; justify-content: space-between; align-items: center; }
-.tx-review-actions { display: flex; gap: 6px; }
+.tx-review-actions { overflow: hidden; }
+.tx-status-inner { display: inline-flex; gap: 6px; align-items: center; justify-content: flex-end; }
 .tx-btn-sm { padding: 4px 10px; font-size: var(--fs-xs); border-radius: var(--radius); cursor: pointer; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); }
 .tx-btn-skip:hover { border-color: var(--text-muted); }
 .tx-btn-cat:hover { border-color: var(--accent); background: rgba(255,170,0,.1); }
@@ -3482,40 +3483,45 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
 
 /* ── transaction table ─────────────────────────────────────────── */
 .tx-table-wrap { overflow-x: auto; margin: 0 calc(var(--sp-3) * -1) calc(var(--sp-3) * -1); }
-.tx-table { width: 100%; min-width: 720px; border-collapse: separate; border-spacing: 0; font-size: var(--fs-sm); }
+/* fixed layout: stable columns keep their width, Description wraps and gets
+   the largest remaining share, and the table can never outgrow its container
+   (no horizontal scroll on desktop) */
+.tx-table { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: var(--fs-sm); }
+.tx-col-date    { width: 14%; }
+.tx-col-desc    { width: 25%; }
+.tx-col-account { width: 9%; }
+.tx-col-cat     { width: 21%; }
+.tx-col-amount  { width: 15%; }
+.tx-col-status  { width: 16%; }
 .tx-table thead th {
   position: sticky; top: 0; z-index: 1; background: var(--bg-card);
   text-align: left; font-size: var(--fs-xs); font-weight: 600;
   text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted);
   padding: 10px 12px 8px; border-bottom: 1px solid var(--border);
+  white-space: nowrap;
 }
-.tx-table td { padding: 9px 12px; border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,.06)); vertical-align: middle; }
+.tx-table td { padding: 9px 12px; border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,.06)); vertical-align: top; }
 .tx-table tbody tr:last-child td { border-bottom: none; }
 .tx-table tbody tr:hover td { background: var(--bg-hover); }
 
-.tx-th-desc { min-width: 160px; }
 .tx-th-amount, .tx-td-amount { text-align: right; }
-.tx-th-status, .tx-td-status { text-align: right; white-space: nowrap; }
-.tx-th-cat { min-width: 150px; }
-.tx-td-cat { white-space: nowrap; }
-.tx-cat {
-  width: 100%; min-width: 140px; max-width: 190px;
-  padding: 4px 6px;
-  font-size: var(--fs-xs); font-weight: 550;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 1px solid transparent; border-radius: var(--radius);
-  cursor: pointer;
+.tx-th-status, .tx-td-status { text-align: right; }
+.tx-td-date {
+  white-space: nowrap; color: var(--text-secondary);
+  font-variant-numeric: tabular-nums; font-size: var(--fs-xs);
 }
-.tx-cat:hover { border-color: var(--border); background: var(--bg-input, rgba(255,255,255,.04)); }
-.tx-cat:focus { border-color: var(--accent); outline: none; }
 
-/* clean description + muted subject subline + confidence dot */
-.tx-desc-main { min-width: 0; }
+/* description: wraps naturally so the row grows; only long unbroken IDs/text
+   actually break anywhere */
+.tx-td-desc { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.tx-desc-main { min-width: 0; line-height: 1.35; }
 .tx-desc-sub {
+  display: block; margin-top: 2px;
   font-size: var(--fs-xxs, 11px); color: var(--text-muted);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 42vw;
+  white-space: normal; overflow-wrap: anywhere;
 }
+
+/* confidence dot */
 .tx-conf {
   display: inline-block; width: 7px; height: 7px; border-radius: 50%;
   margin-right: 6px; vertical-align: middle; flex: none;
@@ -3524,14 +3530,24 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
 .tx-conf-medium { background: var(--warn, #f59e0b); }
 .tx-conf-low    { background: var(--danger, #ef4444); }
 .tx-conf-none   { background: var(--text-muted, #828282); }
-.tx-td-cat { display: flex; align-items: center; min-width: 170px; }
-.tx-td-cat:has(.tx-cat) { padding-right: 4px; }
-.tx-td-date {
-  white-space: nowrap; color: var(--text-secondary);
-  font-variant-numeric: tabular-nums; font-size: var(--fs-xs);
+
+/* category cell stays a table-cell (the flex row lives on the inner wrapper,
+   so the column aligns with its header) */
+.tx-td-cat { overflow: hidden; }
+.tx-cat-wrap { display: flex; align-items: center; min-width: 0; }
+.tx-cat {
+  flex: 1 1 auto; width: 100%; min-width: 0;
+  padding: 4px 8px;
+  font-size: var(--fs-xs); font-weight: 550;
+  color: var(--text-secondary);
+  background: var(--bg-input);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  cursor: pointer;
 }
-.tx-td-desc { min-width: 0; max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tx-td-wallet { white-space: nowrap; }
+.tx-cat:hover { border-color: var(--border); background: var(--bg-input, rgba(255,255,255,.04)); }
+.tx-cat:focus { border-color: var(--accent); outline: none; }
+
+.tx-td-wallet, .tx-td-status { white-space: nowrap; }
 .tx-td-amount { font-family: var(--font-mono); font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .tx-wallet {
   display: inline-flex; align-items: center; gap: 7px;
@@ -3540,13 +3556,50 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
 }
 .tx-wallet-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px rgba(255,255,255,.07); }
 
+@media (max-width: 1100px) {
+  /* tablet: 6 summary cards -> 3 per row */
+  .tx-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 860px) {
+  /* small tablet/narrow: each transaction becomes a stacked card instead of a
+     squeezed table, so every column stays readable (label + value per line) */
+  .tx-table-wrap { overflow: visible; margin: 0; }
+  .tx-table, .tx-table tbody, .tx-table tr, .tx-table td { display: block; width: 100%; }
+  .tx-table colgroup, .tx-table thead { display: none; }
+  .tx-table tr {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    margin-bottom: 10px; padding: 10px 12px; background: var(--bg-card);
+  }
+  .tx-table tr:last-child { margin-bottom: 0; }
+  .tx-table td {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 12px; padding: 3px 0; border: none; text-align: right;
+  }
+  .tx-table td::before {
+    content: attr(data-label); flex: none;
+    font-size: var(--fs-xs); color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: .05em; text-align: left;
+  }
+  .tx-td-desc { display: block; }
+  .tx-td-desc::before { display: none; }
+  .tx-td-desc .tx-desc-main { font-weight: 600; }
+  .tx-td-cat { align-items: center; }
+  .tx-cat-wrap { flex: 1 1 auto; justify-content: flex-end; }
+  .tx-cat { max-width: 70%; }
+}
+
 @media (max-width: 760px) {
   .tx-header { flex-direction: column; align-items: stretch; }
   .tx-actions { flex-wrap: wrap; }
-  .tx-stats { grid-template-columns: repeat(2, 1fr); }
+  /* mobile: 3 summary cards -> 2 per row */
+  .tx-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tx-row-main { flex-direction: column; align-items: flex-start; gap: 2px; }
   .tx-review-row { padding: 10px 0; }
   .tx-btn-sm { padding: 10px 16px; font-size: var(--fs-sm); }
-  .tx-table thead th, .tx-table td { padding: 8px; }
-  .tx-td-desc { max-width: 42vw; }
+}
+
+@media (max-width: 380px) {
+  /* very small screens: one summary card per row */
+  .tx-stats { grid-template-columns: minmax(0, 1fr); }
 }

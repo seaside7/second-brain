@@ -65,6 +65,14 @@ const TransactionsTab = (() => {
 
   /* ── helpers ────────────────────────────────────────────────────── */
   const rp = n => n == null ? '-' : `Rp${Number(n).toLocaleString('id-ID')}`;
+  /* negative values as −Rp1.434.338 (minus BEFORE Rp, proper U+2212) so the
+   sign and number can never split across lines */
+const rpSigned = n => {
+  if (n == null) return '-';
+  const v = Number(n);
+  const s = Math.abs(v).toLocaleString('id-ID');
+  return v < 0 ? `−Rp${s}` : `Rp${s}`;
+};
 
   const _WALLET = {
     bca:   { label: 'BCA',   color: '#00aaef' },
@@ -95,10 +103,14 @@ const TransactionsTab = (() => {
   function _txTable(rows) {
     if (!rows.length) return '<div class="tx-empty">No transactions yet. Upload a GoPay PDF or sync Gmail to start.</div>';
     return `<div class="tx-table-wrap"><table class="tx-table">
+      <colgroup>
+        <col class="tx-col-date"><col class="tx-col-desc"><col class="tx-col-account">
+        <col class="tx-col-cat"><col class="tx-col-amount"><col class="tx-col-status">
+      </colgroup>
       <thead><tr>
         <th class="tx-th-date">Date</th>
         <th class="tx-th-desc">Description</th>
-        <th class="tx-th-wallet">Wallet</th>
+        <th class="tx-th-wallet">Account</th>
         <th class="tx-th-cat">Category</th>
         <th class="tx-th-amount">Amount</th>
         <th class="tx-th-status">Status</th>
@@ -144,18 +156,18 @@ const TransactionsTab = (() => {
   function _txTableRow(r) {
     const amount  = r.amount || r.total_amount || 0;
     const dir     = r.direction === 'in' ? 'tx-pos' : 'tx-neg';
-    const sign    = r.direction === 'in' ? '+' : '-';
+    const sign    = r.direction === 'in' ? '+' : '−';
     const nature  = r.nature || 'needs_review';
     const status  = r.review_status === 'review' ? '<span class="tx-badge tx-badge-warn">review</span>' :
                     r.review_status === 'uncategorized' ? '<span class="tx-badge tx-badge-muted">uncategorized</span>' :
                     nature === 'needs_review' ? '<span class="tx-badge tx-badge-muted">review</span>' : '';
     return `<tr class="tx-tr" data-id="${r.id}">
-      <td class="tx-td-date">${_fmtDate(r.occurred_at || r.created_at)}</td>
-      <td class="tx-td-desc">${_descHtml(r)}</td>
-      <td class="tx-td-wallet">${_walletHtml(r.provider)}</td>
-      <td class="tx-td-cat">${_confDot(r)}${_catSelect(r)}</td>
-      <td class="tx-td-amount ${dir}">${sign}${rp(amount)}</td>
-      <td class="tx-td-status">${status}</td>
+      <td class="tx-td-date" data-label="Date">${_fmtDate(r.occurred_at || r.created_at)}</td>
+      <td class="tx-td-desc" data-label="Description">${_descHtml(r)}</td>
+      <td class="tx-td-wallet" data-label="Account">${_walletHtml(r.provider)}</td>
+      <td class="tx-td-cat" data-label="Category"><div class="tx-cat-wrap">${_confDot(r)}${_catSelect(r)}</div></td>
+      <td class="tx-td-amount ${dir}" data-label="Amount">${sign}${rp(amount)}</td>
+      <td class="tx-td-status" data-label="Status">${status}</td>
     </tr>`;
   }
 
@@ -271,7 +283,7 @@ const TransactionsTab = (() => {
         <div class="tx-stat"><div class="tx-stat-label">Income</div><div class="tx-stat-value tx-pos">${rp(d.income)}</div></div>
         <div class="tx-stat"><div class="tx-stat-label">Refund</div><div class="tx-stat-value tx-pos">${rp(d.refund)}</div></div>
         <div class="tx-stat"><div class="tx-stat-label">Cashback</div><div class="tx-stat-value tx-pos">${rp(d.cashback)}</div></div>
-        <div class="tx-stat"><div class="tx-stat-label">Net</div><div class="tx-stat-value ${d.net >= 0 ? 'tx-pos' : 'tx-neg'}">${rp(d.net)}</div></div>
+        <div class="tx-stat"><div class="tx-stat-label">Net</div><div class="tx-stat-value ${d.net >= 0 ? 'tx-pos' : 'tx-neg'}">${rpSigned(d.net)}</div></div>
       </div>
       <div class="tx-review-bar">
         ${d.pending_review ? `<span class="tx-badge tx-badge-warn">${d.pending_review} need review</span>` : ''}
@@ -337,22 +349,25 @@ const TransactionsTab = (() => {
     const d = await U.fetchJSON('/api/transactions/review');
     const rows = (d.rows || []).map(r => `
       <tr class="tx-tr" data-id="${r.id}">
-        <td class="tx-td-date">${_fmtDate(r.occurred_at || r.created_at)}</td>
-        <td class="tx-td-desc">${_descHtml(r)}</td>
-        <td class="tx-td-wallet">${_walletHtml(r.provider)}</td>
-        <td class="tx-td-cat">${_confDot(r)}${_catSelect(r)}</td>
-        <td class="tx-td-amount ${r.direction === 'in' ? 'tx-pos' : 'tx-neg'}">${r.direction === 'in' ? '+' : '-'}${rp(r.amount)}</td>
-        <td class="tx-td-status tx-review-actions">
+        <td class="tx-td-date" data-label="Date">${_fmtDate(r.occurred_at || r.created_at)}</td>
+        <td class="tx-td-desc" data-label="Description">${_descHtml(r)}</td>
+        <td class="tx-td-wallet" data-label="Account">${_walletHtml(r.provider)}</td>
+        <td class="tx-td-cat" data-label="Category"><div class="tx-cat-wrap">${_confDot(r)}${_catSelect(r)}</div></td>
+        <td class="tx-td-amount ${r.direction === 'in' ? 'tx-pos' : 'tx-neg'}" data-label="Amount">${r.direction === 'in' ? '+' : '−'}${rp(r.amount)}</td>
+        <td class="tx-td-status tx-review-actions" data-label="Status"><span class="tx-status-inner">
           <button class="btn tx-btn-sm tx-btn-skip" data-id="${r.id}">Skip</button>
-        </td>
+        </span></td>
       </tr>`).join('');
     el.innerHTML = `
       <div class="tx-card"><h3 class="tx-card-title">Review Queue (${d.count || 0})</h3>
         ${d.rows && d.rows.length
-          ? `<div class="tx-table-wrap"><table class="tx-table"><thead><tr>
+          ? `<div class="tx-table-wrap"><table class="tx-table"><colgroup>
+               <col class="tx-col-date"><col class="tx-col-desc"><col class="tx-col-account">
+               <col class="tx-col-cat"><col class="tx-col-amount"><col class="tx-col-status">
+             </colgroup><thead><tr>
                <th class="tx-th-date">Date</th>
                <th class="tx-th-desc">Description</th>
-               <th class="tx-th-wallet">Wallet</th>
+               <th class="tx-th-wallet">Account</th>
                <th class="tx-th-cat">Category</th>
                <th class="tx-th-amount">Amount</th>
                <th class="tx-th-status">Status</th>
