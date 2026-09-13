@@ -437,6 +437,23 @@ def get_category(conn: sqlite3.Connection, category_id: int) -> Optional[dict]:
     r = conn.execute("SELECT * FROM categories WHERE id=?", (category_id,)).fetchone()
     return dict(r) if r else None
 
+def nature_for_category(conn: sqlite3.Connection, current_nature: str,
+                        category_id: int | None) -> str:
+    """Nature a row should carry after the owner assigns category_id.
+
+    A person-transfer the owner files into real spend becomes an expense
+    (Transfers-group categories and Uncategorized keep it a transfer).
+    Every other nature is untouched.
+    """
+    if current_nature != 'transfer_to_person' or not category_id:
+        return current_nature
+    cat = get_category(conn, category_id)
+    if not cat:
+        return current_nature
+    if (cat.get('group') or '') == 'Transfers' or cat.get('name') == 'Uncategorized':
+        return current_nature
+    return 'expense'
+
 def get_or_create_category(conn: sqlite3.Connection, name: str,
                             group: str = '') -> int:
     c = find_category(conn, name)

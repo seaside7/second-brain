@@ -25,8 +25,8 @@ try:
     from store import (list_accounts, get_account, add_account, update_account,
                        list_ledger, get_ledger, update_ledger, count_ledger,
                        list_transfers, get_transfer_for_ledger,
-                       list_categories, find_category, get_category,
-                       get_or_create_category,
+                       list_categories, find_category,
+                       get_or_create_category, nature_for_category,
                        list_rules, add_rule, deactivate_rule,
                        list_import_batches, get_import_batch,
                        add_audit, list_audit, fmt_idr)
@@ -638,10 +638,10 @@ def _handle_edit(handler, txn_id: int, body: dict) -> None:
         # internal_transfer, never transfer_to_person.
         if (body.get('category_id') and 'nature' not in body
                 and (row.get('nature') == 'transfer_to_person')):
-            cat = get_category(conn, int(body['category_id']))
-            if cat and (cat.get('group') or '') != 'Transfers' \
-                    and cat.get('name') != 'Uncategorized':
-                fields['nature'] = 'expense'
+            flipped = nature_for_category(conn, row['nature'],
+                                          int(body['category_id']))
+            if flipped != row['nature']:
+                fields['nature'] = flipped
 
         if fields:
             update_ledger(conn, txn_id, **fields)
