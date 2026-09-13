@@ -3691,3 +3691,46 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
 }
 .tx-pager-size:focus { border-color: var(--border-active); }
 .tx-pager-size option { background: #000; color: #fff; }
+
+/* ── finance overview (transactions) ───────────────────────────────── */
+.tx-stat-sub { font-size: var(--fs-xs); color: var(--text-muted); font-weight: 400; text-transform: none; letter-spacing: 0; }
+.tx-num { text-align: right; font-variant-numeric: tabular-nums; }
+.tx-muted { color: var(--text-muted); }
+.ov-move {
+  display: flex; flex-wrap: wrap; gap: 6px 18px;
+  font-size: var(--fs-sm); color: var(--text-muted);
+  padding: 2px 2px 0;
+}
+.ov-move b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.ov-filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.ov-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--text-muted); cursor: pointer; }
+.ov-toggle input { accent-color: var(--accent); }
+.ov-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ov-chip {
+  font: inherit; font-size: var(--fs-xs);
+  color: var(--text); background: transparent;
+  border: 1px solid var(--border); border-radius: 999px;
+  padding: 4px 10px; cursor: pointer;
+}
+.ov-chip:hover { background: var(--bg-hover); }
+.ov-chip.is-active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.ov-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; }
+.ov-bars { display: block; width: 100%; height: auto; }
+.ov-bars g[data-drill]:hover rect { filter: brightness(1.25); }
+.ov-donut-wrap { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.ov-legend { flex: 1 1 180px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ov-legend-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 6px; border-radius: var(--radius-xs);
+  cursor: pointer; font-size: var(--fs-sm);
+}
+.ov-legend-row:hover { background: var(--bg-hover); }
+.ov-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.ov-legend-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-legend-val { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ov-mom-row { cursor: pointer; }
+.ov-mom-row:hover td { background: var(--bg-hover); }
+.ov-allfilters { display: inline-flex; align-items: center; gap: 8px; }
+@media (max-width: 900px) {
+  .ov-grid { grid-template-columns: minmax(0, 1fr); }
+}

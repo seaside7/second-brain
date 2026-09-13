@@ -290,6 +290,7 @@ def list_ledger(conn: sqlite3.Connection, *,
                 review_status: str | None = None,
                 txn_status: str | None = None,
                 account_id: int | None = None,
+                category_id: int | None = None,
                 from_date: str | None = None,
                 to_date: str | None = None,
                 search: str | None = None,
@@ -304,6 +305,8 @@ def list_ledger(conn: sqlite3.Connection, *,
         conds.append("l.txn_status=?"); params.append(txn_status)
     if account_id:
         conds.append("l.account_id=?"); params.append(account_id)
+    if category_id:
+        conds.append("l.category_id=?"); params.append(category_id)
     if from_date:
         conds.append("e.occurred_at>=?"); params.append(from_date)
     if to_date:
@@ -331,6 +334,7 @@ def list_ledger(conn: sqlite3.Connection, *,
 def count_ledger(conn: sqlite3.Connection, *,
                  txn_status: str | None = None,
                  review_status: str | None = None,
+                 category_id: int | None = None,
                  from_date: str | None = None,
                  to_date: str | None = None) -> int:
     conds, params = [], []
@@ -338,6 +342,8 @@ def count_ledger(conn: sqlite3.Connection, *,
         conds.append("l.txn_status=?"); params.append(txn_status)
     if review_status:
         conds.append("l.review_status=?"); params.append(review_status)
+    if category_id:
+        conds.append("l.category_id=?"); params.append(category_id)
     if from_date:
         conds.append("e.occurred_at>=?"); params.append(from_date)
     if to_date:
@@ -425,6 +431,10 @@ def add_category(conn: sqlite3.Connection, name: str,
 
 def find_category(conn: sqlite3.Connection, name: str) -> Optional[dict]:
     r = conn.execute("SELECT * FROM categories WHERE name=?", (name,)).fetchone()
+    return dict(r) if r else None
+
+def get_category(conn: sqlite3.Connection, category_id: int) -> Optional[dict]:
+    r = conn.execute("SELECT * FROM categories WHERE id=?", (category_id,)).fetchone()
     return dict(r) if r else None
 
 def get_or_create_category(conn: sqlite3.Connection, name: str,

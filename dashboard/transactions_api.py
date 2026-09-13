@@ -25,7 +25,8 @@ try:
     from store import (list_accounts, get_account, add_account, update_account,
                        list_ledger, get_ledger, update_ledger, count_ledger,
                        list_transfers, get_transfer_for_ledger,
-                       list_categories, find_category, get_or_create_category,
+                       list_categories, find_category, get_category,
+                       get_or_create_category,
                        list_rules, add_rule, deactivate_rule,
                        list_import_batches, get_import_batch,
                        add_audit, list_audit, fmt_idr)
@@ -35,7 +36,7 @@ try:
     from reconcile import (find_transfer_candidates, confirm_transfer,
                            suggest_transfer, reject_transfer, unlink_transfer)
     import reports
-    from reports import overview, spending_breakdown, cashflow, fees_total
+    from reports import overview, spending_breakdown, fees_total, analytics
     from gmail_sync import sync_gmail
     from scheduler import TransactionScheduler
     from reprocess import reprocess as reprocess_engine
@@ -117,6 +118,8 @@ def route_get(handler) -> None:
                 _handle_detail(handler, int(_id))
             elif _id == 'spending':
                 _handle_spending(handler, qs)
+            elif _id == 'analytics':
+                _handle_analytics(handler, qs)
             elif _id == 'transfers':
                 _handle_transfers_list(handler, qs)
             elif _id == 'accounts':
@@ -177,17 +180,20 @@ def _handle_list(handler, qs: dict) -> None:
         limit = int(qs.get('limit', ['200'])[0])
         offset = int(qs.get('offset', ['0'])[0])
         from_date, to_date = _range_from_qs(qs)
+        cat = qs.get('category', [None])[0]
         rows = list_ledger(conn,
             nature=qs.get('nature', [None])[0],
             review_status=qs.get('review', [None])[0],
             txn_status=qs.get('status', [None])[0],
             account_id=int(qs['account'][0]) if 'account' in qs else None,
+            category_id=int(cat) if cat else None,
             from_date=from_date,
             to_date=to_date,
             search=qs.get('q', [None])[0],
             limit=min(limit, 500),
             offset=offset)
-        total = count_ledger(conn, from_date=from_date, to_date=to_date)
+        total = count_ledger(conn, category_id=int(cat) if cat else None,
+                             from_date=from_date, to_date=to_date)
         _ok(handler, {'rows': rows, 'total': total, 'limit': limit, 'offset': offset})
     finally:
         conn.close()
@@ -217,6 +223,55 @@ def _handle_spending(handler, qs: dict) -> None:
     try:
         from_date, to_date = _range_from_qs(qs)
         data = spending_breakdown(conn, from_date=from_date, to_date=to_date)
+        _ok(handler, data)
+    finally:
+        conn.close()
+
+
+def _shift_month(iso: str, delta: int) -> str:
+    """Shift an ISO 'YYYY-MM-DD...' date by delta calendar months (clamped)."""
+    import calendar as _cal
+    from datetime import datetime as _dt
+    d = _dt.fromisoformat(iso[:10])
+    m = d.month + delta
+    y = d.year + (m - 1) // 12
+    m = (m - 1) % 12 + 1
+    last = _cal.monthrange(y, m)[1]
+    return f'{y}-{m:02d}-{min(d.day, last):02d}{iso[10:]}'
+
+
+def _handle_analytics(handler, qs: dict) -> None:
+    conn = _get_db(handler)
+    if not conn:
+        _err(handler, 403, 'Not available in samudera mode')
+        return
+    try:
+        from_date, to_date = _range_from_qs(qs)
+        cmp_from = qs.get('cmp_from', [None])[0] or None
+        cmp_to = qs.get('cmp_to', [None])[0] or None
+        if not cmp_from and not cmp_to and from_date and to_date:
+            # Default compare: the same day-span, one month earlier (MTD-safe).
+            cmp_from, cmp_to = _shift_month(from_date, -1), _shift_month(to_date, -1)
+
+        def _ids(key: str) -> list[int] | None:
+            raw = qs.get(key, [None])[0]
+            if not raw:
+                return None
+            try:
+                return [int(x) for x in raw.split(',') if x.strip()]
+            except ValueError:
+                return None
+
+        providers = qs.get('providers', [None])[0]
+        providers = [p.strip().lower() for p in providers.split(',') if p.strip()] \
+            if providers else None
+        data = analytics(
+            conn, from_date=from_date, to_date=to_date,
+            cmp_from=cmp_from, cmp_to=cmp_to,
+            category_ids=_ids('categories'), providers=providers,
+            include_fees=qs.get('include_fees', ['1'])[0] != '0',
+            include_transfers=qs.get('include_transfers', ['0'])[0] == '1',
+            granularity=qs.get('granularity', ['auto'])[0] or 'auto')
         _ok(handler, data)
     finally:
         conn.close()
@@ -560,6 +615,17 @@ def _handle_edit(handler, txn_id: int, body: dict) -> None:
         # Setting/clearing a category resolves review status automatically.
         if 'category_id' in body:
             fields['review_status'] = 'ok' if body['category_id'] else 'uncategorized'
+
+        # A person-transfer the owner categorizes into real spend becomes an
+        # expense (Transfers-group categories and explicit nature= keep it a
+        # transfer). Transfers to our own name are untouched - they arrive as
+        # internal_transfer, never transfer_to_person.
+        if (body.get('category_id') and 'nature' not in body
+                and (row.get('nature') == 'transfer_to_person')):
+            cat = get_category(conn, int(body['category_id']))
+            if cat and (cat.get('group') or '') != 'Transfers' \
+                    and cat.get('name') != 'Uncategorized':
+                fields['nature'] = 'expense'
 
         if fields:
             update_ledger(conn, txn_id, **fields)

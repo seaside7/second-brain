@@ -66,6 +66,43 @@ const TransactionsTab = (() => {
   let _accounts = [];
   let _allPage = 0;
   let _allPageSize = 50;
+  /* overview (finance dashboard) filter state */
+  let _ovCats = [];          // selected category ids, [] = all
+  let _ovProviders = '';     // '' = all wallets/banks
+  let _ovFees = true;        // fees count as spend
+  let _ovTransfers = false;  // person-transfers count as spend
+  /* all-view drill-down state (set by chart clicks) */
+  let _allCat = '';          // category id filter, '' = all
+
+  /* Query string for /api/transactions/analytics from overview state. */
+  function _analyticsQS() {
+    const p = [_rangeQS()];
+    if (_ovCats.length) p.push('categories=' + _ovCats.join(','));
+    if (_ovProviders) p.push('providers=' + encodeURIComponent(_ovProviders));
+    p.push('include_fees=' + (_ovFees ? '1' : '0'));
+    p.push('include_transfers=' + (_ovTransfers ? '1' : '0'));
+    return p.join('&');
+  }
+
+  /* Jump to the All table pre-filtered (chart drill-down). */
+  function _drill(from, to, categoryId) {
+    _period = 'custom';
+    _from = from || '';
+    _to = to || '';
+    _allCat = categoryId ? String(categoryId) : '';
+    _allPage = 0;
+    _activeView = 'all';
+    location.hash = '#transactions/all';
+  }
+
+  /* Stable per-render color per category: rank by current spend, cycle the
+     8 app palette vars so bars, donut and legend always agree. */
+  function _ovColorMap(mom) {
+    const map = {};
+    (mom || []).forEach((m, i) => { map[m.category_id] = (i % 8) + 1; });
+    return cid => map[cid] || 8;
+  }
+  const _ovColor = k => `var(--cat-${k})`;
 
   /* ── nav chips ──────────────────────────────────────────────────── */
   const VIEWS = [
@@ -388,37 +425,208 @@ const rpSigned = n => {
     });
   }
 
-  /* ── overview ───────────────────────────────────────────────────── */
+  /* ── overview: finance dashboard ──────────────────────────────── */
   async function _renderOverview(el) {
-    const d = await U.fetchJSON(`/api/transactions/overview?${_rangeQS()}`);
+    const d = await U.fetchJSON(`/api/transactions/analytics?${_analyticsQS()}`);
+    const t = d.totals || {};
+    const buckets = d.buckets || [];
+    const mom = d.mom || [];
+    const colorOf = _ovColorMap(mom);
+    const spend = buckets.reduce((a, b) => a + (b.spend || 0), 0);
+    const prevTotal = mom.reduce((a, m) => a + (m.previous || 0), 0);
+    const momPct = prevTotal > 0 ? Math.round((spend - prevTotal) / prevTotal * 100) : null;
+    const rangeLabel = _ovRangeLabel(d);
+
+    const catChips = (_categories || []).map(c => `
+      <button class="ov-chip ${_ovCats.includes(c.id) ? 'is-active' : ''}"
+        data-ovcat="${c.id}" title="${U.esc(c.group || '')}">${U.esc(c.name)}</button>`).join('');
+
     el.innerHTML = `
       <div class="tx-stats">
-        <div class="tx-stat"><div class="tx-stat-label">Expense</div><div class="tx-stat-value tx-neg">${rp(d.expense)}</div></div>
-        <div class="tx-stat"><div class="tx-stat-label">Fee</div><div class="tx-stat-value tx-neg">${rp(d.fee)}</div></div>
-        <div class="tx-stat"><div class="tx-stat-label">Income</div><div class="tx-stat-value tx-pos">${rp(d.income)}</div></div>
-        <div class="tx-stat"><div class="tx-stat-label">Refund</div><div class="tx-stat-value tx-pos">${rp(d.refund)}</div></div>
-        <div class="tx-stat"><div class="tx-stat-label">Cashback</div><div class="tx-stat-value tx-pos">${rp(d.cashback)}</div></div>
-        <div class="tx-stat"><div class="tx-stat-label">Net</div><div class="tx-stat-value ${d.net >= 0 ? 'tx-pos' : 'tx-neg'}">${rpSigned(d.net)}</div></div>
+        <div class="tx-stat" title="Expense${_ovFees ? ' + bank fees' : ''}${_ovTransfers ? ' + person-transfers' : ''} in range">
+          <div class="tx-stat-label">Spend${_ovFees ? ' <span class="tx-stat-sub">incl. fees</span>' : ''}</div>
+          <div class="tx-stat-value tx-neg">${rp(spend)}</div></div>
+        <div class="tx-stat" title="Income + refund + cashback in range">
+          <div class="tx-stat-label">Income</div>
+          <div class="tx-stat-value tx-pos">${rp(t.income || 0)}</div></div>
+        <div class="tx-stat" title="Income minus spend in range">
+          <div class="tx-stat-label">Net</div>
+          <div class="tx-stat-value ${(t.income_minus_spend || 0) >= 0 ? 'tx-pos' : 'tx-neg'}">${rpSigned(t.income_minus_spend || 0)}</div></div>
+        <div class="tx-stat" title="Spend vs previous comparable period (${U.esc(_ovCmpLabel(d))})">
+          <div class="tx-stat-label">MoM</div>
+          <div class="tx-stat-value ${momPct == null ? '' : momPct <= 0 ? 'tx-pos' : 'tx-neg'}">${momPct == null ? 'new' : (momPct > 0 ? '+' : '') + momPct + '%'}</div></div>
+      </div>
+      <div class="ov-move" title="Money movement excluded from Spend">
+        <span>Transfer out <b>${rp(t.transfer_out || 0)}</b></span>
+        <span>Internal <b>${rp(t.internal || 0)}</b></span>
+        <span>Top-ups <b>${rp(t.top_up || 0)}</b></span>
+        <span>Fees <b>${rp(t.fees || 0)}</b></span>
       </div>
       <div class="tx-review-bar">
-        ${d.pending_review ? `<span class="tx-badge tx-badge-warn">${d.pending_review} need review</span>` : ''}
-        ${d.suggested_transfers ? `<span class="tx-badge tx-badge-info">${d.suggested_transfers} transfer suggestions</span>` : ''}
-        ${d.uncategorized ? `<span class="tx-badge tx-badge-muted">${d.uncategorized} uncategorized</span>` : ''}
+        ${t.uncategorized ? `<span class="tx-badge tx-badge-muted">${t.uncategorized} uncategorized</span>` : ''}
+        ${t.pending_review ? `<span class="tx-badge tx-badge-warn">${t.pending_review} need review</span>` : ''}
+        ${t.suggested_transfers ? `<span class="tx-badge tx-badge-info">${t.suggested_transfers} transfer suggestions</span>` : ''}
+        <span class="tx-range-hint">${U.esc(rangeLabel)}</span>
       </div>
-      ${_period === 'custom' && d.from_date ? `<div class="tx-range-hint">${d.from_date.slice(0, 10)} – ${(d.to_date || '').slice(0, 10)}</div>` : ''}
-      ${_renderRecent(d.recent || [])}
+      <div class="tx-card"><h3 class="tx-card-title">Filters</h3>
+        <div class="ov-filters">
+          <select id="ov-provider" class="tx-select" title="Wallet / bank">
+            <option value="">All wallets</option>
+            <option value="bca" ${_ovProviders === 'bca' ? 'selected' : ''}>BCA</option>
+            <option value="bni" ${_ovProviders === 'bni' ? 'selected' : ''}>BNI</option>
+            <option value="gopay" ${_ovProviders === 'gopay' ? 'selected' : ''}>GoPay</option>
+          </select>
+          <label class="ov-toggle"><input type="checkbox" id="ov-fees" ${_ovFees ? 'checked' : ''}> fees in spend</label>
+          <label class="ov-toggle"><input type="checkbox" id="ov-transfers" ${_ovTransfers ? 'checked' : ''}> person-transfers in spend</label>
+          <button class="btn tx-btn-sm" id="ov-reset">Reset</button>
+        </div>
+        <div class="ov-chips">${catChips || '<span class="tx-empty">No categories yet.</span>'}</div>
+      </div>
+      <div class="ov-grid">
+        <div class="tx-card"><h3 class="tx-card-title">Spend trend <span class="tx-stat-sub">${d.granularity === 'day' ? 'per day' : 'per month'} · click a bar to drill down</span></h3>
+          ${_ovBars(buckets, colorOf, d.granularity)}</div>
+        <div class="tx-card"><h3 class="tx-card-title">By category <span class="tx-stat-sub">click to drill down</span></h3>
+          ${_ovDonut(mom, colorOf, spend)}</div>
+      </div>
+      <div class="tx-card"><h3 class="tx-card-title">Month on month <span class="tx-stat-sub">current vs ${U.esc(_ovCmpLabel(d))} · click a row to drill down</span></h3>
+        ${_ovMomTable(mom, colorOf, d)}</div>
     `;
+
+    el.querySelectorAll('[data-ovcat]').forEach(b => b.addEventListener('click', () => {
+      const id = Number(b.dataset.ovcat);
+      _ovCats = _ovCats.includes(id) ? _ovCats.filter(x => x !== id) : [..._ovCats, id];
+      refreshView();
+    }));
+    el.querySelector('#ov-provider').addEventListener('change', e => { _ovProviders = e.target.value; refreshView(); });
+    el.querySelector('#ov-fees').addEventListener('change', e => { _ovFees = e.target.checked; refreshView(); });
+    el.querySelector('#ov-transfers').addEventListener('change', e => { _ovTransfers = e.target.checked; refreshView(); });
+    el.querySelector('#ov-reset').addEventListener('click', () => {
+      _ovCats = []; _ovProviders = ''; _ovFees = true; _ovTransfers = false; refreshView();
+    });
+    el.querySelectorAll('[data-drill]').forEach(n => n.addEventListener('click', () => {
+      _drill(n.dataset.from || '', n.dataset.to || '', n.dataset.cat || '');
+    }));
   }
 
-  function _renderRecent(rows) {
-    if (!rows.length) return '<div class="tx-card"><div class="tx-empty">No transactions yet. Upload a GoPay PDF or sync Gmail to start.</div></div>';
-    return `<div class="tx-card"><h3 class="tx-card-title">Recent</h3>${_txTable(rows)}</div>`;
+  function _ovRangeLabel(d) {
+    const f = (d.from_date || '').slice(0, 10), t = (d.to_date || '').slice(0, 10);
+    if (f && t) return `${f} – ${t}`;
+    if (f) return `from ${f}`;
+    if (t) return `until ${t}`;
+    return 'all time';
+  }
+  function _ovCmpLabel(d) {
+    const f = (d.cmp_from || '').slice(0, 10), t = (d.cmp_to || '').slice(0, 10);
+    return (f && t) ? `${f} – ${t}` : 'previous period';
+  }
+  function _ovBucketRange(key, granularity) {
+    if (granularity === 'month') {
+      const [y, m] = key.split('-').map(Number);
+      const last = new Date(y, m, 0).getDate();
+      const p = n => String(n).padStart(2, '0');
+      return [`${y}-${p(m)}-01`, `${y}-${p(m)}-${last}`];
+    }
+    return [key, key];
+  }
+  function _ovMonthName(key) {
+    const [y, m] = key.split('-').map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'short' });
+  }
+
+  /* Stacked spend bars (top-5 categories + other), clickable per bucket. */
+  function _ovBars(buckets, colorOf, granularity) {
+    if (!buckets.length) return '<div class="tx-empty">No spend in this range.</div>';
+    const W = 620, H = 190, padL = 8, padB = 22, padT = 8;
+    const max = Math.max(1, ...buckets.map(b => b.spend || 0));
+    const slot = (W - padL * 2) / buckets.length;
+    const bw = Math.max(4, Math.min(26, slot * 0.62));
+    // top-5 categories across the range define the stack order/colors
+    const totals = {};
+    buckets.forEach(b => Object.entries(b.by_category || {}).forEach(([cid, v]) => {
+      totals[cid] = (totals[cid] || 0) + v;
+    }));
+    const top = Object.entries(totals).sort((a, b) => b[1] - a[1]).slice(0, 5).map(e => e[0]);
+    const bars = buckets.map((b, i) => {
+      const h = Math.max(b.spend > 0 ? 2 : 0, (b.spend / max) * (H - padB - padT));
+      const x = padL + slot * i + (slot - bw) / 2;
+      let y = H - padB;
+      const segs = top.filter(cid => (b.by_category || {})[cid] > 0).map(cid => {
+        const sh = (((b.by_category || {})[cid] || 0) / b.spend) * h;
+        y -= sh;
+        return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(sh - 0.6, 0.4).toFixed(1)}" style="fill:${_ovColor(colorOf(cid))}"/>`;
+      }).join('');
+      const other = b.spend - top.reduce((a, cid) => a + ((b.by_category || {})[cid] || 0), 0);
+      let otherRect = '';
+      if (other > 0) {
+        const oh = (other / b.spend) * h;
+        y -= oh;
+        otherRect = `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(oh - 0.6, 0.4).toFixed(1)}" style="fill:var(--text-muted)" opacity="0.45"/>`;
+      }
+      const [f, t] = _ovBucketRange(b.key, granularity);
+      const tip = granularity === 'month'
+        ? `${_ovMonthName(b.key)} ${b.key.slice(0, 4)}: ${rp(b.spend)}`
+        : `${b.key}: ${rp(b.spend)}`;
+      const lbl = granularity === 'month' ? _ovMonthName(b.key)
+        : (buckets.length > 16 ? (i % 5 === 0 ? b.key.slice(8) : '') : b.key.slice(8));
+      return `<g data-drill data-from="${f}" data-to="${t}" style="cursor:pointer"><title>${U.esc(tip)}</title>` +
+        `${otherRect}${segs}` +
+        `<text x="${(x + bw / 2).toFixed(1)}" y="${H - 8}" font-size="9" text-anchor="middle" fill="var(--text-muted)">${lbl}</text></g>`;
+    }).join('');
+    return `<svg class="ov-bars" viewBox="0 0 ${W} ${H}" role="img" aria-label="spend trend">${bars}</svg>`;
+  }
+
+  /* Donut of current-period spend by category, with clickable legend. */
+  function _ovDonut(mom, colorOf, total) {
+    const rows = (mom || []).filter(m => (m.current || 0) > 0);
+    if (!rows.length) return '<div class="tx-empty">No spend in this range.</div>';
+    const sz = 170, sw = 26, r = (sz - sw) / 2, c = sz / 2, circ = 2 * Math.PI * r;
+    let off = 0;
+    const rings = rows.map(m => {
+      const len = (m.current / total) * circ;
+      const el = `<circle cx="${c}" cy="${c}" r="${r}" fill="none" data-drill data-cat="${m.category_id}" ` +
+        `style="fill:none;stroke:${_ovColor(colorOf(m.category_id))};cursor:pointer" stroke-width="${sw}" ` +
+        `stroke-dasharray="${Math.max(len - 2, 0.5).toFixed(2)} ${(circ - Math.max(len - 2, 0)).toFixed(2)}" ` +
+        `stroke-dashoffset="${(-off).toFixed(2)}"><title>${U.esc(`${m.name} — ${rp(m.current)}`)}</title></circle>`;
+      off += len;
+      return el;
+    }).join('');
+    const legend = rows.map(m => {
+      const pct = total > 0 ? Math.round(m.current / total * 100) : 0;
+      return `<div class="ov-legend-row" data-drill data-cat="${m.category_id}" title="Drill to ${U.esc(m.name)}">` +
+        `<span class="ov-dot" style="background:${_ovColor(colorOf(m.category_id))}"></span>` +
+        `<span class="ov-legend-name">${U.esc(m.name)}</span>` +
+        `<span class="ov-legend-val">${rp(m.current)} <span class="tx-count">${pct}%</span></span></div>`;
+    }).join('');
+    return `<div class="ov-donut-wrap"><svg width="${sz}" height="${sz}" viewBox="0 0 ${sz} ${sz}" role="img" aria-label="spend by category">` +
+      `<g transform="rotate(-90 ${c} ${c})">${rings}</g>` +
+      `<text x="${c}" y="${c}" text-anchor="middle" dominant-baseline="central" font-size="17" font-weight="700">${rp(total)}</text></svg>` +
+      `<div class="ov-legend">${legend}</div></div>`;
+  }
+
+  /* MoM table: current vs previous per category. Click a row to drill down. */
+  function _ovMomTable(mom, colorOf, d) {
+    if (!mom.length) return '<div class="tx-empty">No spend in this range.</div>';
+    const [f, t] = [((d.from_date || '').slice(0, 10)), ((d.to_date || '').slice(0, 10))];
+    const rows = mom.map(m => {
+      const pct = m.pct == null ? 'new' : `${m.pct > 0 ? '+' : ''}${m.pct}%`;
+      const cls = m.delta > 0 ? 'tx-neg' : m.delta < 0 ? 'tx-pos' : '';
+      return `<tr class="ov-mom-row" data-drill data-from="${f}" data-to="${t}" data-cat="${m.category_id}" title="Drill to ${U.esc(m.name)}">` +
+        `<td><span class="ov-dot" style="background:${_ovColor(colorOf(m.category_id))}"></span> ${U.esc(m.name)}</td>` +
+        `<td class="tx-num">${rp(m.current)}</td>` +
+        `<td class="tx-num tx-muted">${rp(m.previous)}</td>` +
+        `<td class="tx-num ${cls}">${rpSigned(m.delta)}</td>` +
+        `<td class="tx-num ${cls}">${pct}</td></tr>`;
+    }).join('');
+    return `<div class="tx-table-wrap"><table class="tx-table ov-mom"><thead><tr>` +
+      `<th>Category</th><th class="tx-num">This period</th><th class="tx-num">Previous</th>` +
+      `<th class="tx-num">Δ Rp</th><th class="tx-num">Δ %</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
 
   /* ── all transactions ───────────────────────────────────────────── */
   async function _renderAll(el) {
     const size = _allPageSize;
-    let d = await U.fetchJSON(`/api/transactions/list?limit=${size}&offset=${_allPage * size}&${_rangeQS()}`);
+    const catQ = _allCat ? `&category=${encodeURIComponent(_allCat)}` : '';
+    let d = await U.fetchJSON(`/api/transactions/list?limit=${size}&offset=${_allPage * size}&${_rangeQS()}${catQ}`);
     const total = d.total || 0;
     const pages = Math.max(1, Math.ceil(total / size));
     if (_allPage >= pages) {
@@ -439,12 +647,27 @@ const rpSigned = n => {
       <div class="tx-card">
         <div class="tx-card-header">
           <h3 class="tx-card-title">All Transactions (${total})</h3>
-          ${pages > 1 ? `<span class="tx-pager-info">showing ${_allPage * size + 1}–${Math.min((_allPage + 1) * size, total)}</span>` : ''}
+          <span class="ov-allfilters">
+            <select id="tx-all-cat" class="tx-select" title="Filter by category">
+              <option value="">All categories</option>
+              ${(_categories || []).map(c =>
+                `<option value="${c.id}" ${String(c.id) === String(_allCat) ? 'selected' : ''}>${U.esc(c.name)}</option>`).join('')}
+            </select>
+            ${_allCat || (_from && _to && _period === 'custom') ? '<button class="btn tx-btn-sm" id="tx-all-clear">Clear</button>' : ''}
+          </span>
         </div>
+        ${pages > 1 ? `<span class="tx-pager-info">showing ${_allPage * size + 1}–${Math.min((_allPage + 1) * size, total)}</span>` : ''}
         ${_txTable(d.rows || [])}
         ${pager}
       </div>
     `;
+    el.querySelector('#tx-all-cat').addEventListener('change', e => {
+      _allCat = e.target.value; _allPage = 0; refreshView();
+    });
+    const clr = el.querySelector('#tx-all-clear');
+    if (clr) clr.addEventListener('click', () => {
+      _allCat = ''; _allPage = 0; refreshView();
+    });
     if (pages > 1) {
       el.querySelectorAll('[data-pg]').forEach(b => b.addEventListener('click', () => {
         if (b.dataset.pg === 'prev' && _allPage > 0) { _allPage--; refreshView(); }
