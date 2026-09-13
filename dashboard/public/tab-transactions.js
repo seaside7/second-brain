@@ -292,15 +292,15 @@ const rpSigned = n => {
         } catch (_) { /* accounts are optional for manual entry */ }
       }
       switch (_activeView) {
-        case 'overview':  return await _renderOverview(body);
-        case 'all':       return await _renderAll(body);
-        case 'spending':  return await _renderSpending(body);
-        case 'transfers': return await _renderTransfers(body);
-        case 'review':    return await _renderReview(body);
-        case 'accounts':  return await _renderAccounts(body);
-        case 'imports':   return await _renderImports(body);
-        case 'rules':     return await _renderRules(body);
-        default:          return await _renderOverview(body);
+        case 'overview':  await _renderOverview(body); break;
+        case 'all':       await _renderAll(body); break;
+        case 'spending':  await _renderSpending(body); break;
+        case 'transfers': await _renderTransfers(body); break;
+        case 'review':    await _renderReview(body); break;
+        case 'accounts':  await _renderAccounts(body); break;
+        case 'imports':   await _renderImports(body); break;
+        case 'rules':     await _renderRules(body); break;
+        default:          await _renderOverview(body); break;
       }
     } catch (err) {
       body.innerHTML = `<div class="tx-error">Error: ${U.esc(err.message)}</div>`;
