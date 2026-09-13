@@ -31,7 +31,13 @@ _BANK_PROVIDERS = {'bca', 'bni', 'bri', 'mandiri'}
 
 # VA billers that are loan facilities (owner categorizes the biller, the
 # categorizer never guesses). Everything else falls through to Review.
-_VA_LOAN_BILLERS = ('spaylater', 'pegadaian', 'gadai')
+_VA_LOAN_BILLERS = ('pegadaian', 'gadai')
+
+# Buy-now-pay-later / online credit facilities (owner categorizes the biller,
+# the categorizer never guesses). -> Online Credit.
+_VA_ONLINE_CREDIT = ('spaylater', 'gopay later', 'golater', 'paylater',
+                     'shopee pinjam', 'kredivo', 'akulaku', 'indodana',
+                     'ada kredit')
 
 # Our own names: transfer to an account under these -> internal move.
 _OWN_NAMES = ['said iskandar']
@@ -57,11 +63,13 @@ _CAT = {
     'transport_toll': ('Transport', 'Toll'),
     'transport_parking': ('Transport', 'Parking'),
     'transport_ride': ('Transport', 'Ride Sharing'),
-    'vehicle_service': ('Vehicle', 'Car Service'),
-    'shopping':       ('Shopping', 'Online Shopping'),
+'vehicle_service': ('Vehicle', 'Car Service'),
+    'home_upkeep':     ('Home', 'Home Maintenance & Repair'),
+    'shopping':        ('Shopping', 'Online Shopping'),
     'cash':           ('Cash', 'Cash Withdrawal'),
     'fee':            ('Fees', 'Bank Fee'),
     'loan_payment':   ('Loans', 'Loan Payment'),
+    'online_credit':  ('Loans', 'Online Credit'),
     'cashback':       ('Income', 'Cashback & Rewards'),
     'refund':         ('Income', 'Refund'),
     'uncategorized':  ('Uncategorized', 'Uncategorized'),
@@ -101,6 +109,9 @@ _TRANSPORT_TOLL = ['tol', 'toll', 'jalan tol', 'flazz', 'e-money', 'emoney',
 _TRANSPORT_PARKING = ['parkir', 'parkmen']
 _VEHICLE_SERVICE = ['bengkel', 'servis', 'service', 'spooring', 'tune-up',
                     'tune up', 'ganti oli', 'kaki-kaki', 'gearbox']
+_HOME_UPKEEP = ['tukang', 'plumber', 'ledeng', 'renovasi',
+                'perbaikan rumah', 'servis ac', 'ac service', 'kulkas',
+                'keran', 'cctv']
 _ATM_CASH = ['tarik tunai', 'withdrawal', 'penarikan tunai']
 _INCOME_HINTS = ['gaji', 'salary', 'payroll', 'invoice', 'honor', 'dana masuk',
                  'transfer masuk', 'terima', 'received', 'freelance', 'upah']
@@ -345,8 +356,15 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
         set_fallback('Inbound transfer - verify income vs person')
         return hit
 
-    # 2.6 VIRTUAL ACCOUNT loan payments (SPayLater / Pegadaian) - the owner
-    #     pays down a loan facility through a VA. Never guessed.
+    # 2.6 VIRTUAL ACCOUNT loan payments - the owner pays down a loan facility
+    #     through a VA. Online credit (SPayLater / GoPay Later / Kredivo) ->
+    #     Online Credit; pawnshop facilities (Pegadaian) -> Loan Payment.
+    #     Never guessed.
+    if (direction == 'out' and tx_type == 'va_payment'
+            and any(_has(_text(row), m) for m in _VA_ONLINE_CREDIT)):
+        set_cat('online_credit', 'expense', 'high',
+                'VA online credit payment')
+        return hit
     if (direction == 'out' and tx_type == 'va_payment'
             and any(_has(_text(row), m) for m in _VA_LOAN_BILLERS)):
         set_cat('loan_payment', 'expense', 'high',
@@ -368,6 +386,12 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
     # 5. GROCERIES / retail
     if any(_has(desc, m) or _has((row.get('recipient', '')), m) for m in _GROCERIES):
         set_cat('groceries', 'expense', 'high', 'Retail merchant')
+        return hit
+
+    # 5b. HOME MAINTENANCE & REPAIR (tukang / plumber / servis AC) - before
+    #     vehicle 'servis' so home services win over Car Service.
+    if any(_has(desc, m) for m in _HOME_UPKEEP):
+        set_cat('home_upkeep', 'expense', 'high', 'Home repair / tukang')
         return hit
 
     # 6. FOOD & DINING - warung needs a food word, otherwise -> Review.

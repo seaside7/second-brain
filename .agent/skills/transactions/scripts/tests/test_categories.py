@@ -134,6 +134,31 @@ class CategorizerTestCase(unittest.TestCase):
         self.assertEqual(r['nature'], 'needs_review')
         self.assertNotEqual(r['name'], 'Car Service')
 
+    def test_13_tukang_home_maintenance(self):
+        r = self._cat(description='QRIS PAMOR TUKANG LEDENG',
+                      transaction_type='qris')
+        self.assertEqual(r['nature'], 'expense')
+        self.assertEqual(r['group'], 'Home')
+        self.assertEqual(r['name'], 'Home Maintenance & Repair')
+        self.assertEqual(r['confidence'], 'high')
+
+    def test_14_servis_ac_is_home_not_vehicle(self):
+        r = self._cat(description='Servis AC Sharp Lantai 2', transaction_type='debit')
+        self.assertEqual(r['group'], 'Home')
+        self.assertEqual(r['name'], 'Home Maintenance & Repair')
+
+    def test_15_spaylater_va_is_online_credit(self):
+        r = self._cat(description='VA 12308 SPAYLATER', transaction_type='va_payment')
+        self.assertEqual(r['nature'], 'expense')
+        self.assertEqual(r['group'], 'Loans')
+        self.assertEqual(r['name'], 'Online Credit')
+        self.assertEqual(r['confidence'], 'high')
+
+    def test_16_pegadaian_va_is_loan_payment(self):
+        r = self._cat(description='VA 19008/P Gadai Indo', transaction_type='va_payment')
+        self.assertEqual(r['group'], 'Loans')
+        self.assertEqual(r['name'], 'Loan Payment')
+
 
 class ReprocessTestCase(unittest.TestCase):
     """reprocess._reprocess_doc: idempotency + manual-correction preservation."""
