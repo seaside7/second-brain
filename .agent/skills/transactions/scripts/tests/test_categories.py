@@ -371,6 +371,14 @@ class ManualEntryTestCase(unittest.TestCase):
         self.assertEqual(doc['status'], 'parsed')
         self.assertEqual(batch['state'], 'committed')
 
+    def test_category_create_idempotent(self):
+        """New category create is idempotent: same name -> same id (INSERT OR IGNORE)."""
+        cat_id = store.add_category(self._conn, 'Rent', group='Housing')
+        again_id = store.get_or_create_category(self._conn, 'Rent', group='Housing')
+        self.assertEqual(cat_id, again_id)
+        self.assertIsNotNone(store.find_category(self._conn, 'Rent'))
+        self.assertIsNone(store.find_category(self._conn, 'Does Not Exist'))
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

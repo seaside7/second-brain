@@ -3645,7 +3645,42 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
 }
 .tx-form-row select:focus, .tx-form-row input:focus { border-color: var(--border-active); }
 .tx-form-row select option { background: var(--surface-opaque); color: var(--text-primary); }
+.tx-newcat {
+  display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2);
+}
+.tx-newcat input {
+  font: inherit; font-size: var(--fs-sm);
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  padding: 7px 9px;
+  outline: none;
+}
+.tx-newcat input::placeholder { color: var(--text-muted); }
+.tx-newcat input:focus { border-color: var(--border-active); }
 .tx-form-actions {
   display: flex; justify-content: flex-end; gap: var(--sp-2);
   margin-top: var(--sp-2);
 }
+
+/* ── all-transactions pager ─────────────────────────────────────────── */
+.tx-pager {
+  display: flex; align-items: center; gap: var(--sp-2);
+  margin-top: var(--sp-3); padding-top: var(--sp-3);
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.tx-pager-info {
+  font-size: var(--fs-xs); color: var(--text-muted);
+}
+.tx-pager-size {
+  font: inherit; font-size: var(--fs-sm);
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  padding: 5px 8px; outline: none;
+}
+.tx-pager-size:focus { border-color: var(--border-active); }
+.tx-pager-size option { background: var(--surface-opaque); color: var(--text-primary); }

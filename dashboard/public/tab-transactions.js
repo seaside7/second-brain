@@ -51,6 +51,8 @@ const TransactionsTab = (() => {
   let _uploadBusy = false;
   let _categories = [];
   let _accounts = [];
+  let _allPage = 0;
+  let _allPageSize = 50;
 
   /* ── nav chips ──────────────────────────────────────────────────── */
   const VIEWS = [
@@ -312,13 +314,45 @@ const rpSigned = n => {
 
   /* ── all transactions ───────────────────────────────────────────── */
   async function _renderAll(el) {
-    const d = await U.fetchJSON(`/api/transactions/list?limit=100`);
+    const size = _allPageSize;
+    let d = await U.fetchJSON(`/api/transactions/list?limit=${size}&offset=${_allPage * size}`);
+    const total = d.total || 0;
+    const pages = Math.max(1, Math.ceil(total / size));
+    if (_allPage >= pages) {
+      _allPage = Math.max(0, pages - 1);
+      return _renderAll(el);
+    }
+    const pager = (d.rows || []).length || total > size ? `
+      <div class="tx-pager">
+        <button class="btn tx-btn-sm" data-pg="prev" ${_allPage <= 0 ? 'disabled' : ''}>← Prev</button>
+        <span class="tx-pager-info">Page ${_allPage + 1} / ${pages} · ${total} txns</span>
+        <select class="tx-pager-size" title="Rows per page">
+          ${[25, 50, 100, 200].map(n =>
+            `<option value="${n}" ${n === size ? 'selected' : ''}>${n}/page</option>`).join('')}
+        </select>
+        <button class="btn tx-btn-sm" data-pg="next" ${_allPage >= pages - 1 ? 'disabled' : ''}>Next →</button>
+      </div>` : '';
     el.innerHTML = `
       <div class="tx-card">
-        <div class="tx-card-header"><h3 class="tx-card-title">All Transactions (${d.total || 0})</h3></div>
+        <div class="tx-card-header">
+          <h3 class="tx-card-title">All Transactions (${total})</h3>
+          ${pages > 1 ? `<span class="tx-pager-info">showing ${_allPage * size + 1}–${Math.min((_allPage + 1) * size, total)}</span>` : ''}
+        </div>
         ${_txTable(d.rows || [])}
+        ${pager}
       </div>
     `;
+    if (pages > 1) {
+      el.querySelectorAll('[data-pg]').forEach(b => b.addEventListener('click', () => {
+        if (b.dataset.pg === 'prev' && _allPage > 0) { _allPage--; refreshView(); }
+        if (b.dataset.pg === 'next' && _allPage < pages - 1) { _allPage++; refreshView(); }
+      }));
+      el.querySelector('.tx-pager-size').addEventListener('change', e => {
+        _allPageSize = Number(e.target.value);
+        _allPage = 0;
+        refreshView();
+      });
+    }
   }
 
   /* ── spending ───────────────────────────────────────────────────── */
@@ -480,6 +514,11 @@ const rpSigned = n => {
 
   /* ── manual entry (email notifications can be missed) ───────────── */
   async function _openManual() {
+    try {
+      const c = await U.fetchJSON('/api/transactions/categories');
+      _categories = (c.categories || []).sort((a, b) =>
+        (a.group || a.name).localeCompare(b.group || b.name));
+    } catch (_) { /* keep cached categories on failure */ }
     const accounts = _accountOptions();
     const catOptions = _categoryOptions();
     const card = document.createElement('div');
@@ -516,6 +555,12 @@ const rpSigned = n => {
             <span>Category</span>
             <select id="tx-m-cat">${catOptions}</select>
           </label>
+          <div id="tx-m-newcat" class="tx-newcat" hidden>
+            <input id="tx-m-newcat-name" type="text" maxlength="60"
+                   placeholder="New category name, e.g. Rent">
+            <input id="tx-m-newcat-group" type="text" maxlength="60"
+                   placeholder="Group (optional), e.g. Housing">
+          </div>
           <label class="tx-form-row">
             <span>Notes</span>
             <input id="tx-m-notes" type="text" maxlength="200">
@@ -529,6 +574,15 @@ const rpSigned = n => {
     document.body.appendChild(card);
     card.querySelector('#tx-m-cancel').addEventListener('click', () => card.remove());
     card.addEventListener('click', e => { if (e.target === card) card.remove(); });
+    const catSel = card.querySelector('#tx-m-cat');
+    const newCat = card.querySelector('#tx-m-newcat');
+    const toggleNewCat = () => {
+      const show = catSel.value === '__new';
+      newCat.hidden = !show;
+      if (show) card.querySelector('#tx-m-newcat-name').focus();
+    };
+    catSel.addEventListener('change', toggleNewCat);
+    toggleNewCat();
     card.querySelector('#tx-m-save').addEventListener('click', async () => {
       const amount = (card.querySelector('#tx-m-amount').value || '').trim();
       const desc = (card.querySelector('#tx-m-desc').value || '').trim();
@@ -536,16 +590,25 @@ const rpSigned = n => {
       if (!amount || Number(amount) <= 0) { toast('Amount must be > 0', false); return; }
       if (!desc) { toast('Description is required', false); return; }
       if (!date) { toast('Date is required', false); return; }
-      const cat = card.querySelector('#tx-m-cat');
+      let categoryId = catSel && catSel.value !== '__new' && catSel.value
+        ? Number(catSel.value) : null;
       _busy(true);
       try {
+        if (catSel && catSel.value === '__new') {
+          const name = (card.querySelector('#tx-m-newcat-name').value || '').trim();
+          const group = (card.querySelector('#tx-m-newcat-group').value || '').trim();
+          if (!name) { toast('New category name is required', false); return; }
+          const cat = await _post('/api/transactions/categories/create',
+            { name, group: group || null }, 15000);
+          categoryId = cat.category_id;
+        }
         const res = await _post('/api/transactions/manual', {
           direction: card.querySelector('#tx-m-type').value,
           amount: Number(amount),
           date: `${date}T12:00`,
           description: desc,
           account_id: card.querySelector('#tx-m-account').value || null,
-          category_id: cat && cat.value ? Number(cat.value) : null,
+          category_id: categoryId,
           notes: (card.querySelector('#tx-m-notes').value || '').trim(),
         }, 15000);
         toast(`Added: ${desc}`, true);
@@ -579,6 +642,7 @@ const rpSigned = n => {
         `<option value="${c.id}">${U.esc(c.name)}</option>`).join('');
       html += '</optgroup>';
     });
+    html += '<option value="__new">+ New category…</option>';
     return html;
   }
 

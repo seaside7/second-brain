@@ -25,7 +25,8 @@ try:
     from store import (list_accounts, get_account, add_account, update_account,
                        list_ledger, get_ledger, update_ledger, count_ledger,
                        list_transfers, get_transfer_for_ledger,
-                       list_categories, list_rules, add_rule, deactivate_rule,
+                       list_categories, find_category, get_or_create_category,
+                       list_rules, add_rule, deactivate_rule,
                        list_import_batches, get_import_batch,
                        add_audit, list_audit, fmt_idr)
     from import_engine import (upload_pdf, confirm_import, delete_import,
@@ -265,6 +266,28 @@ def _handle_categories_list(handler) -> None:
         conn.close()
 
 
+def _handle_create_category(handler, body: dict) -> None:
+    conn = _get_db(handler)
+    if not conn:
+        _err(handler, 403, 'Not available in samudera mode')
+        return
+    name = (body.get('name') or '').strip()
+    group = (body.get('group') or '').strip()
+    if not name:
+        _err(handler, 400, 'Category name is required')
+        return
+    if len(name) > 60:
+        _err(handler, 400, 'Category name is too long')
+        return
+    try:
+        existing = find_category(conn, name)
+        cat_id = get_or_create_category(conn, name, group=group)
+        _ok(handler, {'category_id': cat_id, 'created': not existing,
+                      'category': {'id': cat_id, 'name': name, 'group': group}})
+    finally:
+        conn.close()
+
+
 def _handle_rules_list(handler) -> None:
     conn = _get_db(handler)
     if not conn:
@@ -308,6 +331,8 @@ def route_post(handler) -> None:
             _handle_upload(handler, body)
         elif path == '/api/transactions/manual':
             _handle_manual(handler, body)
+        elif path == '/api/transactions/categories/create':
+            _handle_create_category(handler, body)
         elif path == '/api/transactions/import/preview':
             _handle_preview(handler, body)
         elif path == '/api/transactions/import/confirm':
