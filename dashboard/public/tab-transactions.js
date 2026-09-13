@@ -599,7 +599,7 @@ const rpSigned = n => {
     }).join('');
     return `<div class="ov-donut-wrap"><svg width="${sz}" height="${sz}" viewBox="0 0 ${sz} ${sz}" role="img" aria-label="spend by category">` +
       `<g transform="rotate(-90 ${c} ${c})">${rings}</g>` +
-      `<text x="${c}" y="${c}" text-anchor="middle" dominant-baseline="central" font-size="17" font-weight="700">${rp(total)}</text></svg>` +
+      `<text x="${c}" y="${c}" class="donut-total" text-anchor="middle" dominant-baseline="central" font-size="17">${rp(total)}</text></svg>` +
       `<div class="ov-legend">${legend}</div></div>`;
   }
 
