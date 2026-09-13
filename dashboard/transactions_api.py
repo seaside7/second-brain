@@ -277,14 +277,30 @@ def _handle_analytics(handler, qs: dict) -> None:
         conn.close()
 
 
+_TRANSFER_NATURES = ('transfer_to_person', 'internal_transfer', 'top_up')
+
+
 def _handle_transfers_list(handler, qs: dict) -> None:
     conn = _get_db(handler)
     if not conn:
         _err(handler, 403, 'Not available in samudera mode')
         return
     try:
-        rows = list_transfers(conn, status=qs.get('status', [None])[0])
-        _ok(handler, {'rows': rows})
+        from_date, to_date = _range_from_qs(qs)
+        nature = qs.get('nature', ['all'])[0]
+        natures = [nature] if nature in _TRANSFER_NATURES else list(_TRANSFER_NATURES)
+        limit = min(int(qs.get('limit', ['200'])[0]), 500)
+        offset = int(qs.get('offset', ['0'])[0])
+        rows: list[dict] = []
+        for n in natures:
+            rows += list_ledger(conn, nature=n, from_date=from_date,
+                                to_date=to_date, limit=500, offset=0)
+        rows.sort(key=lambda r: (r.get('occurred_at') or '',
+                                 r.get('created_at') or ''),
+                  reverse=True)
+        pairs = list_transfers(conn, status=qs.get('status', [None])[0])
+        _ok(handler, {'rows': rows[offset:offset + limit],
+                      'total': len(rows), 'pairs': pairs})
     finally:
         conn.close()
 

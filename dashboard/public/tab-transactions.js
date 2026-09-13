@@ -1,8 +1,8 @@
 /* ═══════════════════════════════════════════════════════════════════
    tab-transactions.js — 💳 Transactions tab (personal only)
 
-   Sub-views via hash: #transactions | /overview | /all | /spending |
-   /transfers | /review | /accounts | /imports | /rules
+Sub-views via hash: #transactions | /overview | /all |
+    /transfers | /review | /imports | /rules
    ═══════════════════════════════════════════════════════════════════ */
 'use strict';
 
@@ -73,6 +73,10 @@ const TransactionsTab = (() => {
   let _ovTransfers = false;  // person-transfers count as spend
   /* all-view drill-down state (set by chart clicks) */
   let _allCat = '';          // category id filter, '' = all
+  /* transfers-view state */
+  let _trNature = 'all';     // all | transfer_to_person | internal_transfer | top_up
+  let _trPage = 0;
+  let _trPageSize = 50;
 
   /* Query string for /api/transactions/analytics from overview state. */
   function _analyticsQS() {
@@ -108,10 +112,8 @@ const TransactionsTab = (() => {
   const VIEWS = [
     { id: 'overview',  label: 'Overview',  icon: '📊' },
     { id: 'all',       label: 'All Txns',  icon: '📋' },
-    { id: 'spending',  label: 'Spending',  icon: '💸' },
     { id: 'transfers', label: 'Transfers', icon: '🔄' },
     { id: 'review',    label: 'Review',    icon: '✅', badge: true },
-    { id: 'accounts',  label: 'Accounts',  icon: '🏦' },
     { id: 'imports',   label: 'Imports',   icon: '📥' },
     { id: 'rules',     label: 'Rules',     icon: '⚙️' },
   ];
@@ -331,10 +333,8 @@ const rpSigned = n => {
       switch (_activeView) {
         case 'overview':  await _renderOverview(body); break;
         case 'all':       await _renderAll(body); break;
-        case 'spending':  await _renderSpending(body); break;
         case 'transfers': await _renderTransfers(body); break;
         case 'review':    await _renderReview(body); break;
-        case 'accounts':  await _renderAccounts(body); break;
         case 'imports':   await _renderImports(body); break;
         case 'rules':     await _renderRules(body); break;
         default:          await _renderOverview(body); break;
@@ -681,38 +681,56 @@ const rpSigned = n => {
     }
   }
 
-  /* ── spending ───────────────────────────────────────────────────── */
-  async function _renderSpending(el) {
-    const d = await U.fetchJSON(`/api/transactions/spending?${_rangeQS()}`);
-    const cats = d.by_category || [];
-    el.innerHTML = `
-      <div class="tx-card"><h3 class="tx-card-title">Spending by Category</h3>
-        ${cats.length ? cats.map(c => `
-          <div class="tx-row">
-            <span>${U.esc(c.category_name || 'Uncategorized')}</span>
-            <span class="tx-amount">${rp(c.total)} <span class="tx-count">(${c.count})</span></span>
-          </div>
-        `).join('') : '<div class="tx-empty">No spending data.</div>'}
-      </div>
-    `;
-  }
-
-  /* ── transfers ──────────────────────────────────────────────────── */
+  /* ── transfers: every transfer-nature row, editable in place ──── */
   async function _renderTransfers(el) {
-    const d = await U.fetchJSON('/api/transactions/transfers');
+    const size = _trPageSize;
+    const natQ = _trNature !== 'all' ? `&nature=${_trNature}` : '';
+    let d = await U.fetchJSON(`/api/transactions/transfers?limit=${size}&offset=${_trPage * size}&${_rangeQS()}${natQ}`);
+    const total = d.total || 0;
+    const pages = Math.max(1, Math.ceil(total / size));
+    if (_trPage >= pages) {
+      _trPage = Math.max(0, pages - 1);
+      return _renderTransfers(el);
+    }
+    const pairs = (d.pairs || []).filter(p => p.status !== 'rejected');
+    const natLabel = { all: 'All transfers', transfer_to_person: 'To person', internal_transfer: 'Internal', top_up: 'Top-ups' };
     el.innerHTML = `
-      <div class="tx-card"><h3 class="tx-card-title">Transfers</h3>
-        ${d.rows && d.rows.length ? d.rows.map(r => `
+      ${pairs.length ? `<div class="tx-card"><h3 class="tx-card-title">Suggested pairs (${pairs.length})</h3>
+        ${pairs.map(p => `
           <div class="tx-row tx-transfer-row">
-            <span>${U.esc(r.from_desc || r.from_nature || '?')}</span>
+            <span>${U.esc(p.from_desc || p.from_nature || '?')}</span>
             <span class="tx-arrow">→</span>
-            <span>${U.esc(r.to_desc || r.to_nature || '?')}</span>
-            <span class="tx-amount">${rp(r.principal_amount)}</span>
-            <span class="tx-badge tx-badge-${r.status === 'confirmed' ? 'good' : 'warn'}">${r.status}</span>
-          </div>
-        `).join('') : '<div class="tx-empty">No transfers yet.</div>'}
+            <span>${U.esc(p.to_desc || p.to_nature || '?')}</span>
+            <span class="tx-amount">${rp(p.principal_amount)}</span>
+            <span class="tx-badge tx-badge-${p.status === 'confirmed' ? 'good' : 'warn'}">${p.status}</span>
+          </div>`).join('')}</div>` : ''}
+      <div class="tx-card">
+        <div class="tx-card-header">
+          <h3 class="tx-card-title">Transfers (${total})</h3>
+          <span class="ov-allfilters">
+            <select id="tx-tr-nature" class="tx-select" title="Transfer type">
+              ${Object.entries(natLabel).map(([v, l]) =>
+                `<option value="${v}" ${v === _trNature ? 'selected' : ''}>${l}</option>`).join('')}
+            </select>
+          </span>
+        </div>
+        <div class="tx-range-hint">To person = money out to someone else (categorize it into spend here).
+          Internal = your own accounts/wallets (excluded from spend).</div>
+        ${_txTable(d.rows || [])}
+        ${pages > 1 ? `<div class="tx-pager">
+          <button class="btn tx-btn-sm" data-pg="prev" ${_trPage <= 0 ? 'disabled' : ''}>← Prev</button>
+          <span class="tx-pager-info">Page ${_trPage + 1} / ${pages} · ${total} txns</span>
+          <button class="btn tx-btn-sm" data-pg="next" ${_trPage >= pages - 1 ? 'disabled' : ''}>Next →</button>
+        </div>` : ''}
       </div>
     `;
+    el.querySelector('#tx-tr-nature').addEventListener('change', e => {
+      _trNature = e.target.value; _trPage = 0; refreshView();
+    });
+    el.querySelectorAll('[data-pg]').forEach(b => b.addEventListener('click', () => {
+      if (b.dataset.pg === 'prev' && _trPage > 0) { _trPage--; refreshView(); }
+      if (b.dataset.pg === 'next' && _trPage < pages - 1) { _trPage++; refreshView(); }
+    }));
   }
 
   /* ── review queue ───────────────────────────────────────────────── */
@@ -761,22 +779,6 @@ const rpSigned = n => {
     } finally {
       _busy(false);
     }
-  }
-
-  /* ── accounts ───────────────────────────────────────────────────── */
-  async function _renderAccounts(el) {
-    const d = await U.fetchJSON('/api/transactions/accounts');
-    el.innerHTML = `
-      <div class="tx-card"><h3 class="tx-card-title">Accounts</h3>
-        ${d.accounts && d.accounts.length ? d.accounts.map(a => `
-          <div class="tx-row">
-            <span class="tx-account-alias">${U.esc(a.alias)}</span>
-            <span class="tx-account-provider">${U.esc(a.provider)}</span>
-            <span class="tx-account-masked">${U.esc(a.masked || '---')}</span>
-          </div>
-        `).join('') : '<div class="tx-empty">No accounts registered.</div>'}
-      </div>
-    `;
   }
 
   /* ── imports ────────────────────────────────────────────────────── */
