@@ -50,6 +50,7 @@ _CAT = {
     'transport_toll': ('Transport', 'Toll'),
     'transport_parking': ('Transport', 'Parking'),
     'transport_ride': ('Transport', 'Ride Sharing'),
+    'vehicle_service': ('Vehicle', 'Car Service'),
     'shopping':       ('Shopping', 'Online Shopping'),
     'cash':           ('Cash', 'Cash Withdrawal'),
     'fee':            ('Fees', 'Bank Fee'),
@@ -90,6 +91,8 @@ _TRANSPORT_FUEL = ['pertamina', 'bensin', 'solar', 'spbu', 'shell']
 _TRANSPORT_TOLL = ['tol', 'toll', 'jalan tol', 'flazz', 'e-money', 'emoney',
                    'mandiri e-money']
 _TRANSPORT_PARKING = ['parkir', 'parkmen']
+_VEHICLE_SERVICE = ['bengkel', 'servis', 'service', 'spooring', 'tune-up',
+                    'tune up', 'ganti oli', 'kaki-kaki', 'gearbox']
 _ATM_CASH = ['tarik tunai', 'withdrawal', 'penarikan tunai']
 _INCOME_HINTS = ['gaji', 'salary', 'payroll', 'invoice', 'honor', 'dana masuk',
                  'transfer masuk', 'terima', 'received', 'freelance', 'upah']
@@ -328,6 +331,9 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
         return hit
     if any(_has(desc, m) for m in _TRANSPORT_PARKING):
         set_cat('transport_parking', 'expense', 'high', 'Parking')
+        return hit
+    if any(_has(desc, m) for m in _VEHICLE_SERVICE):
+        set_cat('vehicle_service', 'expense', 'high', 'Vehicle service')
         return hit
     if any(_has(desc, m) for m in _FOOD_RIDE):
         set_cat('transport_ride', 'expense', 'high', 'Ride sharing')

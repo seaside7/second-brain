@@ -120,6 +120,19 @@ class CategorizerTestCase(unittest.TestCase):
         self.assertEqual(r['group'], 'Fees')
         self.assertEqual(r['confidence'], 'high')
 
+    def test_11_car_service_workshop(self):
+        r = self._cat(description='Bengkel Sentosa Servis Mobil',
+                      transaction_type='debit')
+        self.assertEqual(r['nature'], 'expense')
+        self.assertEqual(r['group'], 'Vehicle')
+        self.assertEqual(r['name'], 'Car Service')
+        self.assertEqual(r['confidence'], 'high')
+
+    def test_12_car_wash_not_categorised_as_service(self):
+        r = self._cat(description='Cuci Mobil Super', transaction_type='debit')
+        self.assertEqual(r['nature'], 'needs_review')
+        self.assertNotEqual(r['name'], 'Car Service')
+
 
 class ReprocessTestCase(unittest.TestCase):
     """reprocess._reprocess_doc: idempotency + manual-correction preservation."""
