@@ -272,5 +272,105 @@ class BniVaParserTestCase(unittest.TestCase):
                          'VA - XDT-DINDAFITRINURULAINI - Admin Fee')
 
 
+class ManualEntryTestCase(unittest.TestCase):
+    """Manual income/outcome recording (email notifications can be missed)."""
+
+    def setUp(self):
+        self._tmp = Path(tempfile.mkdtemp())
+        self._conn = schema.connect(str(self._tmp / 't.db'))
+        schema.ensure_tables(self._conn)
+        store.add_account(self._conn, type='bank', provider='bca',
+                          alias='BCA Personal', owner_name='Said Iskandar')
+        self._conn.commit()
+
+    def tearDown(self):
+        self._conn.close()
+        shutil.rmtree(self._tmp, ignore_errors=True)
+
+    def _ledger(self, ledger_id):
+        r = self._conn.execute(
+            'SELECT * FROM ledger_txns WHERE id=?', (ledger_id,)).fetchone()
+        return dict(r)
+
+    def test_income_manual_autocategorised(self):
+        import import_engine
+        r = import_engine.add_manual_tx(
+            self._conn, direction='in', amount=5000000,
+            occurred_at='2026-09-13T12:00', description='Salary Accountant')
+        self.assertTrue(r['ok'])
+        lr = self._ledger(r['ledger_id'])
+        self.assertEqual(lr['direction'], 'in')
+        self.assertEqual(lr['amount'], 5000000)
+        self.assertEqual(lr['nature'], 'income')
+        self.assertEqual(lr['review_status'], 'ok')
+        self.assertEqual(
+            self._conn.execute('SELECT name FROM categories WHERE id=?',
+                               (lr['category_id'],)).fetchone()[0], 'Income')
+
+    def test_expense_manual_with_explicit_category(self):
+        import import_engine
+        cat_id = store.get_or_create_category(self._conn, 'Groceries',
+                                              group='Groceries')
+        r = import_engine.add_manual_tx(
+            self._conn, direction='out', amount=120000,
+            occurred_at='2026-09-12T18:00', description='Belanja sayur',
+            category_id=cat_id)
+        self.assertTrue(r['ok'])
+        lr = self._ledger(r['ledger_id'])
+        self.assertEqual(lr['category_id'], cat_id)
+        self.assertEqual(lr['nature'], 'expense')
+        self.assertEqual(lr['review_status'], 'ok')
+        self.assertEqual(lr['txn_status'], 'confirmed')
+
+    def test_expense_manual_autocategorised(self):
+        import import_engine
+        r = import_engine.add_manual_tx(
+            self._conn, direction='out', amount=25000,
+            occurred_at='2026-09-12T12:00', description='Warung Gorengan Bahari')
+        self.assertTrue(r['ok'])
+        lr = self._ledger(r['ledger_id'])
+        self.assertEqual(lr['nature'], 'expense')
+        self.assertEqual(lr['review_status'], 'ok')
+        self.assertEqual(
+            self._conn.execute('SELECT "group" FROM categories WHERE id=?',
+                               (lr['category_id'],)).fetchone()[0],
+            'Food & Dining')
+
+    def test_manual_validation(self):
+        import import_engine
+        r = import_engine.add_manual_tx(
+            self._conn, direction='out', amount=0,
+            occurred_at='2026-09-12T12:00', description='X')
+        self.assertFalse(r['ok'])
+        self.assertIn('Amount', r['error'])
+        r = import_engine.add_manual_tx(
+            self._conn, direction='out', amount=1000,
+            occurred_at='2026-09-12T12:00', description='  ')
+        self.assertFalse(r['ok'])
+        self.assertIn('Description', r['error'])
+        r = import_engine.add_manual_tx(
+            self._conn, direction='out', amount=1000,
+            occurred_at='', description='X')
+        self.assertFalse(r['ok'])
+        self.assertIn('Date', r['error'])
+
+    def test_manual_row_traces_to_doc_and_batch(self):
+        import import_engine
+        r = import_engine.add_manual_tx(
+            self._conn, direction='out', amount=5000,
+            occurred_at='2026-09-10T08:00', description='Ojek')
+        ext = self._conn.execute(
+            'SELECT * FROM extracted_txns WHERE id=?', (r['ext_id'],)).fetchone()
+        doc = self._conn.execute(
+            'SELECT * FROM source_documents WHERE id=?', (ext['doc_id'],)).fetchone()
+        batch = self._conn.execute(
+            'SELECT * FROM import_batches WHERE id=?', (ext['batch_id'],)).fetchone()
+        self.assertEqual(ext['provider'], 'manual')
+        self.assertEqual(ext['total_amount'], 5000)
+        self.assertEqual(doc['kind'], 'manual')
+        self.assertEqual(doc['status'], 'parsed')
+        self.assertEqual(batch['state'], 'committed')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

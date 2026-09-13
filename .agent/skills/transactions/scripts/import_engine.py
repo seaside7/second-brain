@@ -347,3 +347,92 @@ def preview_import(conn: sqlite3.Connection, batch_id: int) -> dict:
             'possible_dup': sum(1 for r in extracted if r['dup_status'] == 'possible'),
         },
     }
+
+
+def add_manual_tx(conn: sqlite3.Connection, *,
+                  direction: str, amount: Any, occurred_at: str,
+                  description: str, account_id: int | None = None,
+                  category_id: int | None = None,
+                  notes: str = '') -> dict:
+    """Record a transaction entered by hand (email notifications can be missed).
+
+    Creates a 'manual' source document + batch + one extracted/ledger row and
+    stamps the audit trail. The deterministic categorizer runs when the caller
+    does not supply an explicit category so the row is either confidently
+    bucketed or flagged for review - never silently dropped.
+
+    Returns {ok, ledger_id, ext_id} or {ok:False, error}.
+    """
+    direction = 'in' if str(direction).lower() in (
+        'in', 'income', 'credit', 'masuk', 'pemasukan', 'dana masuk') else 'out'
+    try:
+        amount = int(float(str(amount).replace('.', '').replace(',', '')))
+    except (TypeError, ValueError):
+        return {'ok': False, 'error': 'Invalid amount'}
+    if amount <= 0:
+        return {'ok': False, 'error': 'Amount must be greater than 0'}
+    description = (description or '').strip()[:200]
+    if not description:
+        return {'ok': False, 'error': 'Description is required'}
+    occurred_at = (occurred_at or '').strip()
+    if not occurred_at:
+        return {'ok': False, 'error': 'Date is required'}
+
+    stamp = datetime.now().strftime('%Y%m%d%H%M%S%f')
+    doc_id = store.add_source_document(
+        conn, kind='manual', source_key=f'manual:{stamp}',
+        fingerprint=f'manual:{stamp}', provider='manual', parser_version='manual',
+        email_subject='Manual entry',
+        email_received_at=occurred_at,
+        preview=f'{direction.upper()} {description}')
+    store.update_source_document(conn, doc_id, status='parsed', parser_version='manual')
+    batch_id = store.add_import_batch(conn, doc_id)
+
+    row = {
+        'provider': 'manual', 'src_txn_id': f'M{stamp}',
+        'description': description,
+        'raw_description': f'Manual entry: {description}',
+        'transaction_type': 'expense' if direction == 'out' else 'income',
+        'merchant': '', 'recipient': '', 'direction': direction,
+        'principal_amount': amount, 'fee_amount': 0, 'total_amount': amount,
+        'currency': 'IDR', 'occurred_at': occurred_at, 'bank_ref': '',
+        'parser_version': 'manual', 'dup_status': 'unique',
+    }
+    [ext_id] = store.add_extracted_rows(conn, batch_id, doc_id, [row])
+
+    ledger_id = store.add_ledger_row(
+        conn, ext_id, account_id=account_id, amount=amount,
+        direction=direction,
+        nature='income' if direction == 'in' else 'expense',
+        category_id=category_id,
+        notes=(notes or '')[:200],
+        confidence='high' if category_id else 'medium',
+        confidence_reason='Manual entry',
+        evidence_json=json.dumps({'source': 'manual'}, ensure_ascii=False),
+        review_status='ok' if category_id else 'review',
+        txn_status='confirmed' if category_id else 'needs_review')
+
+    if category_id is None:
+        res = categorize_batch(conn, [row])[0]
+        if res.get('category_id') and res.get('confidence') in ('high', 'medium'):
+            store.update_ledger(conn, ledger_id,
+                category_id=res['category_id'], nature=res['nature'],
+                confidence=res['confidence'], confidence_reason=res['reason'],
+                review_status='ok', txn_status='confirmed')
+        else:
+            store.update_ledger(conn, ledger_id,
+                confidence_reason='Manual entry - no rule matched',
+                review_status='uncategorized', txn_status='needs_review')
+
+    store.update_import_batch(
+        conn, batch_id, state='committed',
+        stats_json=json.dumps({'total_rows': 1, 'new_rows': 1,
+                               'duplicate_rows': 0, 'categorized': 1,
+                               'applied': 1}, ensure_ascii=False))
+    store.add_audit(conn, action='manual_entry', entity='ledger_txns',
+                    entity_id=ledger_id,
+                    after_json=json.dumps(
+                        {'description': description, 'amount': amount,
+                         'direction': direction}, ensure_ascii=False))
+
+    return {'ok': True, 'ledger_id': ledger_id, 'ext_id': ext_id}

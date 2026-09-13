@@ -50,6 +50,7 @@ const TransactionsTab = (() => {
   let _period = 'current_month';
   let _uploadBusy = false;
   let _categories = [];
+  let _accounts = [];
 
   /* ── nav chips ──────────────────────────────────────────────────── */
   const VIEWS = [
@@ -201,7 +202,8 @@ const rpSigned = n => {
             </select>
             <button id="tx-sync-btn" class="btn tx-btn-outline">🔄 Sync Gmail</button>
             <button id="tx-reprocess-btn" class="btn tx-btn-outline" title="Re-fetch imported emails and re-run the v3 parser + deterministic categorizer in place">♻️ Reprocess</button>
-            <button id="tx-upload-btn" class="btn tx-btn-primary">📄 Upload GoPay PDF</button>
+            <button id="tx-add-btn" class="btn tx-btn-primary" title="Record income/expense by hand (emails can be missed)">➕ Add</button>
+            <button id="tx-upload-btn" class="btn tx-btn-outline">📄 Upload GoPay PDF</button>
           </div>
         </div>
         <div id="tx-progress" class="tx-progress" hidden><div class="tx-progress-bar"></div></div>
@@ -220,6 +222,7 @@ const rpSigned = n => {
     });
     panel.querySelector('#tx-sync-btn').addEventListener('click', _syncGmail);
     panel.querySelector('#tx-reprocess-btn').addEventListener('click', _reprocess);
+    panel.querySelector('#tx-add-btn').addEventListener('click', _openManual);
     panel.querySelector('#tx-upload-btn').addEventListener('click', _uploadPDF);
   }
 
@@ -237,6 +240,12 @@ const rpSigned = n => {
           _categories = (c.categories || []).sort((a, b) =>
             (a.group || a.name).localeCompare(b.group || b.name));
         } catch (_) { /* categories stay cacheable-clean on failure */ }
+      }
+      if (!_accounts.length) {
+        try {
+          const a = await U.fetchJSON('/api/transactions/accounts');
+          _accounts = a.accounts || [];
+        } catch (_) { /* accounts are optional for manual entry */ }
       }
       switch (_activeView) {
         case 'overview':  return await _renderOverview(body);
@@ -467,6 +476,110 @@ const rpSigned = n => {
         `).join('') : '<div class="tx-empty">No rules yet. Use "Remember" when correcting a category.</div>'}
       </div>
     `;
+  }
+
+  /* ── manual entry (email notifications can be missed) ───────────── */
+  async function _openManual() {
+    const accounts = _accountOptions();
+    const catOptions = _categoryOptions();
+    const card = document.createElement('div');
+    card.className = 'tx-modal-backdrop';
+    card.innerHTML = `
+      <div class="tx-modal-card">
+        <h3>Add transaction</h3>
+        <div class="tx-form">
+          <label class="tx-form-row tx-form-type">
+            <span>Type</span>
+            <select id="tx-m-type">
+              <option value="out">Expense (out)</option>
+              <option value="in">Income (in)</option>
+            </select>
+          </label>
+          <label class="tx-form-row">
+            <span>Date</span>
+            <input id="tx-m-date" type="date" value="${new Date().toISOString().slice(0, 10)}">
+          </label>
+          <label class="tx-form-row">
+            <span>Amount (Rp)</span>
+            <input id="tx-m-amount" type="number" min="1" step="1000" placeholder="1.000.000">
+          </label>
+          <label class="tx-form-row">
+            <span>Description</span>
+            <input id="tx-m-desc" type="text" maxlength="200"
+                   placeholder="e.g. Salary, Gojek, Tokopedia, Transfer from X">
+          </label>
+          <label class="tx-form-row">
+            <span>Account</span>
+            <select id="tx-m-account">${accounts}</select>
+          </label>
+          <label class="tx-form-row">
+            <span>Category</span>
+            <select id="tx-m-cat">${catOptions}</select>
+          </label>
+          <label class="tx-form-row">
+            <span>Notes</span>
+            <input id="tx-m-notes" type="text" maxlength="200">
+          </label>
+          <div class="tx-form-actions">
+            <button id="tx-m-cancel" class="btn tx-btn-outline">Cancel</button>
+            <button id="tx-m-save" class="btn tx-btn-primary">Save</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(card);
+    card.querySelector('#tx-m-cancel').addEventListener('click', () => card.remove());
+    card.addEventListener('click', e => { if (e.target === card) card.remove(); });
+    card.querySelector('#tx-m-save').addEventListener('click', async () => {
+      const amount = (card.querySelector('#tx-m-amount').value || '').trim();
+      const desc = (card.querySelector('#tx-m-desc').value || '').trim();
+      const date = (card.querySelector('#tx-m-date').value || '').trim();
+      if (!amount || Number(amount) <= 0) { toast('Amount must be > 0', false); return; }
+      if (!desc) { toast('Description is required', false); return; }
+      if (!date) { toast('Date is required', false); return; }
+      const cat = card.querySelector('#tx-m-cat');
+      _busy(true);
+      try {
+        const res = await _post('/api/transactions/manual', {
+          direction: card.querySelector('#tx-m-type').value,
+          amount: Number(amount),
+          date: `${date}T12:00`,
+          description: desc,
+          account_id: card.querySelector('#tx-m-account').value || null,
+          category_id: cat && cat.value ? Number(cat.value) : null,
+          notes: (card.querySelector('#tx-m-notes').value || '').trim(),
+        }, 15000);
+        toast(`Added: ${desc}`, true);
+        card.remove();
+        await refreshView();
+      } catch (e) {
+        toast(e.message, false);
+      } finally {
+        _busy(false);
+      }
+    });
+  }
+
+  function _accountOptions() {
+    let html = '<option value="">(no account)</option>';
+    _accounts.forEach(a =>
+      html += `<option value="${a.id}">${U.esc(a.alias || a.provider || a.id)}</option>`);
+    return html;
+  }
+
+  function _categoryOptions() {
+    let html = '<option value="">Auto</option>';
+    const groups = {};
+    (_categories || []).forEach(c => {
+      const g = c.group || 'Other';
+      (groups[g] = groups[g] || []).push(c);
+    });
+    Object.keys(groups).sort().forEach(g => {
+      html += `<optgroup label="${U.esc(g)}">`;
+      html += groups[g].map(c =>
+        `<option value="${c.id}">${U.esc(c.name)}</option>`).join('');
+      html += '</optgroup>';
+    });
+    return html;
   }
 
   /* ── upload PDF ─────────────────────────────────────────────────── */

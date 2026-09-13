@@ -28,7 +28,8 @@ try:
                        list_categories, list_rules, add_rule, deactivate_rule,
                        list_import_batches, get_import_batch,
                        add_audit, list_audit, fmt_idr)
-    from import_engine import upload_pdf, confirm_import, delete_import, preview_import
+    from import_engine import (upload_pdf, confirm_import, delete_import,
+                               preview_import, add_manual_tx)
     from categorize import apply_correction
     from reconcile import (find_transfer_candidates, confirm_transfer,
                            suggest_transfer, reject_transfer, unlink_transfer)
@@ -305,6 +306,8 @@ def route_post(handler) -> None:
     try:
         if path == '/api/transactions/upload':
             _handle_upload(handler, body)
+        elif path == '/api/transactions/manual':
+            _handle_manual(handler, body)
         elif path == '/api/transactions/import/preview':
             _handle_preview(handler, body)
         elif path == '/api/transactions/import/confirm':
@@ -358,6 +361,29 @@ def _handle_upload(handler, body: dict) -> None:
             _ok(handler, result)
         else:
             _err(handler, 400, result.get('error', 'Upload failed'))
+    finally:
+        conn.close()
+
+
+def _handle_manual(handler, body: dict) -> None:
+    conn = _get_db(handler)
+    if not conn:
+        _err(handler, 403, 'Not available in samudera mode')
+        return
+    try:
+        result = add_manual_tx(
+            conn,
+            direction=body.get('direction', 'out'),
+            amount=body.get('amount', 0),
+            occurred_at=body.get('date', ''),
+            description=body.get('description', ''),
+            account_id=body.get('account_id'),
+            category_id=body.get('category_id'),
+            notes=body.get('notes', ''))
+        if result.get('ok'):
+            _ok(handler, result)
+        else:
+            _err(handler, 400, result.get('error', 'Manual entry failed'))
     finally:
         conn.close()
 

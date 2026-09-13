@@ -3603,3 +3603,49 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
   /* very small screens: one summary card per row */
   .tx-stats { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ═══════════════════════════════════════════
+   MANUAL ENTRY MODAL (transactions tab)
+   ═══════════════════════════════════════════ */
+.tx-modal-backdrop {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--sp-4);
+}
+.tx-modal-card {
+  width: min(460px, 100%);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-active);
+  border-radius: 14px;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
+  padding: var(--sp-5);
+  max-height: 92vh;
+  overflow-y: auto;
+}
+.tx-modal-card h3 {
+  margin: 0 0 var(--sp-4);
+  font-size: var(--fs-md);
+  font-weight: 650;
+}
+.tx-form { display: flex; flex-direction: column; gap: var(--sp-3); }
+.tx-form-row {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: var(--fs-xs); color: var(--text-secondary);
+}
+.tx-form-row select, .tx-form-row input {
+  font: inherit; font-size: var(--fs-sm);
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  padding: 7px 9px;
+  outline: none;
+}
+.tx-form-row select:focus, .tx-form-row input:focus { border-color: var(--border-active); }
+.tx-form-row select option { background: var(--surface-opaque); color: var(--text-primary); }
+.tx-form-actions {
+  display: flex; justify-content: flex-end; gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
