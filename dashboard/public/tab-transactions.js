@@ -277,14 +277,7 @@ const rpSigned = n => {
   async function _changeCategory(sel) {
     const id = Number(sel.dataset.id);
     if (sel.value === '__new') {
-      const prev = sel.dataset.was || '';
-      sel.value = prev;
-      const newId = await _promptNewCategory();
-      if (!newId) return;
-      sel.value = '';
-      await _post(`/api/transactions/${id}/edit`, { category_id: newId }, 15000);
-      toast('Category updated', true);
-      await refreshView();
+      _inlineNewCategory(sel, id);
       return;
     }
     const category_id = sel.value ? Number(sel.value) : null;
@@ -301,53 +294,55 @@ const rpSigned = n => {
     }
   }
 
-  function _promptNewCategory() {
-    return new Promise(resolve => {
-      const card = document.createElement('div');
-      card.className = 'tx-modal-backdrop';
-      card.innerHTML = `
-        <div class="tx-modal-card">
-          <h3>New category</h3>
-          <div class="tx-form">
-            <label class="tx-form-row">
-              <span>Name</span>
-              <input id="tx-nc-name" type="text" maxlength="60" placeholder="e.g. Rent, Pet Care, School">
-            </label>
-            <label class="tx-form-row">
-              <span>Group (optional)</span>
-              <input id="tx-nc-group" type="text" maxlength="60" placeholder="e.g. Housing, Subscriptions">
-            </label>
-            <div class="tx-form-actions">
-              <button id="tx-nc-cancel" class="btn tx-btn-outline">Cancel</button>
-              <button id="tx-nc-save" class="btn tx-btn-primary">Create</button>
-            </div>
-          </div>
-        </div>`;
-      document.body.appendChild(card);
-      const finish = v => { card.remove(); resolve(v); };
-      card.querySelector('#tx-nc-cancel').addEventListener('click', () => finish(null));
-      card.addEventListener('click', e => { if (e.target === card) finish(null); });
-      const nameEl = card.querySelector('#tx-nc-name');
-      nameEl.focus();
-      card.querySelector('#tx-nc-save').addEventListener('click', async () => {
-        const name = (nameEl.value || '').trim();
-        const group = (card.querySelector('#tx-nc-group').value || '').trim();
-        if (!name) { toast('Category name is required', false); return; }
-        _busy(true);
-        try {
-          const cat = await _post('/api/transactions/categories/create',
-            { name, group: group || null }, 15000);
-          if (!_categories.some(c => c.id === cat.category_id)) {
-            _categories.push({ id: cat.category_id, name, group });
-            _categories.sort((a, b) => (a.group || a.name).localeCompare(b.group || b.name));
-          }
-          finish(cat.category_id);
-        } catch (e) {
-          toast(e.message, false);
-        } finally {
-          _busy(false);
+  function _inlineNewCategory(sel, id) {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'tx-cat tx-cat-new';
+    input.placeholder = 'Type new category… Enter ↵ saves';
+    input.maxLength = 80;
+    sel.replaceWith(input);
+    input.focus();
+
+    let finished = false;
+    const finish = () => { if (finished) return; finished = true; refreshView(); };
+
+    const apply = async () => {
+      if (finished) return;
+      let raw = (input.value || '').trim();
+      if (!raw) { finish(); return; }
+      let name = raw, group = '';
+      const sep = raw.indexOf('|');
+      if (sep > 0) {
+        group = raw.slice(0, sep).trim();
+        name = raw.slice(sep + 1).trim();
+      }
+      if (!name) { toast('Category name is required', false); return; }
+      _busy(true);
+      try {
+        const cat = await _post('/api/transactions/categories/create',
+          { name, group: group || null }, 15000);
+        if (!_categories.some(c => c.id === cat.category_id)) {
+          _categories.push({ id: cat.category_id, name, group });
+          _categories.sort((a, b) => (a.group || a.name).localeCompare(b.group || b.name));
         }
-      });
+        await _post(`/api/transactions/${id}/edit`, { category_id: cat.category_id }, 15000);
+        toast(`Category updated: ${name}`, true);
+        finished = true;
+        await refreshView();
+      } catch (e) {
+        toast(e.message, false);
+        finish();
+      } finally {
+        _busy(false);
+      }
+    };
+
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); apply(); }
+      else if (e.key === 'Escape') { finish(); }
+    });
+    input.addEventListener('blur', () => {
+      if (!finished && !(input.value || '').trim()) finish();
     });
   }
 
