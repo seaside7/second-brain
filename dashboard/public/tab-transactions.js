@@ -121,8 +121,10 @@ const rpSigned = n => {
 
   function _descHtml(r) {
     const main = U.esc(r.description || r.merchant || r.notes || 'Unknown');
-    const sub = (r.email_subject && r.email_subject !== (r.description || r.email_subject))
-      ? `<div class="tx-desc-sub">${U.esc(r.email_subject)}</div>` : '';
+    const sub = r.recipient
+      ? `<div class="tx-desc-sub">ke ${U.esc(r.recipient)}</div>`
+      : (r.email_subject && r.email_subject !== (r.description || r.email_subject))
+        ? `<div class="tx-desc-sub">${U.esc(r.email_subject)}</div>` : '';
     const srcTitle = r.raw_description ? ` title="raw: ${U.esc(r.raw_description.slice(0, 200))}"` : '';
     return `<div class="tx-desc-main"${srcTitle}>${main}${sub}</div>`;
   }

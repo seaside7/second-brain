@@ -26,6 +26,7 @@ import schema
 import store
 import categorize
 import reprocess
+import gmail_sync
 
 
 def _q_cat(conn, category_id):
@@ -228,6 +229,47 @@ class ReprocessTestCase(unittest.TestCase):
         b = reprocess._reprocess_doc(self._conn, self.doc, [self._qris_parsed()],
                                      dry_run=True)
         self.assertEqual(a, b)
+
+
+class BniVaParserTestCase(unittest.TestCase):
+    """BNI/wondr Virtual Account emails - payee must stay visible."""
+
+    _VA_BODY = (
+        'Transaksi berhasil! Hai, SAID ISKANDAR Terima kasih sudah bertransaksi '
+        'dengan wondr by BNI! Kamu baru aja melakukan pembayaran pakai Virtual '
+        'Account dengan detail sebagai berikut: Tujuan XDT-DINDAFITRINURULAINI '
+        '88***97 Sumber dana SAID ISKANDAR TAPLUS \u2022 *******507 Detail '
+        'transaksi Nominal Rp1.300.000 Biaya admin Rp0 Total Rp1.300.000 '
+        'Lainnya Reference ID 20260912013232000190 '
+        'Catatan XDT-DINDAFITRINURULAINI8808211811495297'
+    )
+
+    def test_va_recipient_extracted(self):
+        self.assertEqual(gmail_sync._bni_va_recipient(self._VA_BODY),
+                         'XDT-DINDAFITRINURULAINI')
+
+    def test_va_parse_keeps_payee_in_description(self):
+        rows = gmail_sync._parse_bni(self._VA_BODY, 'Transaksi berhasil!',
+                                     '2026-09-12T05:32:14Z')
+        self.assertEqual(len(rows), 1)
+        r = rows[0]
+        self.assertEqual(r['transaction_type'], 'va_payment')
+        self.assertEqual(r['description'], 'VA - XDT-DINDAFITRINURULAINI')
+        self.assertEqual(r['recipient'], 'XDT-DINDAFITRINURULAINI')
+        self.assertEqual(r['direction'], 'out')
+        self.assertEqual(r['total_amount'], 1300000)
+
+    def test_va_parse_fee_split(self):
+        body = self._VA_BODY.replace('Biaya admin Rp0',
+                                     'Biaya admin Rp1.000')
+        rows = gmail_sync._parse_bni(body, 'Transaksi berhasil!',
+                                     '2026-09-12T05:32:14Z')
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]['fee_amount'], 1000)
+        self.assertEqual(rows[0]['total_amount'], 1301000)
+        self.assertEqual(rows[1]['transaction_type'], 'fee')
+        self.assertEqual(rows[1]['description'],
+                         'VA - XDT-DINDAFITRINURULAINI - Admin Fee')
 
 
 if __name__ == '__main__':

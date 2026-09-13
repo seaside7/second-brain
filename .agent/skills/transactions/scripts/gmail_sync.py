@@ -444,6 +444,38 @@ def _parse_bni(body: str, subject: str, occurred_at: str) -> list[dict]:
                            raw_description=_bni_snippet(body),
                            transaction_type='qris', merchant=merchant)]
 
+    # 2b.1) VIRTUAL ACCOUNT payment (wondr 'membayar pakai Virtual Account').
+    #       The payee sits after 'Tujuan' followed by the (masked) VA number -
+    #       keep it visible in the clean description, unlike a bare bank
+    #       transfer, otherwise the owner cannot tell who was paid.
+    if 'virtual account' in body_l:
+        amount = _extract_amount(body)
+        if amount <= 0:
+            amount = _amount_after(body, ['nominal', 'amount', 'jumlah'])
+        if amount <= 0:
+            return []
+        payee = _bni_va_recipient(body)
+        direction = ('in' if any(k in body_l for k in ['credit', 'receiv',
+                                                       'diterima', 'dana masuk',
+                                                       'kredit'])
+                     else 'out')
+        clean = f'VA - {payee}' if payee else 'Virtual Account Payment'
+        rows = [_build_row('bni', clean, direction, amount,
+                           _extract_txn_id(body), occurred_at,
+                           raw_description=_bni_snippet(body),
+                           transaction_type='va_payment', recipient=payee)]
+        fee = _bni_admin_fee(body)
+        if fee > 0:
+            rows[0]['fee_amount'] = fee
+            rows[0]['total_amount'] = amount + fee
+            rows.append(_build_row(
+                'bni', f'{clean} - Admin Fee', 'out', fee,
+                f'{rows[0]["src_txn_id"]}-fee', occurred_at,
+                raw_description=f'Biaya Admin Rp{fee:,}',
+                transaction_type='fee',
+                principal_amount=0, fee_amount=fee))
+        return rows
+
     # 2) TRANSFER (BNI -> account / person). Use body: recipient name + bank,
     #    notes, and amount. Subject stays only as fallback.
     amount = _extract_amount(body)
@@ -545,6 +577,21 @@ def _bni_qris_merchant(body: str) -> str:
         return ''
     name = m.group(1).split(',')[0].strip().rstrip('- ').strip()
     return name[:50]
+
+
+def _bni_va_recipient(body: str) -> str:
+    """Payee of a BNI/wondr Virtual Account payment, kept verbatim.
+
+    'Tujuan XDT-DINDAFITRINURULAINI 88***97' -> 'XDT-DINDAFITRINURULAINI'
+    'Tujuan TOKOPEDIA 75**01'                -> 'TOKOPEDIA'
+    Stops at the (possibly masked) VA number so 'Sumber dana' is never
+    captured. Returns '' when there is no 'Tujuan' row.
+    """
+    m = re.search(r'tujuan\s+([A-Za-z0-9 .&\-]{2,60}?)\s+\d[\d*\-]*',
+                  body[:900], re.IGNORECASE)
+    if not m:
+        return ''
+    return re.sub(r'\s+', ' ', m.group(1)).strip()[:60]
 
 
 def _clean_counterparty(name: str) -> str:
