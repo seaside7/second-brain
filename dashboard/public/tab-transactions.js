@@ -155,6 +155,7 @@ const rpSigned = n => {
     if (wantedCatId != null && !_categories.some(c => c.id === wantedCatId)) {
       opts.push(`<option value="${wantedCatId}" selected>Category ${wantedCatId}</option>`);
     }
+    opts.push('<option value="__new">+ New category…</option>');
     return `<select class="tx-cat" data-id="${r.id}" aria-label="Category">${opts.join('')}</select>`;
   }
 
@@ -267,11 +268,25 @@ const rpSigned = n => {
       _busy(false);
     }
     const cats = body.querySelectorAll('.tx-cat');
-    cats.forEach(sel => sel.addEventListener('change', () => _changeCategory(sel)));
+    cats.forEach(sel => {
+      sel.addEventListener('focus', () => { sel.dataset.was = sel.value; });
+      sel.addEventListener('change', () => _changeCategory(sel));
+    });
   }
 
   async function _changeCategory(sel) {
     const id = Number(sel.dataset.id);
+    if (sel.value === '__new') {
+      const prev = sel.dataset.was || '';
+      sel.value = prev;
+      const newId = await _promptNewCategory();
+      if (!newId) return;
+      sel.value = '';
+      await _post(`/api/transactions/${id}/edit`, { category_id: newId }, 15000);
+      toast('Category updated', true);
+      await refreshView();
+      return;
+    }
     const category_id = sel.value ? Number(sel.value) : null;
     _busy(true);
     try {
@@ -284,6 +299,56 @@ const rpSigned = n => {
     } finally {
       _busy(false);
     }
+  }
+
+  function _promptNewCategory() {
+    return new Promise(resolve => {
+      const card = document.createElement('div');
+      card.className = 'tx-modal-backdrop';
+      card.innerHTML = `
+        <div class="tx-modal-card">
+          <h3>New category</h3>
+          <div class="tx-form">
+            <label class="tx-form-row">
+              <span>Name</span>
+              <input id="tx-nc-name" type="text" maxlength="60" placeholder="e.g. Rent, Pet Care, School">
+            </label>
+            <label class="tx-form-row">
+              <span>Group (optional)</span>
+              <input id="tx-nc-group" type="text" maxlength="60" placeholder="e.g. Housing, Subscriptions">
+            </label>
+            <div class="tx-form-actions">
+              <button id="tx-nc-cancel" class="btn tx-btn-outline">Cancel</button>
+              <button id="tx-nc-save" class="btn tx-btn-primary">Create</button>
+            </div>
+          </div>
+        </div>`;
+      document.body.appendChild(card);
+      const finish = v => { card.remove(); resolve(v); };
+      card.querySelector('#tx-nc-cancel').addEventListener('click', () => finish(null));
+      card.addEventListener('click', e => { if (e.target === card) finish(null); });
+      const nameEl = card.querySelector('#tx-nc-name');
+      nameEl.focus();
+      card.querySelector('#tx-nc-save').addEventListener('click', async () => {
+        const name = (nameEl.value || '').trim();
+        const group = (card.querySelector('#tx-nc-group').value || '').trim();
+        if (!name) { toast('Category name is required', false); return; }
+        _busy(true);
+        try {
+          const cat = await _post('/api/transactions/categories/create',
+            { name, group: group || null }, 15000);
+          if (!_categories.some(c => c.id === cat.category_id)) {
+            _categories.push({ id: cat.category_id, name, group });
+            _categories.sort((a, b) => (a.group || a.name).localeCompare(b.group || b.name));
+          }
+          finish(cat.category_id);
+        } catch (e) {
+          toast(e.message, false);
+        } finally {
+          _busy(false);
+        }
+      });
+    });
   }
 
   /* ── overview ───────────────────────────────────────────────────── */
@@ -420,8 +485,6 @@ const rpSigned = n => {
           : '<div class="tx-empty">All clear! No transactions need review.</div>'}
       </div>
     `;
-    const cats = el.querySelectorAll('.tx-cat');
-    cats.forEach(sel => sel.addEventListener('change', () => _changeCategory(sel)));
     el.querySelectorAll('.tx-btn-skip').forEach(b =>
       b.addEventListener('click', () => _reviewSkip(b.dataset.id)));
   }
