@@ -80,12 +80,29 @@ const TransactionsTab = (() => {
 
   /* Query string for /api/transactions/analytics from overview state. */
   function _analyticsQS() {
-    const p = [_rangeQS()];
+    return `${_rangeQS()}&${_analyticsFilterQS()}`;
+  }
+
+  /* Filter-only params (no date range) - shared by the period call and the
+     trailing-6-months trend call. */
+  function _analyticsFilterQS() {
+    const p = [];
     if (_ovCats.length) p.push('categories=' + _ovCats.join(','));
     if (_ovProviders) p.push('providers=' + encodeURIComponent(_ovProviders));
     p.push('include_fees=' + (_ovFees ? '1' : '0'));
     p.push('include_transfers=' + (_ovTransfers ? '1' : '0'));
     return p.join('&');
+  }
+
+  /* Trailing-6-months window ending at the selected period's end month. */
+  function _trendRange(toISO) {
+    const end = toISO ? new Date(toISO.slice(0, 10)) : new Date();
+    const endM = new Date(end.getFullYear(), end.getMonth(), 1);
+    const startM = new Date(endM.getFullYear(), endM.getMonth() - 5, 1);
+    const last = new Date(endM.getFullYear(), endM.getMonth() + 1, 0).getDate();
+    const p = n => String(n).padStart(2, '0');
+    const f = d => `${d.getFullYear()}-${p(d.getMonth() + 1)}`;
+    return [`${f(startM)}-01T00:00:00`, `${f(endM)}-${p(last)}T23:59:59`];
   }
 
   /* Jump to the All table pre-filtered (chart drill-down). */
@@ -100,10 +117,21 @@ const TransactionsTab = (() => {
   }
 
   /* Stable per-render color per category: rank by current spend, cycle the
-     8 app palette vars so bars, donut and legend always agree. */
-  function _ovColorMap(mom) {
+     8 app palette vars so bars, donut and legend always agree. Trend-only
+     categories (outside the selected range) are appended after. */
+  function _ovColorMap(mom, buckets) {
     const map = {};
-    (mom || []).forEach((m, i) => { map[m.category_id] = (i % 8) + 1; });
+    let i = 0;
+    (mom || []).forEach(m => {
+      if (!(m.category_id in map)) map[m.category_id] = (i++ % 8) + 1;
+    });
+    const totals = {};
+    (buckets || []).forEach(b => Object.entries(b.by_category || {}).forEach(([cid, v]) => {
+      totals[cid] = (totals[cid] || 0) + v;
+    }));
+    Object.entries(totals).sort((a, b) => b[1] - a[1]).forEach(([cid]) => {
+      if (!(cid in map)) map[cid] = (i++ % 8) + 1;
+    });
     return cid => map[cid] || 8;
   }
   const _ovColor = k => `var(--cat-${k})`;
@@ -427,12 +455,15 @@ const rpSigned = n => {
 
   /* ── overview: finance dashboard ──────────────────────────────── */
   async function _renderOverview(el) {
-    const d = await U.fetchJSON(`/api/transactions/analytics?${_analyticsQS()}`);
+    const d = await U.fetchJSON(`/api/transactions/analytics?${_analyticsQS()}&granularity=month`);
+    const [trFrom, trTo] = _trendRange(d.to_date);
+    const tr = await U.fetchJSON(
+      `/api/transactions/analytics?from=${encodeURIComponent(trFrom)}&to=${encodeURIComponent(trTo)}&granularity=month&${_analyticsFilterQS()}`);
     const t = d.totals || {};
-    const buckets = d.buckets || [];
     const mom = d.mom || [];
-    const colorOf = _ovColorMap(mom);
-    const spend = buckets.reduce((a, b) => a + (b.spend || 0), 0);
+    const trend = tr.buckets || [];
+    const colorOf = _ovColorMap(mom, trend);
+    const spend = t.spend || 0;
     const prevTotal = mom.reduce((a, m) => a + (m.previous || 0), 0);
     const momPct = prevTotal > 0 ? Math.round((spend - prevTotal) / prevTotal * 100) : null;
     const rangeLabel = _ovRangeLabel(d);
@@ -483,8 +514,8 @@ const rpSigned = n => {
         <div class="ov-chips">${catChips || '<span class="tx-empty">No categories yet.</span>'}</div>
       </div>
       <div class="ov-grid">
-        <div class="tx-card"><h3 class="tx-card-title">Spend trend <span class="tx-stat-sub">${d.granularity === 'day' ? 'per day' : 'per month'} · click a bar to drill down</span></h3>
-          ${_ovBars(buckets, colorOf, d.granularity)}</div>
+        <div class="tx-card"><h3 class="tx-card-title">Spend trend <span class="tx-stat-sub">per month · last 6 months · click a bar to drill down</span></h3>
+          ${_ovBars(trend, colorOf, 'month')}</div>
         <div class="tx-card"><h3 class="tx-card-title">By category <span class="tx-stat-sub">click to drill down</span></h3>
           ${_ovDonut(mom, colorOf, spend)}</div>
       </div>
