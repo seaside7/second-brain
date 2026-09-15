@@ -55,7 +55,7 @@ def connect(path: Path | str | None = None, *,
 # Schema – idempotent
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 _SOURCE_DOC_CREATE = """
 CREATE TABLE IF NOT EXISTS source_documents (
@@ -239,25 +239,77 @@ CREATE TABLE IF NOT EXISTS _meta (
 """
 
 
+def _rebuild_table(conn: sqlite3.Connection, name: str, create_sql: str) -> None:
+    """Replace table ``name`` with ``create_sql``, preserving all rows and ids."""
+    import re
+
+    cols = [r[1] for r in conn.execute(f'PRAGMA table_info("{name}")').fetchall()]
+    rows = conn.execute(f'SELECT * FROM "{name}"').fetchall()
+    tmp = f'{name}__mig2'
+    conn.execute(f'DROP TABLE IF EXISTS "{tmp}"')
+    create_sql = re.sub(rf'CREATE TABLE\s+"?{name}"?',
+                        f'CREATE TABLE "{tmp}"', create_sql, count=1)
+    conn.execute(create_sql)
+    if rows:
+        colspec = ', '.join(f'"{c}"' for c in cols)
+        ph = ', '.join(['?'] * len(cols))
+        conn.executemany(f'INSERT INTO "{tmp}" ({colspec}) VALUES ({ph})', rows)
+    conn.execute(f'DROP TABLE "{name}"')
+    conn.execute(f'ALTER TABLE "{tmp}" RENAME TO "{name}"')
+
+
+def _repair_dangling_fks(conn: sqlite3.Connection) -> None:
+    """Rebuild any table whose FK was rewritten to ``source_documents__old``.
+
+    ``ALTER TABLE source_documents RENAME TO source_documents__old`` rewrites
+    foreign-key references in dependent tables (import_batches, extracted_txns)
+    to the new name. After the old table is dropped those references dangle, so
+    rebuild such tables pointing back at the rebuilt source_documents.
+    """
+    for name, sql in conn.execute(
+            "SELECT name, sql FROM sqlite_master WHERE type='table' "
+            "AND sql LIKE '%source_documents__old%'").fetchall():
+        _rebuild_table(conn, name, sql.replace('source_documents__old',
+                                               'source_documents'))
+
+
 def _migrate_source_documents_kind(conn: sqlite3.Connection) -> None:
-    """Widen the source_documents.kind CHECK on pre-existing databases."""
-    row = conn.execute(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='source_documents'"
-    ).fetchone()
-    if not row:
-        return
-    sql = row[0] or ''
-    if 'bca_pdf' in sql:
-        return
-    # Rebuild the table (preserving ids, which other tables FK-reference) with
-    # the extra *_pdf kinds. PRAGMA foreign_keys cannot change mid-transaction,
-    # so commit before re-enabling it below.
+    """Widen the source_documents.kind CHECK on pre-existing databases.
+
+    PRAGMA foreign_keys cannot change mid-transaction, so hold it OFF for the
+    whole migration and repair any dependent-table FKs before re-enabling it.
+    """
+    conn.commit()
     conn.execute('PRAGMA foreign_keys=OFF')
     try:
-        conn.execute('ALTER TABLE source_documents RENAME TO source_documents__old')
-        conn.execute(_SOURCE_DOC_CREATE)
-        conn.execute('INSERT INTO source_documents SELECT * FROM source_documents__old')
-        conn.execute('DROP TABLE source_documents__old')
+        sd = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' "
+            "AND name='source_documents'").fetchone()
+        has_old = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' "
+            "AND name='source_documents__old'").fetchone()
+        sd_sql = (sd[0] or '') if sd else ''
+        kind_ok = all(k in sd_sql for k in ('bca_pdf', 'bni_pdf'))
+
+        if sd and not kind_ok and not has_old:
+            # normal upgrade path: rename-rebuild preserves ids for FKs
+            conn.execute('ALTER TABLE source_documents RENAME TO '
+                         'source_documents__old')
+            conn.execute(_SOURCE_DOC_CREATE)
+            conn.execute('INSERT INTO source_documents SELECT * '
+                         'FROM source_documents__old')
+            conn.execute('DROP TABLE source_documents__old')
+        elif not sd and has_old:
+            # crashed mid-rename: source_documents is missing, recreate it
+            conn.execute(_SOURCE_DOC_CREATE)
+            conn.execute('INSERT INTO source_documents SELECT * '
+                         'FROM source_documents__old')
+            conn.execute('DROP TABLE source_documents__old')
+        elif sd and kind_ok and has_old:
+            # leftover old table from a partial run: drop it
+            conn.execute('DROP TABLE source_documents__old')
+
+        _repair_dangling_fks(conn)
         conn.commit()
     finally:
         conn.execute('PRAGMA foreign_keys=ON')
