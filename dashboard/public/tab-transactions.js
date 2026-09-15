@@ -292,7 +292,7 @@ const rpSigned = n => {
             <button id="tx-sync-btn" class="btn tx-btn-outline">🔄 Sync Gmail</button>
             <button id="tx-reprocess-btn" class="btn tx-btn-outline" title="Re-fetch imported emails and re-run the v3 parser + deterministic categorizer in place">♻️ Reprocess</button>
             <button id="tx-add-btn" class="btn tx-btn-primary" title="Record income/expense by hand (emails can be missed)">➕ Add</button>
-            <button id="tx-upload-btn" class="btn tx-btn-outline">📄 Upload GoPay PDF</button>
+            <button id="tx-upload-btn" class="btn tx-btn-outline">📄 Upload</button>
           </div>
         </div>
         <div id="tx-progress" class="tx-progress" hidden><div class="tx-progress-bar"></div></div>
@@ -334,7 +334,7 @@ const rpSigned = n => {
     panel.querySelector('#tx-sync-btn').addEventListener('click', _syncGmail);
     panel.querySelector('#tx-reprocess-btn').addEventListener('click', _reprocess);
     panel.querySelector('#tx-add-btn').addEventListener('click', _openManual);
-    panel.querySelector('#tx-upload-btn').addEventListener('click', _uploadPDF);
+    panel.querySelector('#tx-upload-btn').addEventListener('click', _openUpload);
   }
 
   /* ── refresh ────────────────────────────────────────────────────── */
@@ -813,13 +813,16 @@ const rpSigned = n => {
   }
 
   /* ── imports ────────────────────────────────────────────────────── */
+  const _IMPORT_ICON = k =>
+    (k === 'gmail') ? '📧' : '📄';
+
   async function _renderImports(el) {
     const d = await U.fetchJSON('/api/transactions/imports');
     const rows = (d.batches || []).map(b => {
       const canConfirm = b.state === 'preview';
       return `
         <div class="tx-row" data-batch="${b.id}">
-          <span class="tx-import-kind">${b.kind === 'gopay_pdf' ? '📄' : '📧'} ${U.esc(b.provider || '')}</span>
+          <span class="tx-import-kind">${_IMPORT_ICON(b.kind)} ${U.esc(b.provider || '')}</span>
           <span class="tx-import-state tx-badge tx-badge-${b.state === 'committed' ? 'good' : 'warn'}">${b.state}</span>
           <span class="tx-import-date">${U.esc(b.created_at || '')}</span>
           ${canConfirm ? '<button class="tx-btn tx-btn-sm" onclick="Tabs.transactions._confirmImport(event)">Confirm</button>' : ''}
@@ -827,7 +830,7 @@ const rpSigned = n => {
     }).join('');
     el.innerHTML = `
       <div class="tx-card"><h3 class="tx-card-title">Import History</h3>
-        ${rows || '<div class="tx-empty">No imports yet. Upload a GoPay PDF to start.</div>'}
+        ${rows || '<div class="tx-empty">No imports yet. Upload a statement PDF (GoPay / BCA / BNI) to start.</div>'}
       </div>
     `;
   }
@@ -1003,23 +1006,95 @@ const rpSigned = n => {
     return html;
   }
 
-  /* ── upload PDF ─────────────────────────────────────────────────── */
-  async function _uploadPDF() {
+  /* ── upload PDF (GoPay / BCA / BNI) ─────────────────────────────── */
+  const _WALLETS = [
+    { id: 'gopay', label: 'GoPay', hint: 'Saldo rows only (Coins are skipped automatically)' },
+    { id: 'bca', label: 'BCA', hint: 'Rekening Tahapan e-statement' },
+    { id: 'bni', label: 'BNI', hint: 'e-statement needs the PDF password (pre-filled)' },
+  ];
+
+  async function _openUpload() {
+    const today = new Date();
+    const defMonth = today.toISOString().slice(0, 7);
+    const card = document.createElement('div');
+    card.className = 'tx-modal-backdrop';
+    card.innerHTML = `
+      <div class="tx-modal-card">
+        <h3>Upload statement PDF</h3>
+        <div class="tx-form">
+          <label class="tx-form-row">
+            <span>Wallet</span>
+            <select id="tx-up-provider">
+              ${_WALLETS.map(w =>
+                `<option value="${w.id}" ${w.id === 'bni' ? 'selected' : ''}>${w.label}</option>`).join('')}
+            </select>
+          </label>
+          <label class="tx-form-row">
+            <span>Month</span>
+            <input id="tx-up-month" type="month" value="${defMonth}">
+          </label>
+          <label class="tx-form-row">
+            <span>PDF password</span>
+            <input id="tx-up-password" type="text" value="01041988"
+                   title="Only encrypted e-statements (BNI) use this; it is ignored otherwise"
+                   placeholder="(leave blank if none)">
+          </label>
+          <div id="tx-up-hint" class="tx-up-hint"></div>
+          <div id="tx-up-file" class="tx-up-drop">
+            <div class="tx-up-drop-label">Choose PDF…</div>
+          </div>
+          <div class="tx-form-actions">
+            <button id="tx-up-cancel" class="btn tx-btn-outline">Cancel</button>
+            <button id="tx-up-submit" class="btn tx-btn-primary">Upload</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(card);
+    const fileLabel = card.querySelector('.tx-up-drop-label');
+    const hintEl = card.querySelector('#tx-up-hint');
+    let file = null;
+
+    const updateHint = () => {
+      const w = _WALLETS.find(x => x.id === card.querySelector('#tx-up-provider').value);
+      hintEl.textContent = w ? w.hint : '';
+    };
+    card.querySelector('#tx-up-provider').addEventListener('change', updateHint);
+    updateHint();
+
+    card.querySelector('.tx-up-drop').addEventListener('click', () => input.click());
+    card.querySelector('#tx-up-cancel').addEventListener('click', () => card.remove());
+    card.addEventListener('click', e => { if (e.target === card) card.remove(); });
+
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.pdf';
-    input.onchange = async () => {
-      const file = input.files[0];
-      if (!file) return;
+    input.onchange = () => {
+      file = input.files[0];
+      fileLabel.textContent = file ? `📄 ${file.name}` : 'Choose PDF…';
+    };
+
+    card.querySelector('#tx-up-submit').addEventListener('click', async () => {
+      if (!file) { toast('Choose a PDF file first', false); return; }
       if (_uploadBusy) return toast('Upload already in progress', false);
+      const provider = card.querySelector('#tx-up-provider').value;
+      const month = card.querySelector('#tx-up-month').value;
+      const password = (card.querySelector('#tx-up-password').value || '').trim();
+      card.remove();
       _uploadBusy = true;
       _busy(true);
+      const lock = _lockLayer();
+      const start = Date.now();
+      const fake = setInterval(() => {
+        const el = document.getElementById('tx-upload-bar');
+        if (el) el.style.width = `${Math.min(92, (Date.now() - start) / 2000)}%`;
+      }, 200);
       try {
         const b64 = await _fileToBase64(file);
         const res = await _post('/api/transactions/upload',
-          { filename: file.name, data: b64 }, 30000);
+          { filename: file.name, data: b64, provider, password, month }, 120000);
         if (res.ok) {
-          toast(`Uploaded: ${res.row_count} rows parsed`);
+          toast(`Imported ${res.new_rows || 0} rows (${res.duplicate_rows || 0} duplicates skipped)` +
+                (res.skipped_rows ? `, ${res.skipped_rows} out-of-month skipped` : ''), true);
           await refreshView();
         } else {
           toast(res.error || 'Upload failed', false);
@@ -1027,11 +1102,28 @@ const rpSigned = n => {
       } catch (e) {
         toast(e.message, false);
       } finally {
+        clearInterval(fake);
+        lock.remove();
         _busy(false);
         _uploadBusy = false;
       }
-    };
-    input.click();
+    });
+  }
+
+  /* Full-screen overlay that blocks any click behind the upload and shows
+     the (indeterminate-till-done) progress bar while the browser sends the
+     PDF and the server parses + auto-confirms it. */
+  function _lockLayer() {
+    const lock = document.createElement('div');
+    lock.className = 'tx-upload-lock';
+    lock.innerHTML = `
+      <div class="tx-upload-card">
+        <div class="tx-upload-title">Importing statement…</div>
+        <div class="tx-upload-track"><div id="tx-upload-bar" class="tx-upload-bar" style="width:6%"></div></div>
+        <div class="tx-upload-sub">Parsing PDF, checking duplicates, categorizing — the page stays locked until done.</div>
+      </div>`;
+    document.body.appendChild(lock);
+    return lock;
   }
 
   function _fileToBase64(file) {

@@ -3671,6 +3671,59 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
   margin-top: var(--sp-2);
 }
 
+/* ── statement upload (GoPay / BCA / BNI) ─────────────────────────── */
+.tx-up-hint {
+  font-size: var(--fs-xs); color: var(--text-muted);
+  min-height: 1.2em;
+}
+.tx-up-drop {
+  border: 1px dashed var(--border-active);
+  border-radius: var(--radius-xs);
+  padding: 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease;
+}
+.tx-up-drop:hover { background: var(--bg-hover); border-color: var(--accent); }
+.tx-up-drop-label {
+  font-size: var(--fs-sm); color: var(--text-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* full-screen progress lock while the upload processes */
+.tx-upload-lock {
+  position: fixed; inset: 0; z-index: 80;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--sp-4);
+  cursor: wait;
+}
+.tx-upload-card {
+  width: min(420px, 100%);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-active);
+  border-radius: 14px;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
+  padding: var(--sp-5);
+  text-align: center;
+}
+.tx-upload-title { font-size: var(--fs-md); font-weight: 650; margin-bottom: 14px; }
+.tx-upload-track {
+  height: 8px; border-radius: 999px;
+  background: var(--bg-input, rgba(255,255,255,.08));
+  overflow: hidden;
+}
+.tx-upload-bar {
+  height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), #8b5cf6);
+  transition: width .3s ease;
+}
+.tx-upload-sub {
+  margin-top: 12px;
+  font-size: var(--fs-xs); color: var(--text-muted);
+}
+
 /* ── all-transactions pager ─────────────────────────────────────────── */
 .tx-pager {
   display: flex; align-items: center; gap: var(--sp-2);

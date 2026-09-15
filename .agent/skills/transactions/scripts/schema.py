@@ -55,27 +55,12 @@ def connect(path: Path | str | None = None, *,
 # Schema – idempotent
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
-_DDL = """
--- accounts: one row per bank/e-wallet/account
-CREATE TABLE IF NOT EXISTS accounts (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    type        TEXT    NOT NULL CHECK(type IN ('bank','ewallet','card','cash','other')),
-    provider    TEXT    NOT NULL DEFAULT '',
-    alias       TEXT    NOT NULL,
-    masked      TEXT    NOT NULL DEFAULT '',
-    owner_name  TEXT    NOT NULL DEFAULT '',
-    currency    TEXT    NOT NULL DEFAULT 'IDR',
-    active      INTEGER NOT NULL DEFAULT 1,
-    created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
-    updated_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
-);
-
--- source_documents: one row per file / email / import run
+_SOURCE_DOC_CREATE = """
 CREATE TABLE IF NOT EXISTS source_documents (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    kind             TEXT    NOT NULL CHECK(kind IN ('gmail','gopay_pdf','manual')),
+    kind             TEXT    NOT NULL CHECK(kind IN ('gmail','gopay_pdf','bca_pdf','bni_pdf','manual')),
     source_key       TEXT    NOT NULL,
     fingerprint      TEXT    NOT NULL,
     provider         TEXT    NOT NULL DEFAULT '',
@@ -91,6 +76,24 @@ CREATE TABLE IF NOT EXISTS source_documents (
     UNIQUE(source_key),
     UNIQUE(fingerprint)
 );
+"""
+
+_DDL = f"""
+-- accounts: one row per bank/e-wallet/account
+CREATE TABLE IF NOT EXISTS accounts (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    type        TEXT    NOT NULL CHECK(type IN ('bank','ewallet','card','cash','other')),
+    provider    TEXT    NOT NULL DEFAULT '',
+    alias       TEXT    NOT NULL,
+    masked      TEXT    NOT NULL DEFAULT '',
+    owner_name  TEXT    NOT NULL DEFAULT '',
+    currency    TEXT    NOT NULL DEFAULT 'IDR',
+    active      INTEGER NOT NULL DEFAULT 1,
+    created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+    updated_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
+);
+
+{_SOURCE_DOC_CREATE}
 
 -- import_batches: each upload / gmail sync batch
 CREATE TABLE IF NOT EXISTS import_batches (
@@ -99,7 +102,7 @@ CREATE TABLE IF NOT EXISTS import_batches (
     created_at        TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
     state             TEXT    NOT NULL DEFAULT 'preview'
                             CHECK(state IN ('preview','confirmed','cancelled','committed')),
-    stats_json        TEXT    NOT NULL DEFAULT '{}'
+    stats_json        TEXT    NOT NULL DEFAULT '{{}}'
 );
 
 -- extracted_txns: immutable original records (one-to-one with source)
@@ -151,7 +154,7 @@ CREATE TABLE IF NOT EXISTS ledger_txns (
     confidence       TEXT    NOT NULL DEFAULT 'none'
                            CHECK(confidence IN ('high','medium','low','none')),
     confidence_reason TEXT   NOT NULL DEFAULT '',
-    evidence_json    TEXT    NOT NULL DEFAULT '{}',
+    evidence_json    TEXT    NOT NULL DEFAULT '{{}}',
     review_status    TEXT    NOT NULL DEFAULT 'ok'
                            CHECK(review_status IN ('ok','review','uncategorized')),
     txn_status       TEXT    NOT NULL DEFAULT 'confirmed'
@@ -217,8 +220,8 @@ CREATE TABLE IF NOT EXISTS audit_log (
     action      TEXT    NOT NULL DEFAULT '',
     entity      TEXT    NOT NULL DEFAULT '',
     entity_id   INTEGER DEFAULT NULL,
-    before_json TEXT    NOT NULL DEFAULT '{}',
-    after_json  TEXT    NOT NULL DEFAULT '{}',
+before_json TEXT    NOT NULL DEFAULT '{{}}',
+after_json  TEXT    NOT NULL DEFAULT '{{}}',
     source      TEXT    NOT NULL DEFAULT 'web'
 );
 
@@ -236,6 +239,30 @@ CREATE TABLE IF NOT EXISTS _meta (
 """
 
 
+def _migrate_source_documents_kind(conn: sqlite3.Connection) -> None:
+    """Widen the source_documents.kind CHECK on pre-existing databases."""
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='source_documents'"
+    ).fetchone()
+    if not row:
+        return
+    sql = row[0] or ''
+    if 'bca_pdf' in sql:
+        return
+    # Rebuild the table (preserving ids, which other tables FK-reference) with
+    # the extra *_pdf kinds. PRAGMA foreign_keys cannot change mid-transaction,
+    # so commit before re-enabling it below.
+    conn.execute('PRAGMA foreign_keys=OFF')
+    try:
+        conn.execute('ALTER TABLE source_documents RENAME TO source_documents__old')
+        conn.execute(_SOURCE_DOC_CREATE)
+        conn.execute('INSERT INTO source_documents SELECT * FROM source_documents__old')
+        conn.execute('DROP TABLE source_documents__old')
+        conn.commit()
+    finally:
+        conn.execute('PRAGMA foreign_keys=ON')
+
+
 def _migrate(conn: sqlite3.Connection) -> None:
     """Apply idempotent column migrations for pre-existing databases."""
     cols = {r['name'] for r in conn.execute("PRAGMA table_info(extracted_txns)").fetchall()}
@@ -247,6 +274,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if 'transaction_type' not in cols:
         conn.execute("ALTER TABLE extracted_txns ADD COLUMN transaction_type "
                      "TEXT NOT NULL DEFAULT ''")
+    _migrate_source_documents_kind(conn)
     if cols and 'transaction_type' in cols and 'raw_description' in cols:
         conn.execute(
             "INSERT OR REPLACE INTO _meta(key, value) VALUES (?, ?)",

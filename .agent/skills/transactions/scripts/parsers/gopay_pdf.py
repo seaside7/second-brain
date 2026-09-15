@@ -5,8 +5,11 @@ Handles:
 - Table-based statements with wrapped descriptions
 - Saldo (cash balance) vs GoPay Coins
 - Transaction ID extraction
+- The modern 'GoPay Transaction History' two-line layout (date+desc+txnid+
+  method+amount on line A, time+id-tail on line B)
 - Both old and new layout variants
 - Page-level parsing (multi-page statements)
+- Password-protected PDFs (optional decryption password)
 """
 from __future__ import annotations
 
@@ -17,6 +20,8 @@ from pathlib import Path
 from typing import Optional
 
 import pdfplumber
+
+from . import _common as _c
 
 PARSER_VERSION = '1.0'
 
@@ -69,6 +74,9 @@ def _parse_amount(text: str) -> int:
     if not m:
         return 0
     sign = -1 if m.group(1) else 1
+    # a sign before the prefix (e.g. '-Rp10.000') also flips the direction
+    if re.match(r'^\s*[-+]', text) and text.lstrip().startswith('-'):
+        sign = -sign
     num_str = m.group(2).replace('.', '').replace(',', '')
     try:
         return sign * int(num_str)
@@ -99,8 +107,16 @@ def _is_coins_header(text: str) -> bool:
     return bool(re.search(r'coins|reward|coin\s*balance', text, re.IGNORECASE))
 
 
-def parse_gopay_pdf(path: str | Path) -> dict:
+def parse_gopay_pdf(path: str | Path, password: str = '',
+                    include_coins: bool = False) -> dict:
     """Parse a GoPay statement PDF.
+
+    Parameters
+    ----------
+    path : statement PDF to read.
+    password : optional decryption password (unencrypted files ignore it).
+    include_coins : when False (default), GoPay Coins reward/spend rows are
+        dropped - only real Saldo (rupiah) moves are returned.
 
     Returns
     -------
@@ -113,7 +129,7 @@ def parse_gopay_pdf(path: str | Path) -> dict:
     pages = 0
 
     try:
-        with pdfplumber.open(str(path)) as pdf:
+        with _c.open_pdf(str(path), password) as pdf:
             pages = len(pdf.pages)
             account_name = ''
             phone_suffix = ''
@@ -128,12 +144,20 @@ def parse_gopay_pdf(path: str | Path) -> dict:
                     account_name, phone_suffix = _extract_identity(text)
                     statement_period = _extract_period(text)
 
-                # Detect wallet type from section headers
-                if _is_coins_header(text):
-                    current_wallet = 'coins'
+                lines = text.split('\n')
 
-                # Word-based column parsing (handles borderless tables where
-                # extract_tables() finds nothing — the real GoPay layout)
+                # Modern two-line layout: detect the column header once.
+                # It appears at the top of every page with the new format.
+                if any('metode pembayaran' in ln.lower() for ln in lines):
+                    parsed = _parse_new_layout(lines, current_wallet)
+                    if parsed is not None:
+                        rows.extend(parsed)
+                        # Wallet state can flip mid-page (GoPay Coins / GoPay
+                        # Saldo headers) - reflect it back to the loop.
+                        current_wallet = _last_wallet_marker(lines) or current_wallet
+                        continue
+
+                # Legacy: word-based column parsing (borderless tables)
                 parsed = _parse_page_words(page)
                 if parsed:
                     for txn in parsed:
@@ -142,7 +166,6 @@ def parse_gopay_pdf(path: str | Path) -> dict:
                         rows.append(txn.to_dict())
                 else:
                     # Fallback: line-by-line text parsing
-                    lines = text.split('\n')
                     i = 0
                     while i < len(lines):
                         txn = _parse_line_fallback(lines, i, page_idx + 1)
@@ -157,11 +180,16 @@ def parse_gopay_pdf(path: str | Path) -> dict:
         warnings.append(f'PDF read error: {e}')
 
     # Post-process: extract txn IDs, normalize amounts
+    kept: list[dict] = []
     for r in rows:
+        if not include_coins and r.get('wallet_type') == 'coins':
+            continue
         if not r.get('src_txn_id'):
             r['src_txn_id'] = _extract_txn_id(r.get('description', '') + r.get('raw1', ''))
         if not r.get('occurred_at') and r.get('raw1'):
             r['occurred_at'] = _parse_date(r['raw1'])
+        kept.append(r)
+    rows = kept
 
     # Compute hash fingerprint (string-safe; used for tiebreak dedupe only)
     parts = [str(r.get('src_txn_id', '')), str(r.get('occurred_at', '')),
@@ -179,6 +207,114 @@ def parse_gopay_pdf(path: str | Path) -> dict:
         'page_count': pages,
         'fingerprint': fingerprint,
     }
+
+
+_ROW_A_RE = re.compile(
+    r'^(?P<date>\d{1,2}/\d{1,2}/\d{4})\s+'
+    r'(?P<desc>.+?)\s+'
+    r'(?P<txnid>[A-Z0-9]{8,})\s+'
+    r'(?P<method>GoPay\s+Saldo|GoPay\s+Coins|xx-?\d{2,6}|[A-Za-z0-9.&-]{2,30})\s+'
+    r'(?P<amt>[-+]?\s*(?:Rp\s*)?[\d.,]+)$'
+    r'',
+    re.IGNORECASE)
+_TIME_B_RE = re.compile(r'^(\d{1,2}:\d{2}(?::\d{2})?)\s+(\S+)\s*$')
+
+
+def _parse_new_date(text: str) -> tuple[str, tuple[int, int, int]]:
+    """Parse DD/MM/YYYY -> (ISO date, (day, month, year))."""
+    parts = text.split('/')
+    if len(parts) != 3:
+        return '', (0, 0, 0)
+    try:
+        d, m, y = int(parts[0]), int(parts[1]), int(parts[2])
+    except ValueError:
+        return '', (0, 0, 0)
+    if y < 100:
+        y += 2000
+    return f'{y:04d}-{m:02d}-{d:02d}', (d, m, y)
+
+
+def _last_wallet_marker(lines: list[str]) -> str:
+    """Return the wallet named by the last standalone marker line, or ''."""
+    for line in reversed(lines):
+        low = line.strip().lower()
+        if low == 'gopay saldo':
+            return 'saldo'
+        if low == 'gopay coins':
+            return 'coins'
+    return ''
+
+
+def _parse_new_layout(lines: list[str],
+                      fallback_wallet: str = 'saldo') -> list[dict]:
+    """Parse the modern 'GoPay Transaction History' two-line layout.
+
+    Line A : DD/MM/YYYY <description> <txn-id> <method> <amount>
+    Line B : HH:MM[:SS] <id-tail>
+
+    Interleaved standalone 'GoPay Saldo' / 'GoPay Coins' lines switch the
+    wallet for rows that do not name a wallet in their method column.
+
+    Returns list of row dicts; wallet_type is set so the caller's
+    include_coins gate can drop reward rows.
+    """
+    rows: list[dict] = []
+    for i, line in enumerate(lines):
+        line = line.strip()
+        if not line:
+            continue
+        low = line.lower()
+        if low == 'gopay saldo':
+            fallback_wallet = 'saldo'
+            continue
+        if low == 'gopay coins':
+            fallback_wallet = 'coins'
+            continue
+
+        m = _ROW_A_RE.match(line)
+        if not m:
+            continue
+
+        amount = _c.parse_amount(m.group('amt'))
+        iso, (_d, mo, _y) = _parse_new_date(m.group('date'))
+
+        # Time + id tail from the following line (when present)
+        time_s = '00:00'
+        txn_id = m.group('txnid')
+        if i + 1 < len(lines):
+            tm = _TIME_B_RE.match(lines[i + 1].strip())
+            if tm:
+                time_s = tm.group(1)
+                txn_id += tm.group(2)
+
+        method = m.group('method')
+        wallet = ('coins' if 'coins' in method.lower()
+                  else 'saldo' if 'saldo' in method.lower()
+                  else fallback_wallet)
+
+        hour, minute = time_s.split(':')[:2] if ':' in time_s else ('00', '00')
+        if len(hour) == 1:
+            hour = f'0{hour}'
+        if len(minute) == 1:
+            minute = f'0{minute}'
+        occurred_at = (f'{iso}T{hour}:{minute}:00'
+                       if len(time_s) >= 4 else iso)
+
+        rows.append({
+            'description': m.group('desc').strip()[:200],
+            'merchant': m.group('desc').strip()[:120],
+            'direction': 'in' if amount >= 0 else 'out',
+            'principal_amount': abs(amount),
+            'fee_amount': 0,
+            'total_amount': abs(amount),
+            'occurred_at': occurred_at,
+            'src_txn_id': txn_id,
+            'provider': 'gopay',
+            'wallet_type': wallet,
+            'raw1': line,
+            'raw2': lines[i + 1].strip() if i + 1 < len(lines) else '',
+        })
+    return rows
 
 
 def _extract_identity(text: str) -> tuple[str, str]:

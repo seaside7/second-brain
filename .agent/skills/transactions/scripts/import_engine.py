@@ -9,6 +9,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import shutil
 import sqlite3
 from datetime import datetime
@@ -17,9 +18,25 @@ from typing import Any, Optional
 
 import store
 import schema
-from parsers.gopay_pdf import parse_gopay_pdf, PARSER_VERSION
+from parsers.gopay_pdf import parse_gopay_pdf, PARSER_VERSION as GOPAY_VERSION
+from parsers.bca_pdf import parse_bca_pdf, PARSER_VERSION as BCA_VERSION
+from parsers.bni_pdf import parse_bni_pdf, PARSER_VERSION as BNI_VERSION
 from duplicates import check_duplicates
 from categorize import categorize_batch
+
+UPLOAD_PROVIDERS = {
+    'gopay': {'parser': parse_gopay_pdf, 'version': GOPAY_VERSION,
+              'kwargs': {'include_coins': False}},
+    'bca': {'parser': parse_bca_pdf, 'version': BCA_VERSION, 'kwargs': {}},
+    'bni': {'parser': parse_bni_pdf, 'version': BNI_VERSION, 'kwargs': {}},
+}
+
+# Brand labels shown in the UI when an upload's account is auto-created.
+_ACCOUNT_DEFS = {
+    'gopay': {'type': 'ewallet', 'provider': 'gopay', 'alias': 'GoPay'},
+    'bca': {'type': 'bank', 'provider': 'bca', 'alias': 'BCA'},
+    'bni': {'type': 'bank', 'provider': 'bni', 'alias': 'BNI'},
+}
 
 _UPLOAD_DIR = Path(os.environ.get(
     'TRANSACTIONS_UPLOAD_DIR',
@@ -32,12 +49,32 @@ def ensure_upload_dir() -> Path:
     return _UPLOAD_DIR
 
 
+def _ensure_account(conn: sqlite3.Connection, provider: str) -> int | None:
+    """Get-or-create the account stamped on a provider's uploaded rows."""
+    low = (provider or 'gopay').lower()
+    for a in store.list_accounts(conn, active_only=True):
+        if (a.get('provider') or '').lower() == low:
+            return a['id']
+    if low not in _ACCOUNT_DEFS:
+        return None
+    return store.add_account(conn, **_ACCOUNT_DEFS[low])
+
+
 def upload_pdf(conn: sqlite3.Connection, *,
                filename: str, b64data: str,
+               provider: str = 'gopay',
+               password: str = '',
+               month: str = '',
                max_size_mb: int = 20) -> dict:
-    """Upload a GoPay PDF (base64-encoded).
+    """Upload a bank/e-wallet statement PDF (base64-encoded).
 
-    Returns {ok, doc_id, batch_id, preview_data} or {ok:False, error}.
+    ``provider`` selects the parser (gopay|bca|bni); ``password`` is passed
+    through for encrypted statements (e.g. BNI); ``month`` (YYYY-MM) keeps only
+    that month's rows. Matching rows are stamped with the provider's account
+    and auto-confirmed straight into the ledger.
+
+    Returns {ok, doc_id, batch_id, account_id, total_rows, new_rows,
+    duplicate_rows, categorized, skipped_rows} or {ok:False, error}.
     """
     # Decode
     try:
@@ -53,13 +90,22 @@ def upload_pdf(conn: sqlite3.Connection, *,
     if not raw[:5] == b'%PDF-':
         return {'ok': False, 'error': 'Not a valid PDF file'}
 
+    provider = (provider or 'gopay').lower()
+    if provider not in UPLOAD_PROVIDERS:
+        return {'ok': False, 'error': f'Unsupported provider "{provider}"'}
+    parser_spec = UPLOAD_PROVIDERS[provider]
+    kind = f'{provider}_pdf'
+
     # Sanitize filename
     safe_name = Path(filename).stem.replace('..', '').replace('/', '_').replace('\\', '_')[:80]
     safe_name = ''.join(c for c in safe_name if c.isalnum() or c in '._- ') + '.pdf'
 
-    # Fingerprint
+    # Fingerprint + month filter
     fingerprint = hashlib.sha256(raw).hexdigest()[:32]
     source_key = f'upload:{fingerprint}'
+    month = (month or '').strip()
+    if month and not re.match(r'^\d{4}-(0[1-9]|1[0-2])$', month):
+        return {'ok': False, 'error': f'Invalid month "{month}"'}
 
     # Check duplicate document (a previously FAILED parse can be retried)
     existing_doc = store.source_doc_exists(conn, source_key=source_key, fingerprint=fingerprint)
@@ -82,14 +128,16 @@ def upload_pdf(conn: sqlite3.Connection, *,
 
     # Create source_document
     doc_id = store.add_source_document(conn,
-        kind='gopay_pdf', source_key=source_key, fingerprint=fingerprint,
-        upload_path=str(file_path))
+        kind=kind, source_key=source_key, fingerprint=fingerprint,
+        provider=provider, upload_path=str(file_path))
 
     # Parse
     try:
-        parse_result = parse_gopay_pdf(file_path)
+        parse_result = parser_spec['parser'](file_path,
+                                             password=password,
+                                             **parser_spec['kwargs'])
         store.update_source_document(conn, doc_id, status='parsed',
-            parser_version=parse_result.get('parser_version', PARSER_VERSION),
+            parser_version=parse_result.get('parser_version', parser_spec['version']),
             preview=json.dumps({
                 'row_count': len(parse_result.get('rows', [])),
                 'account_name': parse_result.get('account_name', ''),
@@ -99,29 +147,56 @@ def upload_pdf(conn: sqlite3.Connection, *,
         store.update_source_document(conn, doc_id, status='failed', error=str(e))
         return {'ok': False, 'error': f'Parse error: {e}', 'doc_id': doc_id}
 
-    # Create batch
-    batch_id = store.add_import_batch(conn, doc_id)
-
-    # Store extracted rows with dup checks
+    # Month filter (out-of-month rows are skipped, not imported)
     rows = parse_result.get('rows', [])
+    skipped_rows = 0
+    if month:
+        kept = [r for r in rows if str(r.get('occurred_at', ''))[:7] == month]
+        skipped_rows = len(rows) - len(kept)
+        rows = kept
+        if not rows:
+            store.update_source_document(conn, doc_id, status='failed',
+                error=f'No transactions found for {month}')
+            return {
+                'ok': False, 'error': f'No transactions found for {month}',
+                'doc_id': doc_id, 'skipped_rows': skipped_rows,
+            }
+
+    # Create batch + store extracted rows (with dup checks)
+    batch_id = store.add_import_batch(conn, doc_id)
     if rows:
-        _store_extracted_rows(conn, batch_id, doc_id, rows)
+        _store_extracted_rows(conn, batch_id, doc_id, rows, provider)
+
+    # Auto-confirm into the ledger, stamped with the provider's account
+    account_id = _ensure_account(conn, provider)
+    confirm = confirm_import(conn, batch_id, account_id=account_id)
 
     preview_data = {
         'doc_id': doc_id,
         'batch_id': batch_id,
+        'account_id': account_id,
         'row_count': len(rows),
+        'skipped_rows': skipped_rows,
         'account_name': parse_result.get('account_name', ''),
         'period': parse_result.get('statement_period', ''),
         'fingerprint': fingerprint,
         'warnings': parse_result.get('warnings', []),
-        'parser_version': parse_result.get('parser_version', PARSER_VERSION),
+        'parser_version': parse_result.get('parser_version', parser_spec['version']),
+        'provider': provider,
+        'total_rows': confirm.get('total_rows', len(rows)),
+        'new_rows': confirm.get('new_rows', 0),
+        'duplicate_rows': confirm.get('duplicate_rows', 0),
+        'categorized': confirm.get('categorized', 0),
     }
+    if not confirm.get('ok'):
+        return {'ok': False, **preview_data,
+                'error': confirm.get('error', 'Auto-confirm failed')}
     return {'ok': True, **preview_data}
 
 
 def _store_extracted_rows(conn: sqlite3.Connection,
-                           batch_id: int, doc_id: int, rows: list[dict]) -> None:
+                           batch_id: int, doc_id: int, rows: list[dict],
+                           provider: str = 'gopay') -> None:
     """Insert extracted rows with duplicate detection."""
     from datetime import datetime
     for i, row in enumerate(rows):
@@ -134,8 +209,8 @@ def _store_extracted_rows(conn: sqlite3.Connection,
 
         # Check duplicates
         dup_status, dup_id = check_duplicates(conn,
-            source_key=f"gopay:{row.get('src_txn_id', '')}",
-            account_hint='gopay',
+            source_key=f"{provider}:{row.get('src_txn_id', '')}",
+            account_hint=provider,
             occurred_at=row.get('occurred_at', ''),
             total_amount=total,
             direction=row.get('direction', 'out'))

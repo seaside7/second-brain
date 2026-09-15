@@ -468,7 +468,10 @@ def _handle_upload(handler, body: dict) -> None:
         _err(handler, 400, 'Missing filename or data')
         return
     try:
-        result = upload_pdf(conn, filename=filename, b64data=b64data)
+        result = upload_pdf(conn, filename=filename, b64data=b64data,
+                            provider=body.get('provider', 'gopay'),
+                            password=body.get('password', ''),
+                            month=body.get('month', ''))
         if result.get('ok'):
             _ok(handler, result)
         else:
