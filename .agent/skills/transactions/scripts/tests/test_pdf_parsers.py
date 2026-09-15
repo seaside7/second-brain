@@ -10,6 +10,7 @@ is exercised offline against a temp SQLite DB.
 from __future__ import annotations
 
 import base64
+import hashlib
 import shutil
 import sqlite3
 import sys
@@ -266,6 +267,22 @@ class UploadEngineTestCase(unittest.TestCase):
             'SELECT amount, account_id FROM ledger_txns').fetchall()
         self.assertEqual(len(ledger), 2)
         self.assertTrue(all(a == res['account_id'] for _, a in ledger))
+
+    def test_parsed_doc_without_batch_is_retriable(self):
+        """A doc whose parse succeeded but whose batch never committed (crash
+        mid-upload) must not permanently block re-import."""
+        rows = [_row(src_txn_id='x1', occurred_at='2026-08-01T08:00:00',
+                     total_amount=25000, direction='out', provider='bca')]
+        self._stub('bca', rows)
+        # simulate the crashed attempt: source_document present, no batch
+        fingerprint = hashlib.sha256(_fake_pdf_bytes()).hexdigest()[:32]
+        store.add_source_document(self._conn, kind='bca_pdf',
+                                 source_key=f'upload:{fingerprint}',
+                                 fingerprint=fingerprint, provider='bca')
+        res = ie.upload_pdf(self._conn, filename='a.pdf', b64data=self._b64,
+                            provider='bca', month='2026-08')
+        self.assertTrue(res.get('ok'), res)
+        self.assertEqual(res['row_count'], 1)
 
     def test_duplicate_document_blocked(self):
         rows = [_row(src_txn_id='x1', occurred_at='2026-08-01T08:00:00',

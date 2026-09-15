@@ -107,13 +107,16 @@ def upload_pdf(conn: sqlite3.Connection, *,
     if month and not re.match(r'^\d{4}-(0[1-9]|1[0-2])$', month):
         return {'ok': False, 'error': f'Invalid month "{month}"'}
 
-    # Check duplicate document (a previously FAILED parse can be retried)
+    # Check duplicate document. A re-import is only blocked when a committed
+    # batch exists; a doc that never produced a batch (failed parse, or a
+    # crash before the batch insert committed) is cleared and retried fresh.
     existing_doc = store.source_doc_exists(conn, source_key=source_key, fingerprint=fingerprint)
     if existing_doc:
-        prev = store.get_source_document(conn, existing_doc)
-        if not (prev and prev.get('status') == 'failed'):
+        batch_count = conn.execute(
+            'SELECT COUNT(*) FROM import_batches WHERE source_document_id=?',
+            (existing_doc,)).fetchone()[0]
+        if batch_count:
             return {'ok': False, 'error': 'This file has already been imported', 'doc_id': existing_doc}
-        # Clear the failed attempt so the re-upload re-parses fresh
         conn.execute('DELETE FROM extracted_txns WHERE doc_id=?', (existing_doc,))
         conn.execute('DELETE FROM import_batches WHERE source_document_id=?', (existing_doc,))
         conn.execute('DELETE FROM source_documents WHERE id=?', (existing_doc,))
