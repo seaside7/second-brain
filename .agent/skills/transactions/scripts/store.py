@@ -443,14 +443,26 @@ def nature_for_category(conn: sqlite3.Connection, current_nature: str,
 
     A person-transfer the owner files into real spend becomes an expense
     (Transfers-group categories and Uncategorized keep it a transfer).
-    Every other nature is untouched.
+
+    Manual-only Loan categories map direction: Friend Loan -> income,
+    Friend Repayment -> expense (always resolved regardless of prior nature).
     """
-    if current_nature != 'transfer_to_person' or not category_id:
+    if not category_id:
         return current_nature
     cat = get_category(conn, category_id)
     if not cat:
         return current_nature
-    if (cat.get('group') or '') == 'Transfers' or cat.get('name') == 'Uncategorized':
+
+    # Friend Loan / Friend Repayment override nature unconditionally.
+    name = (cat.get('name') or '').strip()
+    if name == 'Friend Loan':
+        return 'income'
+    if name == 'Friend Repayment':
+        return 'expense'
+
+    if current_nature != 'transfer_to_person':
+        return current_nature
+    if (cat.get('group') or '') == 'Transfers' or name == 'Uncategorized':
         return current_nature
     return 'expense'
 

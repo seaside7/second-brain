@@ -98,9 +98,46 @@ class CategorizerTestCase(unittest.TestCase):
         self.assertEqual(r['group'], 'Food & Dining')
         self.assertIn(r['confidence'], ('high', 'medium'))
 
-    def test_07_ambig_warung_needs_review(self):
+    def test_07_plain_warung_is_food(self):
+        # 'warung' alone now counts as food (no extra food word required).
         r = self._cat(description='Warung Sumber Rejeki', transaction_type='qris')
+        self.assertEqual(r['nature'], 'expense')
+        self.assertEqual(r['group'], 'Food & Dining')
+
+    def test_07b_standalone_food_words(self):
+        for desc in ('Nasi Goreng Mantap', 'Pecel Lele Emas', 'Bakso Mas Kumis',
+                     'Gorengan Bu Sri', 'Rumah Makan Padang Sederhana'):
+            r = self._cat(description=desc, transaction_type='qris')
+            self.assertEqual(r['group'], 'Food & Dining', desc)
+            self.assertEqual(r['nature'], 'expense', desc)
+
+    def test_07c_food_word_does_not_hit_nasional(self):
+        # 'nasi' must match whole-word, so "nasional" is not mistaken for food.
+        r = self._cat(description='PT BANK NASIONAL INDONESIA', transaction_type='qris')
+        self.assertNotEqual(r['group'], 'Food & Dining')
+
+    def test_07d_gojek_ride_is_not_ride_sharing(self):
+        # Ride Sharing category no longer exists - gojek/grab rides fall to Review.
+        r = self._cat(description='Gojek - Ride Payment', transaction_type='qris')
         self.assertEqual(r['nature'], 'needs_review')
+        cats = [c['name'] for c in store.list_categories(self._conn)]
+        self.assertNotIn('Ride Sharing', cats)
+
+    def test_07e_friend_categories_in_taxonomy(self):
+        self.assertEqual(categorize._CAT['friend_loan'], ('Loans', 'Friend Loan'))
+        self.assertEqual(categorize._CAT['friend_repay'], ('Loans', 'Friend Repayment'))
+
+    def test_07f_manual_friend_categories_map_nature(self):
+        loan_id = store.get_or_create_category(self._conn, 'Friend Loan', group='Loans')
+        repay_id = store.get_or_create_category(self._conn, 'Friend Repayment', group='Loans')
+        # Money received from a friend -> income; paid back -> expense.
+        self.assertEqual(store.nature_for_category(self._conn, 'needs_review', loan_id), 'income')
+        self.assertEqual(store.nature_for_category(self._conn, 'needs_review', repay_id), 'expense')
+        # Other categories leave nature untouched.
+        food_id = store.get_or_create_category(self._conn, 'Food & Dining',
+                                               group='Food & Dining')
+        self.assertEqual(store.nature_for_category(self._conn, 'needs_review', food_id),
+                         'needs_review')
 
     def test_08_atm_withdrawal(self):
         r = self._cat(description='Tarik Tunai', transaction_type='withdrawal')

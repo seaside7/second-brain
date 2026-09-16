@@ -635,12 +635,11 @@ def _handle_edit(handler, txn_id: int, body: dict) -> None:
         if 'category_id' in body:
             fields['review_status'] = 'ok' if body['category_id'] else 'uncategorized'
 
-        # A person-transfer the owner categorizes into real spend becomes an
-        # expense (Transfers-group categories and explicit nature= keep it a
-        # transfer). Transfers to our own name are untouched - they arrive as
-        # internal_transfer, never transfer_to_person.
-        if (body.get('category_id') and 'nature' not in body
-                and (row.get('nature') == 'transfer_to_person')):
+        # Resolve nature when the owner assigns a category. This covers:
+        # - transfer_to_person -> real-spend category becomes 'expense'
+        # - Friend Loan -> 'income', Friend Repayment -> 'expense'
+        # - any other assignment leaves nature unchanged
+        if body.get('category_id') and 'nature' not in body:
             flipped = nature_for_category(conn, row['nature'],
                                           int(body['category_id']))
             if flipped != row['nature']:

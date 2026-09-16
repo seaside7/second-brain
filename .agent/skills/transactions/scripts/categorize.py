@@ -74,14 +74,18 @@ _CAT = {
     'transport_fuel': ('Transport', 'Fuel'),
     'transport_toll': ('Transport', 'Toll'),
     'transport_parking': ('Transport', 'Parking'),
-    'transport_ride': ('Transport', 'Ride Sharing'),
-'vehicle_service': ('Vehicle', 'Car Service'),
+    'vehicle_service': ('Vehicle', 'Car Service'),
     'home_upkeep':     ('Home', 'Home Maintenance & Repair'),
     'shopping':        ('Shopping', 'Online Shopping'),
     'cash':           ('Cash', 'Cash Withdrawal'),
     'fee':            ('Fees', 'Bank Fee'),
     'loan_payment':   ('Loans', 'Loan Payment'),
     'online_credit':  ('Loans', 'Online Credit'),
+    # Manual-only categories (owner assigns by hand; the categorizer never
+    # auto-fires them): money received from a friend (income) and money paid
+    # back to a friend (expense).
+    'friend_loan':    ('Loans', 'Friend Loan'),
+    'friend_repay':   ('Loans', 'Friend Repayment'),
     'refund':         ('Income', 'Refund'),
     'uncategorized':  ('Uncategorized', 'Uncategorized'),
 }
@@ -101,16 +105,17 @@ _BILLERS = [
 _GROCERIES = ['indomaret', 'alfamart', 'superindo', 'hypermart', 'transmart',
               'ranch market', 'sembako', 'belanja sayur', 'sayur']
 _FOOD_DELIVERY = ['gofood', 'grabfood', 'shopeefood', 'go food', 'delivery']
-_FOOD_RIDE = ['gojek', 'grab']
 _FOOD_RESTAURANT = ['restoran', 'restaurant', 'rm ', 'warung makan', 'rumah makan']
 _FOOD_CAFE = ['cafe', 'kopi', 'café', 'kafé']
 _ECOMMERCE = ['tokopedia', 'shopee', 'lazada', 'blibli', 'forumer', ' marketplace']
 
-# "warung" is ambiguous on its own: combine it with food words, else -> Review.
-_WARUNG_MARKERS = ['warung', 'warkop']
+# Standalone food words -> Food & Dining unconditionally. 'warung'/'warkop' are
+# treated as food on their own (no extra food word required). Keep 'nasi' and
+# 'warung' whole-word to avoid substring false positives (e.g. "nasional").
 _FOOD_WORDS = ['gorengan', 'nasi', 'soto', 'bakso', 'mie', 'mihun', 'kopi',
-               'restoran', 'cafe', 'padang', 'ayam', 'rendang', 'rujak',
-               'pecel', 'ikan bak', 'seafood', 'gado-gado', 'penyet', 'sate']
+               'restoran', 'restaurant', 'cafe', 'padang', 'ayam', 'rendang',
+               'rujak', 'pecel', 'ikan bak', 'seafood', 'gado-gado', 'penyet',
+               'sate', 'warung', 'warkop', 'nasi goreng']
 
 _TRANSPORT_FUEL = ['pertamina', 'bensin', 'solar', 'spbu', 'shell']
 _TRANSPORT_TOLL = ['tol', 'toll', 'jalan tol', 'flazz', 'e-money', 'emoney',
@@ -132,7 +137,8 @@ _TOPUP_KEYWORDS = ['top up', 'topup', 'top-up', 'isi ulang', 'isi saldo',
 _REFUND_KEYWORDS = ['refund', 'kembalian', 'cancelled refund']
 
 # Short tokens need whole-word matching to avoid false positives (e.g. "xl").
-_WORD_BOUNDED = {'pln', 'grab', 'shopee', 'xl', 'sate', 'kopi', 'tol'}
+_WORD_BOUNDED = {'pln', 'grab', 'shopee', 'xl', 'sate', 'kopi', 'tol',
+                 'nasi', 'warung', 'warkop', 'bakso', 'mie', 'ayam'}
 
 
 def _has(text: str, token: str) -> bool:
@@ -439,14 +445,10 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
         set_cat('home_upkeep', 'expense', 'high', 'Home repair / tukang')
         return hit
 
-    # 6. FOOD & DINING - one flat category. Warung needs a food word,
-    #    otherwise -> Review.
-    if any(_has(desc, m) for m in _WARUNG_MARKERS):
-        if any(_has(desc, m) for m in _FOOD_WORDS):
-            set_cat('food', 'expense', 'medium',
-                    'Warung + food word')
-            return hit
-        set_fallback('Warung without food context - verify')
+    # 6. FOOD & DINING - one flat category. Food words (incl. warung/warkop)
+    #    fire standalone; restaurant/cafe/delivery are kept for confidence.
+    if any(_has(desc, m) for m in _FOOD_WORDS):
+        set_cat('food', 'expense', 'medium', 'Food word')
         return hit
     if any(_has(desc, m) for m in _FOOD_RESTAURANT):
         set_cat('food', 'expense', 'high', 'Restaurant')
@@ -458,7 +460,7 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
         set_cat('food', 'expense', 'high', 'Food delivery')
         return hit
 
-    # 7. TRANSPORT
+    # 7. TRANSPORT (no ride-sharing category - gojek/grab rides fall to Review)
     if any(_has(desc, m) for m in _TRANSPORT_FUEL):
         set_cat('transport_fuel', 'expense', 'high', 'Fuel')
         return hit
@@ -470,9 +472,6 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
         return hit
     if any(_has(desc, m) for m in _VEHICLE_SERVICE):
         set_cat('vehicle_service', 'expense', 'high', 'Vehicle service')
-        return hit
-    if any(_has(desc, m) for m in _FOOD_RIDE):
-        set_cat('transport_ride', 'expense', 'high', 'Ride sharing')
         return hit
 
     # 8. E-COMMERCE
