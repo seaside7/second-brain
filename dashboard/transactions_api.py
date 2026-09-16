@@ -638,12 +638,17 @@ def _handle_edit(handler, txn_id: int, body: dict) -> None:
         # Resolve nature when the owner assigns a category. This covers:
         # - transfer_to_person -> real-spend category becomes 'expense'
         # - Friend Loan -> 'income', Friend Repayment -> 'expense'
+        # - a needs_review row filed into spend/income resolves by direction
         # - any other assignment leaves nature unchanged
         if body.get('category_id') and 'nature' not in body:
             flipped = nature_for_category(conn, row['nature'],
-                                          int(body['category_id']))
+                                          int(body['category_id']),
+                                          row.get('direction'))
             if flipped != row['nature']:
                 fields['nature'] = flipped
+            # A resolved nature means the row is reviewed + confirmed.
+            if flipped != 'needs_review':
+                fields['txn_status'] = 'confirmed'
 
         if fields:
             update_ledger(conn, txn_id, **fields)

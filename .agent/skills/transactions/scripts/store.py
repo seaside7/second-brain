@@ -438,14 +438,18 @@ def get_category(conn: sqlite3.Connection, category_id: int) -> Optional[dict]:
     return dict(r) if r else None
 
 def nature_for_category(conn: sqlite3.Connection, current_nature: str,
-                        category_id: int | None) -> str:
+                        category_id: int | None,
+                        direction: str | None = None) -> str:
     """Nature a row should carry after the owner assigns category_id.
-
-    A person-transfer the owner files into real spend becomes an expense
-    (Transfers-group categories and Uncategorized keep it a transfer).
 
     Manual-only Loan categories map direction: Friend Loan -> income,
     Friend Repayment -> expense (always resolved regardless of prior nature).
+
+    Any other manual pick resolves too (the review row counts in spend/income):
+    money-out -> expense, money-in -> income. Transfers-group categories and
+    Uncategorized never resolve - they keep the current nature and stay
+    excluded from spend. A person-transfer the owner files into real spend
+    becomes an expense (Transfers-group keeps it a transfer).
     """
     if not category_id:
         return current_nature
@@ -460,11 +464,18 @@ def nature_for_category(conn: sqlite3.Connection, current_nature: str,
     if name == 'Friend Repayment':
         return 'expense'
 
-    if current_nature != 'transfer_to_person':
-        return current_nature
+    # Transfers-group categories and Uncategorized never count as spend.
     if (cat.get('group') or '') == 'Transfers' or name == 'Uncategorized':
         return current_nature
-    return 'expense'
+
+    if current_nature == 'transfer_to_person':
+        return 'expense'
+
+    # Owner picked a normal category: resolve by money direction.
+    if current_nature in ('needs_review',):
+        return {'in': 'income', 'out': 'expense'}.get(direction or '',
+                                                      current_nature)
+    return current_nature
 
 def get_or_create_category(conn: sqlite3.Connection, name: str,
                             group: str = '') -> int:

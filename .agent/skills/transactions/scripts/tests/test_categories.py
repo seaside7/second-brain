@@ -131,13 +131,32 @@ class CategorizerTestCase(unittest.TestCase):
         loan_id = store.get_or_create_category(self._conn, 'Friend Loan', group='Loans')
         repay_id = store.get_or_create_category(self._conn, 'Friend Repayment', group='Loans')
         # Money received from a friend -> income; paid back -> expense.
-        self.assertEqual(store.nature_for_category(self._conn, 'needs_review', loan_id), 'income')
-        self.assertEqual(store.nature_for_category(self._conn, 'needs_review', repay_id), 'expense')
-        # Other categories leave nature untouched.
+        # Overrides regardless of direction/prior nature.
+        self.assertEqual(store.nature_for_category(self._conn, 'needs_review',
+                                                   loan_id, 'in'), 'income')
+        self.assertEqual(store.nature_for_category(self._conn, 'needs_review',
+                                                   repay_id, 'out'), 'expense')
+
+    def test_07g_manual_pick_resolves_by_direction(self):
         food_id = store.get_or_create_category(self._conn, 'Food & Dining',
                                                group='Food & Dining')
-        self.assertEqual(store.nature_for_category(self._conn, 'needs_review', food_id),
-                         'needs_review')
+        # A needs_review row the owner files into spend -> resolves.
+        self.assertEqual(store.nature_for_category(self._conn, 'needs_review',
+                                                   food_id, 'out'), 'expense')
+        self.assertEqual(store.nature_for_category(self._conn, 'needs_review',
+                                                   food_id, 'in'), 'income')
+        # No direction known -> stays needs_review.
+        self.assertEqual(store.nature_for_category(self._conn, 'needs_review',
+                                                   food_id), 'needs_review')
+
+    def test_07h_transfer_categories_stay_neutral(self):
+        topup = store.get_or_create_category(self._conn, 'Top Up (3rd party)',
+                                             group='Transfers')
+        # Even when filed manually, transfers never count as spend.
+        self.assertEqual(store.nature_for_category(self._conn, 'needs_review',
+                                                   topup, 'out'), 'needs_review')
+        self.assertEqual(store.nature_for_category(self._conn, 'transfer_to_person',
+                                                   topup), 'transfer_to_person')
 
     def test_08_atm_withdrawal(self):
         r = self._cat(description='Tarik Tunai', transaction_type='withdrawal')
