@@ -417,9 +417,40 @@ def delete_transfer(conn: sqlite3.Connection, transfer_id: int) -> bool:
 
 # ── categories + rules ──────────────────────────────────────────────────
 
+# Category names (case-insensitive) that only make sense as money coming in.
+_INCOME_CATEGORY_NAMES = {
+    'income', 'salary', 'bonus', 'refund', 'cashback', 'interest',
+    'dividend', 'freelance',
+}
+
+def category_flow(cat: dict) -> str:
+    """Direction affinity for the category picker.
+
+    'in'   - income categories, only offered on money-in rows
+    'out'  - spend categories, only offered on money-out rows
+    'both' - neutral rows (transfers, uncategorized) offered everywhere
+
+    Category names win over groups so a user-created category with no group
+    stays a spend category rather than being mistaken for income.
+    """
+    name = (cat.get('name') or '').strip().lower()
+    group = (cat.get('group') or '').strip().lower()
+    if group == 'transfers' or name == 'uncategorized':
+        return 'both'
+    if name == 'friend loan':
+        return 'in'
+    if name == 'friend repayment':
+        return 'out'
+    if group == 'income' or name in _INCOME_CATEGORY_NAMES:
+        return 'in'
+    return 'out'
+
 def list_categories(conn: sqlite3.Connection) -> list[dict]:
-    return [dict(r) for r in conn.execute(
+    cats = [dict(r) for r in conn.execute(
         "SELECT * FROM categories ORDER BY builtin DESC, name").fetchall()]
+    for c in cats:
+        c['flow'] = category_flow(c)
+    return cats
 
 def add_category(conn: sqlite3.Connection, name: str,
                   group: str = '', builtin: int = 0) -> int:

@@ -158,6 +158,36 @@ class CategorizerTestCase(unittest.TestCase):
         self.assertEqual(store.nature_for_category(self._conn, 'transfer_to_person',
                                                    topup), 'transfer_to_person')
 
+    def test_07i_category_flow_for_picker(self):
+        # Income categories only make sense on money-in rows.
+        self.assertEqual(store.category_flow({'name': 'Income', 'group': ''}), 'in')
+        self.assertEqual(store.category_flow({'name': 'Salary', 'group': ''}), 'in')
+        self.assertEqual(store.category_flow({'name': 'Friend Loan', 'group': 'Loans'}),
+                         'in')
+        # Spend categories only on money-out rows.
+        self.assertEqual(store.category_flow({'name': 'Food & Dining',
+                                              'group': 'Food & Dining'}), 'out')
+        self.assertEqual(store.category_flow({'name': 'Friend Repayment',
+                                              'group': 'Loans'}), 'out')
+        # Transfers + Uncategorized show on both.
+        self.assertEqual(store.category_flow({'name': 'Internal Transfer',
+                                              'group': 'Transfers'}), 'both')
+        self.assertEqual(store.category_flow({'name': 'Uncategorized',
+                                              'group': 'Uncategorized'}), 'both')
+
+    def test_07j_ungrouped_custom_category_is_spend(self):
+        # A user-created category with no group must NOT be mistaken for income.
+        self.assertEqual(store.category_flow({'name': 'Rent', 'group': ''}), 'out')
+
+    def test_07k_list_categories_tags_flow(self):
+        store.get_or_create_category(self._conn, 'Food & Dining',
+                                     group='Food & Dining')
+        store.get_or_create_category(self._conn, 'Internal Transfer',
+                                     group='Transfers')
+        flows = {c['name']: c['flow'] for c in store.list_categories(self._conn)}
+        self.assertEqual(flows.get('Food & Dining'), 'out')
+        self.assertEqual(flows.get('Internal Transfer'), 'both')
+
     def test_08_atm_withdrawal(self):
         r = self._cat(description='Tarik Tunai', transaction_type='withdrawal')
         self.assertEqual(r['nature'], 'expense')

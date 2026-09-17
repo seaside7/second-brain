@@ -218,13 +218,26 @@ const rpSigned = n => {
     return `<span class="tx-conf tx-conf-${level}" title="${level} confidence${reason ? ' - ' + reason : ''}"></span>`;
   }
 
-  function _catSelect(r) {
-    const wantedCatId = r.category_id ? Number(r.category_id) : null;
+  /* Group categories for a given direction ('' | 'in' | 'out').
+     Categories are tagged with a flow ('in' | 'out' | 'both'); neutral
+     ('both') ones always show, the rest only for their direction. A
+     currently-selected category (keepId) is always kept so an existing
+     choice never disappears when the direction filters it out. */
+  function _catGroups(dir, keepId) {
+    const want = dir === 'in' ? 'in' : 'out';
     const groups = {};
     (_categories || []).forEach(c => {
+      const flow = c.flow || 'out';
+      if (flow !== 'both' && flow !== want && Number(c.id) !== Number(keepId)) return;
       const g = c.group || 'Other';
       (groups[g] = groups[g] || []).push(c);
     });
+    return groups;
+  }
+
+  function _catSelect(r) {
+    const wantedCatId = r.category_id ? Number(r.category_id) : null;
+    const groups = _catGroups(r.direction, wantedCatId);
     const opts = ['<option value="">Uncategorized</option>'];
     Object.keys(groups).sort().forEach(g => {
       let inner = groups[g].map(c =>
@@ -880,7 +893,7 @@ const rpSigned = n => {
         (a.group || a.name).localeCompare(b.group || b.name));
     } catch (_) { /* keep cached categories on failure */ }
     const accounts = _accountOptions();
-    const catOptions = _categoryOptions();
+    const catOptions = _categoryOptions('out');
     const card = document.createElement('div');
     card.className = 'tx-modal-backdrop';
     card.innerHTML = `
@@ -943,6 +956,13 @@ const rpSigned = n => {
     };
     catSel.addEventListener('change', toggleNewCat);
     toggleNewCat();
+    /* Re-filter the category list when the type flips in/out. */
+    card.querySelector('#tx-m-type').addEventListener('change', e => {
+      const keep = catSel.value;
+      catSel.innerHTML = _categoryOptions(e.target.value);
+      catSel.value = keep;
+      toggleNewCat();
+    });
     card.querySelector('#tx-m-save').addEventListener('click', async () => {
       const amount = (card.querySelector('#tx-m-amount').value || '').trim();
       const desc = (card.querySelector('#tx-m-desc').value || '').trim();
@@ -989,13 +1009,9 @@ const rpSigned = n => {
     return html;
   }
 
-  function _categoryOptions() {
+  function _categoryOptions(dir) {
     let html = '<option value="">Auto</option>';
-    const groups = {};
-    (_categories || []).forEach(c => {
-      const g = c.group || 'Other';
-      (groups[g] = groups[g] || []).push(c);
-    });
+    const groups = _catGroups(dir, null);
     Object.keys(groups).sort().forEach(g => {
       html += `<optgroup label="${U.esc(g)}">`;
       html += groups[g].map(c =>
