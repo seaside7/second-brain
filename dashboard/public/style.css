@@ -3787,3 +3787,41 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
 @media (max-width: 900px) {
   .ov-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ═══════════════════════════════════════════
+   TRADING BRAIN TAB (📈)
+   ═══════════════════════════════════════════ */
+.trading-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--sp-3); flex-wrap: wrap; margin-bottom: var(--sp-3);
+}
+.trading-title { margin: 0 0 var(--sp-1); font-size: var(--fs-lg); }
+.trading-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--text-muted); font-size: var(--fs-xs); }
+.trading-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 var(--sp-3); }
+.trading-chip {
+  font-size: var(--fs-xs); padding: 3px 9px; border-radius: 999px;
+  background: var(--bg-hover); border: 1px solid var(--border); color: var(--text-secondary);
+}
+.trading-chip.is-dim { color: var(--text-muted); }
+.trading-prose-line { margin: 0 0 6px; line-height: 1.55; color: var(--text-secondary); }
+.trading-prose-line.is-bullet { padding-left: 14px; position: relative; }
+.trading-prose-line.is-bullet::before { content: '•'; position: absolute; left: 2px; color: var(--text-muted); }
+.table-scroll { overflow-x: auto; }
+.trading-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+.trading-table th {
+  text-align: left; color: var(--text-muted); font-weight: 600; font-size: var(--fs-xs);
+  letter-spacing: 0.04em; text-transform: uppercase; padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.trading-table td { padding: 5px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.trading-table tbody tr:hover td { background: var(--bg-hover); }
+.trading-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.trading-table .nowrap { white-space: nowrap; }
+.trading-sub { color: var(--text-muted); font-weight: 400; text-transform: none; }
+.trading-metric { font-weight: 600; }
+.trading-winner {
+  font-size: var(--fs-xs); font-weight: 700; padding: 2px 8px; border-radius: 999px;
+  background: var(--bg-hover); border: 1px solid var(--border-active); color: var(--text-primary);
+}
+.trading-pos { color: var(--st-good); font-weight: 600; }
+.trading-neg { color: var(--st-serious); font-weight: 600; }

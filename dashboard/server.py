@@ -66,6 +66,7 @@ import workspace_resolver as ws_resolver  # noqa: E402
 # All /api/coding/* + /api/coding/preview/* traffic is delegated here.
 import coding_agent  # noqa: E402
 import transactions_api  # noqa: E402
+import trading_api  # noqa: E402
 
 # Model registry (Settings → AI Models): single resolution service for every
 # module. resolve_module/list_modules/execute power /api/models*; provider
@@ -595,6 +596,10 @@ JOB_RUN_MAP = {
     'work-hours': {
         'argv': ['python3', '.agent/skills/work-hours/scripts/work_hours.py', 'sweep', '--backfill', '2', '--quiet'],
         'lock': '/tmp/work_hours.lock',
+    },
+    'trading-brain': {
+        'argv': ['python3', '.agent/skills/trading-sheets/scripts/trading_brain.py', 'learn'],
+        'lock': '/tmp/trading_brain.lock',
     },
 }
 
@@ -3425,6 +3430,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._handle_get_finance()
         elif self.path.startswith('/api/transactions'):
             transactions_api.route_get(self)
+        elif self.path.startswith('/api/trading'):
+            trading_api.route_get(self)
         elif self.path.split('?')[0] == '/api/invoices':
             self._handle_get_invoices()
         elif self.path.split('?')[0] == '/api/invoice/file':
@@ -3572,6 +3579,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 transactions_api.route_post(self)
             except Exception as e:
                 self._send_json(500, json.dumps({'error': f'transactions route failed: {e}'}))
+        elif self.path.startswith('/api/trading'):
+            try:
+                trading_api.route_post(self)
+            except Exception as e:
+                self._send_json(500, json.dumps({'error': f'trading route failed: {e}'}))
         elif self.path == '/api/coding/jobs' or \
                 self.path.startswith('/api/coding/jobs/') or \
                 self.path.startswith('/api/coding/repos/'):
@@ -8586,6 +8598,44 @@ def _start_transactions_scheduler():
         print(f"  Transactions:  scheduler failed to start: {e}")
 
 
+def _start_trading_scheduler():
+    """Start the Trading Brain journal learner (diff + summarize every 6h).
+
+    Learn is idempotent and cheap when nothing new (a no-op diff), and the LLM
+    summary only fires when the journal tab gained rows since the last run. Runs
+    an immediate catch-up on start. Disabled without the personal Drive token
+    (which grants read access to the trading journal sheet).
+    """
+    try:
+        if not getattr(trading_api, '_IMPORTS_OK', False):
+            print(f"  Trading:      modules missing ({getattr(trading_api, '_IMPORT_ERR', '?')}), scheduler disabled")
+            return
+        token = BASE_DIR / '.agent' / 'workspaces' / 'personal' / 'token_drive.json'
+        if not token.exists():
+            print("  Trading:      scheduler disabled (no personal token at .agent/workspaces/personal/token_drive.json)")
+            return
+        learner = str(BASE_DIR / '.agent' / 'skills' / 'trading-sheets' / 'scripts' / 'trading_brain.py')
+        interval_s = 6 * 3600
+
+        def _learn_once():
+            try:
+                subprocess.run([sys.executable, learner, 'learn'],
+                               capture_output=True, timeout=180, cwd=str(BASE_DIR))
+            except Exception:
+                pass  # non-fatal: next 6h tick retries
+
+        def _loop():
+            _learn_once()
+            while True:
+                time.sleep(interval_s)
+                _learn_once()
+
+        threading.Thread(target=_loop, daemon=True).start()
+        print("  Trading:      journal learner armed (checks every 6h, learns on new records)")
+    except Exception as e:
+        print(f"  Trading:      scheduler failed to start: {e}")
+
+
 def main():
     # ThreadingHTTPServer: each request/connection gets its own thread, so one slow or
     # keep-alive browser connection can't freeze the whole dashboard (the old single-threaded
@@ -8595,6 +8645,7 @@ def main():
     coding_agent.start_background()
     threading.Thread(target=_intel_scheduler, daemon=True).start()
     _start_transactions_scheduler()
+    _start_trading_scheduler()
     print(f"\n  [Dashboard] running at http://localhost:{PORT}\n")
     print(f"  Intel feed:  auto 07:00 + 13:00 WIB")
     print(f"  Reading from: {DASHBOARD_PATH}")
