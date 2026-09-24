@@ -289,6 +289,129 @@ class CategorizerTestCase(unittest.TestCase):
             transaction_type='top_up', provider='bni', recipient='GoPay')
         self.assertEqual(r['nature'], 'internal_transfer')
 
+    def test_21_apotek_is_medical(self):
+        r = self._cat(description='Apotek Berkat K-24', transaction_type='qris')
+        self.assertEqual(r['group'], 'Health')
+        self.assertEqual(r['name'], 'Medical')
+        self.assertEqual(r['nature'], 'expense')
+        self.assertEqual(r['confidence'], 'high')
+
+    def test_22_klinik_obat_is_medical(self):
+        r = self._cat(description='Klinik Dokter Sehat - biaya obat',
+                      transaction_type='qris')
+        self.assertEqual(r['group'], 'Health')
+        self.assertEqual(r['name'], 'Medical')
+
+    def test_23_vitamin_shop_is_vitamins(self):
+        r = self._cat(description='Vitamin C1000 / Suplemen', transaction_type='qris')
+        self.assertEqual(r['group'], 'Health')
+        self.assertEqual(r['name'], 'Vitamins')
+        self.assertEqual(r['nature'], 'expense')
+
+    def test_24_streaming_subscription_is_leisure(self):
+        r = self._cat(description='Netflix', transaction_type='payment')
+        self.assertEqual(r['group'], 'Leisure')
+        self.assertEqual(r['name'], 'Leisure')
+        self.assertEqual(r['nature'], 'expense')
+
+    def test_25_game_purchase_is_leisure(self):
+        r = self._cat(description='Steam Games', transaction_type='va_payment')
+        self.assertEqual(r['group'], 'Leisure')
+        self.assertEqual(r['name'], 'Leisure')
+
+    def test_26_new_categories_in_taxonomy(self):
+        self.assertEqual(categorize._CAT['leisure'], ('Leisure', 'Leisure'))
+        self.assertEqual(categorize._CAT['health_vitamins'], ('Health', 'Vitamins'))
+        self.assertEqual(categorize._CAT['health_medical'], ('Health', 'Medical'))
+
+    def test_27_bca_va_is_not_person_transfer(self):
+        # BCA VA emails have 'Transfer to BCA Virtual Account' in the raw body -
+        # the row must flow to the VA rules, never the person-transfer branch.
+        r = self._cat(
+            description='VA - PT Lentera DANA Nusantara / Spinjam Bill',
+            raw_description='Transfer Type : Transfer to BCA Virtual Account '
+                            'Company/Product Name : PT LENTERA DANA NUSANTARA / '
+                            'SPINJAM Bill',
+            transaction_type='va_payment', recipient='PT LENTERA DANA NUSANTARA / SPINJAM Bill')
+        self.assertEqual(r['nature'], 'expense')
+        self.assertEqual(r['group'], 'Loans')
+        self.assertEqual(r['name'], 'Online Credit')
+
+
+class BcaJournalParserTestCase(unittest.TestCase):
+    """BCA 'internet transaction journal' emails - description must reflect the
+    email body payee detail, not the generic subject."""
+
+    def _parse(self, body, subject='Internet Transaction Journal'):
+        return gmail_sync._parse_bca(body, subject, '2026-09-20T10:00:00Z')
+
+    def test_transfer_uses_beneficiary_and_remarks(self):
+        body = (
+            'Transfer Type : Transfer to BCA Account\n'
+            'Beneficiary Name : DINDA FITRI NURUL AINI\n'
+            'Rekening Tujuan : 1234567890\n'
+            'Transfer Amount : IDR 103,000.00\n'
+            'Status : BERHASIL\n'
+            'Remarks : Beli Ayam'
+        )
+        rows = self._parse(body)
+        self.assertEqual(len(rows), 1)
+        r = rows[0]
+        self.assertEqual(r['description'],
+                         'Transfer - Dinda Fitri Nurul Aini - Beli Ayam')
+        self.assertEqual(r['recipient'], 'DINDA FITRI NURUL AINI')
+        self.assertEqual(r['transaction_type'], 'transfer')
+        self.assertEqual(r['direction'], 'out')
+        self.assertEqual(r['total_amount'], 103000)
+
+    def test_va_uses_company_and_not_wallet_topup(self):
+        body = (
+            'Transfer Type : Transfer to BCA Virtual Account\n'
+            'Name : DINX LUTXXXXX\n'
+            'Company/Product Name : PT AIRPAY INTERNATIONAL INDONE / SHOPEEPAY\n'
+            'Pay Amount : IDR 40,000.00\n'
+            'Status : BERHASIL'
+        )
+        rows = self._parse(body)
+        self.assertEqual(len(rows), 1)
+        r = rows[0]
+        self.assertEqual(r['description'],
+                         'VA - PT AirPay International Indone / ShopeePay')
+        self.assertEqual(r['recipient'],
+                         'PT AIRPAY INTERNATIONAL INDONE / SHOPEEPAY')
+        self.assertEqual(r['transaction_type'], 'va_payment')
+        self.assertEqual(r['total_amount'], 40000)
+
+    def test_transfer_without_remarks_no_suffix(self):
+        body = (
+            'Transfer Type : Transfer to BCA Account\n'
+            'Beneficiary Name : BUDI SANTOSO\n'
+            'Transfer Amount : IDR 50,000.00\n'
+            'Remarks : -'
+        )
+        rows = self._parse(body)
+        self.assertEqual(rows[0]['description'], 'Transfer - Budi Santoso')
+        self.assertEqual(rows[0]['recipient'], 'BUDI SANTOSO')
+
+    def test_qris_unchanged(self):
+        body = (
+            'You just made a transaction\n'
+            'Transaction Type : QRIS\n'
+            'To : WARUNG GORENGAN BAHARI\n'
+            'Merchant Location : BEKASI\n'
+            'Total Payment : IDR 25,000.00'
+        )
+        rows = self._parse(body)
+        self.assertEqual(rows[0]['description'], 'QRIS - Warung Gorengan Bahari')
+        self.assertEqual(rows[0]['transaction_type'], 'qris')
+
+    def test_no_payee_falls_back_to_subject(self):
+        body = ('Transaction Type : PURCHASE\n'
+                'Product : Pensiun\n'
+                'Total Payment : IDR 100,000.00')
+        rows = self._parse(body)
+        self.assertEqual(rows[0]['description'], 'Internet Transaction Journal')
+
 
 class ReprocessTestCase(unittest.TestCase):
     """reprocess._reprocess_doc: idempotency + manual-correction preservation."""

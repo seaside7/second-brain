@@ -338,10 +338,16 @@ def _parse_bca(body: str, subject: str, occurred_at: str) -> list[dict]:
         # Direction from the journal's own wording.
         direction = 'in' if any(k in body_l for k in ['credit', 'received', 'dana masuk', 'kredit']) else 'out'
 
+        # Preferred over the subject: the journal's own payee detail (the
+        # subject is just the generic "Internet Transaction Journal").
+        detail, recipient, detail_type = _bca_journal_payee(body, body_l)
         tx_type, clean = _bca_clean(method, subject, body)
+        if detail:
+            tx_type, clean = detail_type, detail
         return [_build_row('bca', clean, direction, amount,
                            _extract_txn_id(body), occurred_at,
-                           raw_description=body[:2000], transaction_type=tx_type)]
+                           raw_description=body[:2000], transaction_type=tx_type,
+                           recipient=recipient)]
 
     # Generic BCA notification: bare amount + bank markers.
     amount = _extract_amount(body)
@@ -351,9 +357,73 @@ def _parse_bca(body: str, subject: str, occurred_at: str) -> list[dict]:
         return []
     direction = 'in' if any(k in body_l for k in ['credit', 'received', 'diterima', 'masuk', 'kredit']) else 'out'
     tx_type, clean = _bca_clean('', subject, body)
+    detail, recipient, detail_type = _bca_journal_payee(body, body_l)
+    if detail:
+        tx_type, clean = detail_type, detail
     return [_build_row('bca', clean, direction, amount,
                        _extract_txn_id(body), occurred_at,
-                       raw_description=body[:2000], transaction_type=tx_type)]
+                       raw_description=body[:2000], transaction_type=tx_type,
+                       recipient=recipient)]
+
+
+# Labels that appear AFTER the payee detail in a (single-line) BCA journal
+# email. Cutting at the earliest of these keeps 'PT AIRPAY ... / SHOPEE Bill'
+# intact ('Bill' is a product name, not a label) while dropping tails like
+# 'Transfer' from 'Transfer Amount' or 'Pay' from 'Pay Amount'.
+_PAYEE_CUT_LABELS = ('Total Payment', 'Pay Amount', 'Transfer Amount',
+                     'Transfer Currency', 'Transfer Type', 'Company/Product Name',
+                     'Beneficiary Account', 'Reference No.', 'Description',
+                     'Remarks', 'Berita', 'Status', 'Note(s)', 'Sumber dana',
+                     'Total', 'Reference', 'Name')
+
+
+def _label_field(text: str, label: str) -> str:
+    """Value after ``label``, cut at the next known label.
+
+    The BCA internet journal emails pack many label:value pairs on ONE line
+    (e.g. '... Beneficiary Name : DINDA ... Transfer Amount : IDR ...'). The
+    token-based _label_value cut can leave a compound label's first word behind
+    ('Transfer' from 'Transfer Amount'), so here the value ends at the earliest
+    known following label token or a newline.
+    """
+    m = re.search(re.escape(label) + r'\s*[:\-]\s*', text)
+    if not m:
+        return ''
+    rest = text[m.end():]
+    cuts = [i for i in (rest.find(c, 1) for c in _PAYEE_CUT_LABELS) if i > 0]
+    nl = rest.find('\n')
+    if nl > 0:
+        cuts.append(nl)
+    if cuts:
+        rest = rest[: min(cuts)]
+    return re.sub(r'\s+', ' ', rest).strip(' .,:;|•\u2022').strip()
+
+
+def _bca_journal_payee(body: str, body_l: str) -> tuple[str, str, str]:
+    """Payee detail from a myBCA internet journal body.
+
+    Transfers name a Beneficiary (with optional Remarks); Virtual Account
+    payments name a Company/Product (or a person 'Name'). Returning this keeps
+    the description faithful to the email the owner reads, instead of the
+    generic subject 'Internet Transaction Journal'.
+
+    Returns (description, recipient, transaction_type); all empty when the
+    body has no payee detail (the caller keeps its subject fallback).
+    """
+    recipient = _label_field(body, 'Beneficiary Name')
+    if recipient:
+        desc = f'Transfer - {_display_case(recipient)}'
+        remarks = _label_field(body, 'Remarks') or _label_field(body, 'Berita')
+        if remarks and remarks.strip('- '):
+            desc += f' - {_display_case(remarks)}'
+        return desc, recipient, 'transfer'
+    if 'virtual account' in body_l:
+        payee = _label_field(body, 'Company/Product Name')
+        if not payee:
+            payee = _label_field(body, 'Name')
+        if payee:
+            return f'VA - {_display_case(payee)}', payee, 'va_payment'
+    return '', '', ''
 
 
 def _bca_clean(method: str, subject: str, body: str) -> tuple[str, str]:
@@ -370,7 +440,9 @@ def _bca_clean(method: str, subject: str, body: str) -> tuple[str, str]:
         merchant = _label_value(body, 'To') or _label_value(body, 'Merchant')
         # BCA QRIS emails append 'Merchant Location : <area>, Id Acquirer :
         # <name>, Merchant Pan : <digits>' right after the merchant name - never
-        # leak that technical data into the clean description.
+        # leak that technical data into the clean description. Some templates
+        # put those labels on their own line, so normalise newlines first.
+        merchant = merchant.replace('\n', ' ')
         for cut in (' Merchant Location', ' Merch Location', ' Id Acquirer',
                     ' Acquirer', ' Merchant Pan', ' Pan ', ' PAN'):
             i = merchant.lower().find(cut.lower())
@@ -821,11 +893,11 @@ def _build_row(provider: str, description: str, direction: str, amount: int,
 # ── display + masking helpers ─────────────────────────────────────────────
 
 _DISPLAY_CAPS = {'pln', 'pdam', 'bpjs', 'bca', 'bni', 'bri', 'spbu', 'xl',
-                 'idr', 'qr', 'qris', 'vw'}
+                 'idr', 'qr', 'qris', 'vw', 'pt'}
 _DISPLAY_MAP = {'gopay': 'GoPay', 'ovo': 'OVO', 'dana': 'DANA', 'emoney': 'e-Money',
                 'e-money': 'e-Money', 'indihome': 'IndiHome', 'telkomsel': 'Telkomsel',
-                'shopee': 'Shopee', 'tokopedia': 'Tokopedia',
-                'mandiri': 'Mandiri', 'siapa': 'Siapa'}
+                'shopee': 'Shopee', 'shopeepay': 'ShopeePay', 'airpay': 'AirPay',
+                'tokopedia': 'Tokopedia', 'mandiri': 'Mandiri', 'siapa': 'Siapa'}
 
 # Sensitive patterns: masked before storage so they never reach UI / logs / AI.
 _SENSITIVE_PATTERNS = [

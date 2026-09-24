@@ -77,6 +77,9 @@ _CAT = {
     'vehicle_service': ('Vehicle', 'Car Service'),
     'home_upkeep':     ('Home', 'Home Maintenance & Repair'),
     'shopping':        ('Shopping', 'Online Shopping'),
+    'leisure':        ('Leisure', 'Leisure'),
+    'health_vitamins': ('Health', 'Vitamins'),
+    'health_medical': ('Health', 'Medical'),
     'cash':           ('Cash', 'Cash Withdrawal'),
     'fee':            ('Fees', 'Bank Fee'),
     'loan_payment':   ('Loans', 'Loan Payment'),
@@ -126,6 +129,12 @@ _VEHICLE_SERVICE = ['bengkel', 'servis', 'service', 'spooring', 'tune-up',
 _HOME_UPKEEP = ['tukang', 'plumber', 'ledeng', 'renovasi',
                 'perbaikan rumah', 'servis ac', 'ac service', 'kulkas',
                 'keran', 'cctv']
+_MEDICAL = ['apotek', 'pharmacy', 'farmasi', 'klinik', 'dokter', 'rumah sakit',
+            'hospital', 'obat', 'puskesmas', 'laboratorium']
+_VITAMINS = ['vitamin', 'suplemen', 'supplement', 'multivitamin']
+_LEISURE = ['netflix', 'spotify', 'youtube', 'steam', 'playstation', 'xbox',
+            'game', 'gaming', 'bioskop', 'cinema', 'movie', 'konser', 'concert',
+            'hobi', 'hobby', 'museum', 'bowling', 'golf', 'karaoke']
 _ATM_CASH = ['tarik tunai', 'withdrawal', 'penarikan tunai']
 _INCOME_HINTS = ['gaji', 'salary', 'payroll', 'invoice', 'honor', 'dana masuk',
                  'transfer masuk', 'terima', 'received', 'freelance', 'upah']
@@ -368,7 +377,9 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
     # 2. TRANSFER detection (bank out / person transfer) - do NOT auto-treat
     #    the sign or subject as income/expense. Transfer to own account is
     #    internal; to another person it is a tracked, non-spend transfer.
-    if direction == 'out' and _is_transfer_desc(desc):
+    #    VA payments never qualify: their raw body often says 'Transfer to BCA
+    #    Virtual Account' but a VA always belongs to a real biller, not a person.
+    if direction == 'out' and tx_type != 'va_payment' and _is_transfer_desc(desc):
         if _is_own_name_transfer(row):
             set_cat('internal', 'internal_transfer', 'high',
                     'Transfer to own account')
@@ -395,7 +406,7 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
         return hit
 
     # 2.5 MONEY-IN transfer (credit) - not income by sign alone.
-    if direction == 'in' and _is_transfer_desc(desc):
+    if direction == 'in' and tx_type != 'va_payment' and _is_transfer_desc(desc):
         if _is_own_name_transfer(row):
             set_cat('internal', 'internal_transfer', 'high',
                     'Transfer from own account')
@@ -443,6 +454,20 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
     #     vehicle 'servis' so home services win over Car Service.
     if any(_has(desc, m) for m in _HOME_UPKEEP):
         set_cat('home_upkeep', 'expense', 'high', 'Home repair / tukang')
+        return hit
+
+    # 5c. HEALTH - medical / pharmacy first, then supplements/vitamins. Before
+    #     food so an apotek row is never mistaken for a warung.
+    if any(_has(desc, m) for m in _MEDICAL):
+        set_cat('health_medical', 'expense', 'high', 'Medical / pharmacy')
+        return hit
+    if any(_has(desc, m) for m in _VITAMINS):
+        set_cat('health_vitamins', 'expense', 'high', 'Vitamins / supplements')
+        return hit
+
+    # 5d. LEISURE - streaming, games, entertainment.
+    if any(_has(desc, m) for m in _LEISURE):
+        set_cat('leisure', 'expense', 'high', 'Leisure / entertainment')
         return hit
 
     # 6. FOOD & DINING - one flat category. Food words (incl. warung/warkop)
