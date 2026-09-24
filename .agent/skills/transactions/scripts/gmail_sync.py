@@ -368,13 +368,17 @@ def _parse_bca(body: str, subject: str, occurred_at: str) -> list[dict]:
 
 # Labels that appear AFTER the payee detail in a (single-line) BCA journal
 # email. Cutting at the earliest of these keeps 'PT AIRPAY ... / SHOPEE Bill'
-# intact ('Bill' is a product name, not a label) while dropping tails like
-# 'Transfer' from 'Transfer Amount' or 'Pay' from 'Pay Amount'.
+# intact ('Bill' is a product name, not a label) while dropping compound-label
+# tails like 'Transfer' from 'Transfer Amount' or BI-FAST extras like
+# 'Beneficiary Bank : ...' / 'Save To Beneficiary List : Yes'.
 _PAYEE_CUT_LABELS = ('Total Payment', 'Pay Amount', 'Transfer Amount',
                      'Transfer Currency', 'Transfer Type', 'Company/Product Name',
-                     'Beneficiary Account', 'Reference No.', 'Description',
-                     'Remarks', 'Berita', 'Status', 'Note(s)', 'Sumber dana',
-                     'Total', 'Reference', 'Name')
+                     'Beneficiary Account', 'Beneficiary Bank', 'Beneficiary Mobile',
+                     'Beneficiary Address', 'Save To Beneficiary List',
+                     'Transaction Purpose', 'Transfer Purpose', 'Destination Bank',
+                     'Reference No.', 'Description', 'Remarks', 'Berita', 'Status',
+                     'Note(s)', 'Sumber dana', 'Total', 'Reference', 'Name',
+                     'Tujuan Transfer', 'Bank Tujuan', 'Penerima')
 
 
 def _label_field(text: str, label: str) -> str:
@@ -396,7 +400,8 @@ def _label_field(text: str, label: str) -> str:
         cuts.append(nl)
     if cuts:
         rest = rest[: min(cuts)]
-    return re.sub(r'\s+', ' ', rest).strip(' .,:;|•\u2022').strip()
+    val = rest.replace('&nbsp;', ' ')
+    return re.sub(r'\s+', ' ', val).strip(' .,:;|•\u2022').strip()
 
 
 def _bca_journal_payee(body: str, body_l: str) -> tuple[str, str, str]:
