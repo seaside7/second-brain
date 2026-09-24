@@ -394,7 +394,8 @@ def _label_field(text: str, label: str) -> str:
     if not m:
         return ''
     rest = text[m.end():]
-    cuts = [i for i in (rest.find(c, 1) for c in _PAYEE_CUT_LABELS) if i > 0]
+    rest_l = rest.lower()
+    cuts = [i for i in (rest_l.find(c.lower(), 1) for c in _PAYEE_CUT_LABELS) if i > 0]
     nl = rest.find('\n')
     if nl > 0:
         cuts.append(nl)

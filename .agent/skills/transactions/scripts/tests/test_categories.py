@@ -410,6 +410,21 @@ class BcaJournalParserTestCase(unittest.TestCase):
             'You just made a transaction through myBCA. Here are the details '
             'of your transaction : Status : Successful Transaction Date : '
             '14 Sep 2026 Transfer Type : Transfer to BCA Account '
+            'Beneficiary Name : ARDIAN Save to Beneficiary List : Yes '
+            'Transfer Amount : IDR 44,000.00 '
+            'Beneficiary Bank : Bank Smbc Indonesia &nbsp - - '
+            'Transaction Purpose : Transfer Of Wealth Reference No. : 56EF802A'
+        )
+        rows = self._parse(body)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['description'], 'Transfer - Ardian')
+        self.assertEqual(rows[0]['recipient'], 'ARDIAN')
+
+    def test_transfer_bifast_html_entities_stripped(self):
+        body = (
+            'You just made a transaction through myBCA. Here are the details '
+            'of your transaction : Status : Successful Transaction Date : '
+            '14 Sep 2026 Transfer Type : Transfer to BCA Account '
             'Beneficiary Name : ALYA SABRINA ALISKI &nbsp; Beneficiary Bank : '
             'Bank Smbc Indonesia &nbsp - - Transaction Purpose : Transfer Of '
             'Wealth Reference No. : 56EF802A Total Payment : IDR 44,000.00'
