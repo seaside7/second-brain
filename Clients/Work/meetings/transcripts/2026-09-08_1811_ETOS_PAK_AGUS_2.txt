@@ -1,0 +1,1953 @@
+**[00:00]** dia muat di PSB, PGC, dia planning dulu tuh.
+**[00:04]** Jadi ketika dia mau muat di atas kapal ekspor, dia serendahin dulu nih kontrol ini,
+**[00:10]** akan singgah, itu gimana, dan makanya karena begitu data import ini sangat penting gitu loh.
+**[00:18]** Karena dia nggak mungkin nge-plan di posisi yang nggak ada.
+**[00:21]** Tapi kemarin kita infonya dari PSP itu kalau UMT malah nggak di-planning, jadi mereka masuk-masuk aja.
+**[00:28]** Nanya-nya sama siapa? Nanya-nya sama Pak Andi pasti harusnya di-planning, tapi kalau nanya-nya sama Pak Andi, iya.
+**[00:33]** Karena infonya dari Pak Andi kan?
+**[00:36]** Jadi Pak Andi emang harusnya di-planning.
+**[00:38]** Kalau yang full load itu di-planning, tapi kalau misalnya yang empty, saya lihat dulu, dia nggak planning.
+**[00:47]** Iya, karena kalau Pak Andi harusnya di-planning.
+**[00:49]** Harusnya di-planning, karena kosong anyway.
+**[00:53]** Mereka kembangnya, oke kirim 10 kontainer ke blok ini, kalau mau mereka di-planning.
+**[00:58]** Makanya di ETHOS selama itu ada activity code, loading without planning.
+**[01:04]** Kalau planning dengan tadi yang LDP, LDP mungkin ya.
+**[01:15]** Tapi saya udah tanya-tanya sama Pak Andi, sama tim PMK juga, di ETHOS baru, saya nggak kenal LDP.
+**[01:25]** Saya nggak mau ada loading without planning.
+**[01:29]** Kenapa? Karena sekedulungan kliennya sekarang.
+**[01:32]** Kalau internasional, case-nya nggak masalah.
+**[01:34]** Ini yang masalah domestiknya, domestik tuh agak-agak serabutan, agak-agak aturannya udah jelas gitu ya.
+**[01:39]** Kalau misalnya berkapal, kadang problemnya itu waktu mengemuatan.
+**[01:42]** Kalau di internasional nggak ada cerita.
+**[01:45]** Iya, ditinggal aja ya.
+**[01:46]** Berpintingnya kan udah fixed tuh, kalau nggak kogresifan banyak kapal yang empty.
+**[01:50]** Di PNP itu kadang dipaksa nunggu sama kliennya.
+**[01:55]** Itu mungkin agak-agak ngaduk gitu, mereka agak susah tuh.
+**[02:00]** Maaf Pak, ini mulai Pak, saya agak-agak loading nih.
+**[02:03]** Kita baru bahas-bahas lho.
+**[02:07]** Jum' 12, mau nunggu siang, nunggu semalem ya Pak.
+**[02:10]** Apa-apa, langsung aja ya, sorry ya.
+**[02:13]** Jadi tadi yang di-plan itu, dari sisi operational port yang rima barang itu, itu mereka planning?
+**[02:21]** Yang rima. Ini kita masih ngomong import ya?
+**[02:24]** Ini mau jangkau pas pemuatan, nanti nyampe disitu sih mas.
+**[02:28]** Masih jangkau alur-alurnya dulu.
+**[02:30]** Yang planning tadi apa?
+**[02:32]** Itu pemuatan.
+**[02:33]** Oh, pemuatan nanti.
+**[02:34]** Nanti-nanti, ini nanti ada proses, terus gitu.
+**[02:39]** Ini masih ngomong kita kapal datang nih.
+**[02:42]** Belum ada planning nggak disini tadi?
+**[02:43]** Disini belum ada planning, kapal datang, kita ngakut data.
+**[02:48]** Ngakut data, data posisi keluarga di dalam kapal.
+**[02:52]** Nggak semuanya bateri, kalau Indonesia semuanya bateri, itu standar internasional.
+**[02:57]** Kayak Tanto, PNR Steel, itu kadang ngasihnya itu berupa Excel.
+**[03:05]** File Excel.
+**[03:07]** Tapi intinya sama, kontainer sama posisinya di kapal.
+**[03:11]** Jadi sebenarnya di file ini yang diperlukan,
+**[03:15]** sesuatu yang diperlukan itu hanya Tanto yang penting.
+**[03:18]** Posisi di kapal sama pelabuhan Excel.
+**[03:23]** Jadi susah nentukan dia dibongkar disitu atau di tempat lain.
+**[03:28]** Berarti kalau yang Excel tadi tetap sama, Pak?
+**[03:31]** Kalau di Ethos-nya di menu yang...
+**[03:33]** Sama, ketika upload data muatan, itu tetap bongkar.
+**[03:41]** Itu dia pilih Excel atau...
+**[03:44]** Tapi kalau di Pesek ini nanti pakai domestik itu nggak kebebasan.
+**[03:48]** Walaupun mereka sebenarnya bisa sih.
+**[03:50]** Bila kebiasaan lagi pakai Excel gitu ya?
+**[03:52]** Kebiasaan dulu mungkin masih tradisionalnya pelayanannya.
+**[03:56]** Kalau sekarang kan pelayanan, posisi-posisinya udah udah selesai.
+**[04:00]** Harusnya sudah mulai bisa dipersihkan ke arah sana sih.
+**[04:03]** Di PNP lagi kita coba ke arah sana, kita menggunakan baktis.
+**[04:06]** PPNP pun udah bisa jadi baktis.
+**[04:08]** PPNP pelayanan kita, customernya PNP sama Pesek.
+**[04:12]** PNP, Pesek.
+**[04:14]** Domestik itu, nah kalau bedanya domestik-domestik itu memang banyak aturan yang...
+**[04:20]** Yang diawalkan, itu terus.
+**[04:23]** Kalau di Excel itu jelas.
+**[04:28]** Itu jelas.
+**[04:30]** Oke, lanjut.
+**[04:33]** Backline juga disini.
+**[04:35]** Informasi B tadi ada disini juga.
+**[04:37]** Kenapa?
+**[04:39]** Jadi output dari selang update ini, ada namanya kita bisa nge-print by plain info.
+**[04:45]** Teman-teman lihat, by plain info.
+**[04:47]** Nah, ini upah-upah.
+**[04:49]** Ada nggak?
+**[04:51]** Dikit sih.
+**[04:53]** By plain document?
+**[05:03]** Homescreen aja.
+**[05:07]** Homescreennya, entire screennya ini.
+**[05:09]** Ini kan ya?
+**[05:11]** Oh nggak, ini profile bay.
+**[05:13]** Oh ini profile bay.
+**[05:15]** Ini nggak ada nomor kontainernya kan?
+**[05:17]** Nggak ada.
+**[05:19]** Oh kalau itu langsung ada nomor kontainernya ya.
+**[05:23]** Bapak itu termasuk berat kontainernya juga nggak?
+**[05:26]** Ada, ada. Berat kontainer.
+**[05:28]** Di by plain itu?
+**[05:30]** Bagai pejangan manual.
+**[05:36]** Biasanya kalau import dia nggak konsentrasi berat.
+**[05:40]** Iya, kalau muat ya.
+**[05:42]** Kalau import kan dia tinggal turunin dari kantor.
+**[05:44]** Iya.
+**[05:46]** Makanya kalau import biasanya nggak disimpan.
+**[05:49]** Kalau export.
+**[05:59]** Kalau commodity, yang mainkan siapa ya Pak?
+**[06:03]** Jadi gini, terminal itu kan selalunya
+**[06:05]** Buang kertas, buang muat doang ya Pak?
+**[06:07]** Enggak, bukan.
+**[06:09]** Seperti packagingnya, kontainer.
+**[06:11]** Commodity itu kadang-kadang marketing,
+**[06:13]** terutama marketing terminal butuh
+**[06:15]** untuk kalau kita mikirkan efek terminal itu
+**[06:17]** mungkin bisa bantu cargo.
+**[06:19]** Iya, betul.
+**[06:21]** Tapi sebenarnya commodity itu
+**[06:23]** terminal itu nggak konten karena commodity.
+**[06:25]** Dia konsennya terhadap
+**[06:27]** kalau misalnya cargo ini digi atau enggak.
+**[06:29]** Iya.
+**[06:31]** Kalau itulah kita nggak perlu tahu komoditinya sebenarnya.
+**[06:33]** Kita tahu diginya.
+**[06:35]** Kalau dari si point of view terminal ya,
+**[06:37]** cuman kadang-kadang marketing cargo itu
+**[06:41]** data commodity.
+**[06:44]** Maksudnya kita lah.
+**[06:46]** Pelayaran tapi harusnya pegang ya Pak?
+**[06:48]** Nah, kadang kalau di amati,
+**[06:50]** kalau di internasional mungkin mereka
+**[06:52]** langsung-langsung harus mengetahuinya.
+**[06:56]** Cuman kalau di permasingan sebenarnya ngumpetin.
+**[06:58]** Iya, kenapa?
+**[07:00]** Mereka juga pintar.
+**[07:04]** Takutnya di undercut ya?
+**[07:10]** Kita lanjut Pak.
+**[07:13]** Nah, yang ini mungkin perlu tambahannya.
+**[07:15]** Ini kurang perlu tambah.
+**[07:17]** Jadi kadang memang
+**[07:19]** ada yang
+**[07:25]** flat rack container.
+**[07:27]** Flat rack container itu kan
+**[07:29]** kalau di bike rack, dia menempati satu base.
+**[07:31]** Satu lokasi.
+**[07:33]** Flat rack.
+**[07:35]** Flat rack ini kan misalnya ada empatnya.
+**[07:37]** Biasanya kan dia kalau ngirim itu
+**[07:39]** empat container.
+**[07:41]** Biasanya yang paling bawah, yang di atlet.
+**[07:43]** Sedangkan atlet perlu untuk
+**[07:45]** di atlet tiga lagi.
+**[07:57]** Jadi flat rack itu cuman
+**[07:59]** plat besi gitu doang Mas?
+**[08:01]** Gak ada tube ya?
+**[08:03]** Flat rack itu kan container yang base-nya
+**[08:05]** buat ratakannya lah.
+**[08:07]** Biasanya untuk kartu yang oversize
+**[08:10]** atau overheated.
+**[08:12]** Kalau dia kosong,
+**[08:14]** kalau cuman satu, dia rugi tuh.
+**[08:16]** Jadi dia ngirimnya
+**[08:18]** dalam empat debukan.
+**[08:20]** Biasanya kalau di bike rack,
+**[08:22]** mungkin atlet cuman satu.
+**[08:24]** Yang bawahnya doang.
+**[08:26]** Jadi yang tergantung cuman satu.
+**[08:28]** Kadang makanya perlu ada
+**[08:30]** tambahin tuh data di atlet.
+**[08:32]** Kenapa Pak?
+**[08:34]** Kenapa harus ada itu di atlet?
+**[08:36]** Harus ada di atlet juga kan?
+**[08:46]** Misalkan saya mau satu-satu.
+**[08:48]** Karena kebutuhan cost-ready.
+**[08:50]** Beda-beda ya?
+**[08:54]** Dan diangkatnya juga satu-satu kan?
+**[08:56]** Bisa langsung satu-satu.
+**[08:58]** Kalau satu bundel dibukin dari carry-nya,
+**[09:00]** dibukin luar terminal,
+**[09:02]** ada satu bundel di atlet.
+**[09:05]** Bagaimana posisinya?
+**[09:07]** Ini sih kebutuhan
+**[09:09]** karena cost-free saja.
+**[09:15]** Di atlet itu sebenarnya
+**[09:17]** cuma ada tiga table utama.
+**[09:19]** Terkait operational ya.
+**[09:21]** Trust announcement inbound.
+**[09:23]** Trust announcement inbound.
+**[09:25]** Trust announcement inbound.
+**[09:27]** Trust announcement export.
+**[09:29]** Trouble transaction announcement inbound.
+**[09:31]** Trust announcement export.
+**[09:33]** Tiga table itu saja.
+**[09:35]** Trust announcement inbound.
+**[09:37]** Trust announcement export.
+**[09:39]** Jadi, announcement inbound itu untuk
+**[09:41]** ngampung data import.
+**[09:45]** Activity detail untuk ngambil activity itu.
+**[09:47]** Kalau ada discuss, placement,
+**[09:49]** itu dapet semua di situ, ada kodenya.
+**[09:51]** Summary-nya gitu.
+**[09:53]** Activity-nya.
+**[09:55]** Trust announcement outbound untuk dapet data import.
+**[09:57]** Sama satu lagi,
+**[09:59]** trust announcement inbound,
+**[10:02]** trust announcement outbound.
+**[10:04]** Untuk yang ini,
+**[10:06]** upload API, kita uploadnya masukin
+**[10:08]** trust announcement inbound.
+**[10:12]** Kedulian ini, itu cuma sebenarnya
+**[10:14]** nambah row.
+**[10:18]** Saya jelasin untuk masuk ke sini.
+**[10:26]** Ini kapal belum dateng.
+**[10:28]** Ketika kapal dateng, ada namanya
+**[10:30]** masukin actual data.
+**[10:34]** Jadi sebenarnya flow-nya bisa seperti ini.
+**[10:40]** Kadang bahkan,
+**[10:42]** bisa juga ketika kapal udah dateng,
+**[10:44]** baru masukin flow-nya.
+**[10:47]** Oh, iya-iya.
+**[10:57]** Oke, terus apa lagi?
+**[10:59]** Terus abis itu kan, setelah
+**[11:01]** level-nya udah sampai,
+**[11:03]** kita aktifkan actual level-nya.
+**[11:09]** Oh iya, ini saya kotakin karena ini
+**[11:11]** proses step-in during gitu, Pak.
+**[11:13]** Yang menuruninnya lagi.
+**[11:16]** Nah, di sini kan ada, masuk ke
+**[11:18]** tablet kontennya keren ya,
+**[11:20]** kalau di PSV itu.
+**[11:22]** Terus belum ke situ.
+**[11:26]** Berarti ada trigger ketika kita update
+**[11:28]** actual-nya sama start-up-nya.
+**[11:32]** Baru itu bisa masuk ke...
+**[11:34]** Kayak buka kunci lah.
+**[11:36]** Kita kan ada validasi
+**[11:38]** di modul selanjutnya.
+**[11:40]** Dia nggak bisa kalau kapalnya belum dateng.
+**[11:42]** Di logis aja dong.
+**[11:46]** Abis itu masuk ke tablet,
+**[11:48]** di PC gitu ya?
+**[11:50]** Intinya ya,
+**[11:52]** sebetulnya tablet PC atau handheld
+**[11:54]** atau apalah namanya,
+**[11:56]** kita menyakat,
+**[11:58]** menyediakan,
+**[12:00]** jadi setelah kapal kita kan ada kerjaan mengongkar nuat.
+**[12:02]** Mungkin kita mengongkar dulu ya,
+**[12:04]** karena kan sebenarnya bisa
+**[12:06]** mengongkar nuatnya,
+**[12:08]** tapi biar flow-nya enak, kita mengongkar dulu.
+**[12:12]** Mengongkar, terus...
+**[12:16]** Set operator,
+**[12:18]** set operator,
+**[12:20]** jadi gini, kalau di SS itu ada
+**[12:22]** namanya pertama kejadian planning.
+**[12:26]** Planning,
+**[12:28]** jadi sebelum,
+**[12:30]** ada special operation, jadi planning,
+**[12:32]** special operation,
+**[12:34]** planning, special operation,
+**[12:36]** terus baru,
+**[12:39]** nah kalau,
+**[12:41]** special operation,
+**[12:45]** kalau planning,
+**[12:51]** termasuk equipment allocation,
+**[12:53]** jadi sebenarnya,
+**[12:55]** kalau mau bagi mas, ada planning,
+**[12:57]** ada kegiatan kapal,
+**[12:59]** ada kegiatan resipi,
+**[13:01]** jadi flow-nya enak,
+**[13:03]** mana yang planning, mana ini.
+**[13:05]** Yang set operator,
+**[13:07]** itu bagian planning.
+**[13:09]** Di ethos-nya, Pak ya?
+**[13:11]** Bukan di tablet, kontra kredit.
+**[13:13]** Sebenarnya kalau di ultimate, itu dalam satu modul ya?
+**[13:15]** Ya, kalau di ethos ultimate,
+**[13:17]** sebenarnya,
+**[13:19]** tugasnya handheld tablet,
+**[13:21]** itu hanya mencatat,
+**[13:23]** kapan dia bayar, atau kemana gitu.
+**[13:25]** Nah kemana yang ditulis,
+**[13:27]** adalah kapal yang sudah dialokasi.
+**[13:29]** Dari ethos-nya.
+**[13:31]** Di mana itu Pak?
+**[13:34]** Kalau di sini dipakai nggak?
+**[13:38]** Kalau di PSP itu kayaknya nggak dipakai.
+**[13:40]** Dia langsung di tabletnya.
+**[13:44]** Yang kayak gitu-gitu tuh,
+**[13:46]** kita mau coba ngelapihin.
+**[13:48]** Jadi semua itu harus dimulai dari itu.
+**[13:56]** Di bagian mana, Pak?
+**[13:58]** Di sini.
+**[14:00]** Di depan.
+**[14:02]** Istilahnya kalau pool-nya apa lainnya,
+**[14:04]** kalau di planning.
+**[14:06]** Maksud saya, sebelum vessel schedule dibuat,
+**[14:08]** atau setelah dibuat?
+**[14:14]** Setelah vessel schedule.
+**[14:16]** Karena setelah planning,
+**[14:18]** dia harus ngambil vessel schedule-nya mana.
+**[14:20]** Jadi intinya untuk kapal ini,
+**[14:22]** yang terjatuh, siap.
+**[14:24]** Nggak cuma teret,
+**[14:26]** tapi alatnya,
+**[14:28]** equipment-nya, segala macam.
+**[14:31]** Samper tinggi juga, Pak?
+**[14:33]** Samper tinggi.
+**[14:35]** Jadi ketika berkerja,
+**[14:37]** itu udah ada validasinya.
+**[14:39]** Nanti akan mempermuda
+**[14:41]** pada saat muka.
+**[14:43]** Dia nggak usah ngubilin lagi.
+**[14:45]** Jadi ketika siap ini,
+**[14:47]** yang bisa dipilih cuma kalau nggak dia, dia.
+**[14:49]** Terus atau misalkan nanti,
+**[14:51]** itu kaitannya nanti banyak tuh
+**[14:53]** keperhitungan books.
+**[14:57]** Jadi memang seharusnya nanti
+**[15:00]** harus di-plan.
+**[15:10]** Terus dengan sekarang kondisinya,
+**[15:12]** ya udah berapa tahun,
+**[15:14]** itu kenapa, Pak?
+**[15:16]** Jadi kadang gini, kalau jadwal selama itu,
+**[15:18]** memang modifikasinya itu.
+**[15:20]** Kita kan nggak usah kalau misalnya harus
+**[15:22]** punya konsep-konsep besar yang akan itu, ya.
+**[15:24]** Jadi kadang,
+**[15:26]** di sini kayak gini,
+**[15:28]** di sini kayak gini,
+**[15:30]** di sini kayak gini.
+**[15:32]** Jadi nggak ada konsep awal.
+**[15:34]** Itu yang coba kita
+**[15:36]** rakin di Ethos.
+**[15:38]** Termasuk dari sisi
+**[15:40]** tarif,
+**[15:42]** servis itu beda jauh antara
+**[15:44]** Ethos lama sama Ethos
+**[15:46]** baru nanti
+**[15:48]** kita jelasin.
+**[15:50]** Balik ke sama tarif tadi,
+**[15:52]** kalau yang di Ethos lama,
+**[15:55]** ini mau bilang sebelum resor schedule
+**[15:57]** kita buat, kita ada.
+**[15:59]** Kita tanya nih, resornya apa aja,
+**[16:01]** gitu kan. Harus juga di-prep
+**[16:03]** dulu sebelum ini.
+**[16:05]** Pasti, tapi malah sebelum kapal hangga,
+**[16:07]** tarif kan itu
+**[16:09]** itu kan fokusnya marketing itu
+**[16:11]** dia punya customer,
+**[16:13]** saya harus ngapain ngapain customer itu,
+**[16:15]** servis detailnya apa,
+**[16:17]** tarifnya apa.
+**[16:19]** Kan nggak usah ngapain di sosial kan?
+**[16:21]** Kita lanjut nanti.
+**[16:25]** Ini part one ya Pak.
+**[16:37]** Sorry, tadi tuh jadinya
+**[16:39]** harusnya dibaginya planning terus
+**[16:41]** apa lagi Pak yang kedua?
+**[16:43]** Planning terus apa, terus
+**[16:45]** receiving delivery sama billing dan lain-lain
+**[16:47]** yang administratif.
+**[16:51]** Perlakuan itu kan sebenarnya
+**[16:53]** cuman ada
+**[16:55]** empat ya?
+**[16:57]** Bungkar, muat, receiving, delivery.
+**[16:59]** Itu yang utama ya.
+**[17:01]** Nah, untuk masing-masing itu ada
+**[17:03]** kegiatan planning,
+**[17:05]** juga booking,
+**[17:07]** booking kan yang paling important.
+**[17:09]** Itu jauh sebelumnya.
+**[17:11]** Sama billing juga kan.
+**[17:13]** Tapi kegiatan utamanya itu tadi.
+**[17:15]** Bungkar, muat, receiving, delivery.
+**[17:17]** Bungkar, muat, receiving, delivery,
+**[17:20]** saya ada selain itu sebentar ya.
+**[17:38]** Yang handheld
+**[17:40]** itu menyambung ke ethos juga.
+**[17:42]** Handheld di ethos multinet
+**[17:44]** itu sudah.
+**[17:46]** Ethos itu sudah established.
+**[17:48]** Handheld, web portal,
+**[17:50]** apa namanya?
+**[17:52]** Ethos utamanya
+**[17:54]** itu dalam satu database.
+**[17:58]** Kalau Italy masih ada nggak ya Pak?
+**[18:00]** Italy itu apa ya?
+**[18:02]** Booking Telemen itu?
+**[18:04]** Telemen kan pakai yang lain.
+**[18:06]** Pakai itu kan.
+**[18:08]** Dulu tuh saya tahu
+**[18:10]** ada Italy itu Pak, dari Bandi.
+**[18:12]** Dulu?
+**[18:14]** Italy ya itu.
+**[18:17]** Sebenernya fungsinya sama kan?
+**[18:19]** Iya untuk placement.
+**[18:21]** Oh, ECY.
+**[18:23]** Itu handheld yang ECY.
+**[18:47]** Oke.
+**[18:51]** Oke.
+**[18:53]** Saya lupa berpandang.
+**[18:55]** Apa?
+**[18:57]** Gak bisa.
+**[18:59]** Apa?
+**[19:01]** Ngomong aja.
+**[19:03]** Tidak ada apa-apa.
+**[19:25]** Oke kita lanjut ya tadi ya.
+**[19:27]** Di tablet.
+**[19:29]** Di PSV ini kan dia set operasional
+**[19:32]** di tablet CC ya Pak?
+**[19:34]** Di ASRIN.
+**[19:36]** Sekarang ada headrack-nya.
+**[19:38]** Di Atosong sekarang.
+**[19:40]** Mungkin nanti harusnya ini saya cobain yang ada di depan dulu ya.
+**[19:42]** Operan di bagian lain.
+**[19:44]** Kalau di website-nya tablet itu
+**[19:46]** pertama pilih kapal yang mau.
+**[19:48]** Jadi specialnya tuh
+**[19:50]** bukan di sini.
+**[19:52]** Hah? Bukan di sini maksudnya?
+**[19:54]** Bukan.
+**[19:56]** Jadi kalau flow-nya tablet
+**[19:58]** pertama pilih kapal.
+**[20:02]** Saya lupa kali ya.
+**[20:04]** Oh ini pasang lama ya?
+**[20:06]** Iya yang lama.
+**[20:08]** Nah, ya kan?
+**[20:14]** Oh iya udah pilih kapalnya dulu.
+**[20:16]** Pilih schedule kapalnya.
+**[20:18]** Oke.
+**[20:20]** Terus
+**[20:22]** kalau misalkan
+**[20:24]** ini ngikutin flow ya?
+**[20:26]** Flow apa?
+**[20:29]** Jadi klik.
+**[20:31]** Nah ini ga usah skip.
+**[20:33]** Ini harusnya ngikutin flow.
+**[20:37]** Yang tadi saya bilang harusnya di klik.
+**[20:43]** Jadi kalau
+**[20:45]** CC atau HMSW
+**[20:47]** itu kan dia ga bisa bergerak-gerak secara bebas.
+**[20:49]** Misalkan saat ini
+**[20:51]** menuju ke sini sekarang di B1
+**[20:53]** nanti ke B5.
+**[20:55]** Karena cara kerjanya ga gitu.
+**[20:57]** Jalan.
+**[20:59]** Nah, makanya
+**[21:01]** langkah berikutnya selama ini kapal
+**[21:03]** ada yang di B.
+**[21:05]** Dia akan kerja di B mana?
+**[21:07]** Nah ini di B.
+**[21:09]** Ga bisa kalau masuk kapal
+**[21:11]** masih sama.
+**[21:13]** Kalau saya lapo di lapangan
+**[21:15]** di B1. Baru setelah B1 dia pilih container
+**[21:17]** yang mau di bongkar.
+**[21:19]** By container number?
+**[21:23]** Atau ngikutin urutan
+**[21:26]** dari yang ini ya?
+**[21:28]** Dari B plan itu?
+**[21:30]** Nah iya.
+**[21:32]** Pastinya ini langsung dari yang paling atas ya.
+**[21:34]** Kalau yang atas itu kan langsung dari atas.
+**[21:40]** Nah, soalnya apa?
+**[21:42]** Dia kan punya pegangan yang baik-baik di bongkar.
+**[21:44]** Jadi setiap sistem
+**[21:46]** karena ada aplikasinya, sistem juga
+**[21:48]** nanti akan nampulin yang ga bisa
+**[21:50]** di bongkar.
+**[21:52]** Kalau kontainer yang LOB itu ga bisa di bongkar.
+**[21:54]** Tapi ini bisa disetel.
+**[21:56]** Nah ini masuk sistem ini.
+**[21:58]** Sistem import namanya.
+**[22:00]** Misalkan
+**[22:02]** ini yang mau di bongkar kan?
+**[22:06]** Ini aslinya merah ya?
+**[22:08]** Ini merah bisa dibongkar.
+**[22:10]** Udah di bongkar? Udah di bongkar. Udah ya?
+**[22:12]** Udah. Coba saya.
+**[22:15]** Ini kita bicara dulu.
+**[22:17]** Karena ini bongkar.
+**[22:23]** Nah ini harus disiplin.
+**[22:25]** Di turunin.
+**[22:27]** Lalu ini bisa dibongkar.
+**[22:29]** Kalau ini secara fisik juga.
+**[22:31]** Oh di turunin dulu ya?
+**[22:33]** Dari atas tuh udah paling turunin.
+**[22:35]** Semua di atas? Engga.
+**[22:41]** Biasanya sistemnya posisinya begini.
+**[22:43]** Sistemnya tuh begini sih.
+**[22:45]** Ini lagi ngomongin tepukan ke atas.
+**[22:47]** Oke.
+**[22:49]** Ini mau dibongkar.
+**[22:51]** Disini ada kontainer yang mau dibongkar.
+**[22:59]** Dua palingan.
+**[23:01]** Satu.
+**[23:03]** Biasanya ada gini.
+**[23:05]** Ya disiplin.
+**[23:07]** Disiplinnya ada pilihannya.
+**[23:09]** Namanya disiplin day-to-day.
+**[23:12]** Untuk unlanded.
+**[23:14]** Unlanded ini artinya
+**[23:16]** dia ga perlu di turunin ke bawah.
+**[23:18]** Di geser aja ya?
+**[23:20]** Dalam satu day yang sama.
+**[23:22]** Di turunin tuh maksudnya di turunin ke darat gitu?
+**[23:24]** Iya.
+**[23:26]** Itu namanya landed.
+**[23:28]** Untuk unlanded atau nama lainnya day-to-day
+**[23:30]** dia cuma
+**[23:32]** hanya bisa di day yang sama.
+**[23:34]** Misalkan nih dia di day-2 ya.
+**[23:36]** Day-2.
+**[23:38]** Day-2, day-84.
+**[23:40]** Nah kat sini.
+**[23:42]** Itu yang mau dibongkar nih.
+**[23:44]** Kita pindahin ke
+**[23:46]** lokal 6 sebelahnya.
+**[23:48]** Lokal 6, day-80.
+**[23:50]** Misalkan situ lah ya.
+**[23:52]** Itu namanya
+**[23:54]** hanya dalam satu day yang sama bisa.
+**[23:56]** As long as ada space yang kosong.
+**[23:58]** As long as ada yang kosong.
+**[24:00]** Dia tuh harus di-upset.
+**[24:02]** Karena nanti posisi final kapal
+**[24:04]** itu harus di-upset.
+**[24:06]** Karena itu yang kita kirim ke pelabuhan.
+**[24:10]** Kalau di-shifting kayak gitu nanti
+**[24:12]** dibalikin lagi kan?
+**[24:14]** Oh ada dua juga?
+**[24:16]** Kalau misalkan di-shifting yang masih
+**[24:18]** apa? B?
+**[24:20]** Sekarang saya bicara di-shifting yang day-to-day.
+**[24:22]** Yang unlanded, yang nggak di-turunin.
+**[24:24]** Itu biasanya
+**[24:26]** nggak dibalikin.
+**[24:28]** Nggak efektif dong.
+**[24:30]** Maksudnya udah taruh di situ, dinaikin lagi,
+**[24:32]** diundangin lagi.
+**[24:34]** Ada dua kali pergerakan.
+**[24:36]** Itu bisa kita tagi dua kali.
+**[24:39]** Makanya umumnya
+**[24:41]** kalau day-to-day sih nggak dibalikin lagi.
+**[24:43]** Asalkan dicatat posisi akhirnya
+**[24:45]** yang tadi dipindahin.
+**[24:47]** Ketika jatuh kayak modal shifting,
+**[24:49]** jatuh.
+**[24:51]** Kenapa? Itu nanti
+**[24:53]** bakal jadi informasi di bay plan
+**[24:55]** buat report berikutnya kan?
+**[25:05]** Ini turunin.
+**[25:09]** Atau
+**[25:11]** biasanya ke bay lain ya?
+**[25:13]** Ke bay lain
+**[25:17]** pasti posisinya beda kalau ke bay lain ya?
+**[25:19]** Pasti ke posisinya yang lain.
+**[25:21]** Yang ngalami PPP
+**[25:23]** yang terakhir.
+**[25:25]** Ini ada dua jenis.
+**[25:27]** Ada yang diturunkan di berbagai.
+**[25:29]** Di berbagai.
+**[25:31]** Bahkan tadi punya kapal.
+**[25:33]** Digeletakin di bawah.
+**[25:35]** Dia nggak beli bagian terakhir.
+**[25:38]** Ada yang ditarik ke
+**[25:42]** yang ini.
+**[25:44]** Tapi secara komersil saat ini
+**[25:46]** nantinya mesti sama tuh.
+**[25:48]** Karena pelindung nantinya cuma satu sama harganya.
+**[25:50]** Tapi secara operasional
+**[25:52]** itu kosnya nggak beda.
+**[25:54]** Ya lah yang dipindah.
+**[25:56]** Karena ada orang yang tanya
+**[25:58]** kalau dipindah-pindah itu nggak boleh banyak-banyak
+**[26:00]** konten dari mesin gaming.
+**[26:02]** Jadi harus
+**[26:04]** kalau misalkan ada 10 kan mengganggu prosesnya
+**[26:06]** Maksudnya perbedaannya
+**[26:08]** apa yang ditaruh di situ
+**[26:10]** apa yang ditaruh di konten
+**[26:12]** itu perbedaan?
+**[26:14]** Kenapa dia ditaruh di situ?
+**[26:16]** Karena nggak boleh banyak-banyak di dermaga.
+**[26:20]** Mungkin kalau di dermaga udah penuh
+**[26:22]** nggak bisa nambah lagi.
+**[26:24]** Nggak ada tipenya.
+**[26:30]** Ini masih ngomongin shifting.
+**[26:32]** Masih ngomongin konten yang di atas
+**[26:35]** terus kita mau ambil konten bawahnya
+**[26:37]** terus ditaruh di dermaga.
+**[26:39]** Ternyata dermaga udah lebih dari 10 kontener
+**[26:41]** dia harus dibawa dulu ke tempat lain.
+**[26:53]** Tapi parameter
+**[26:55]** dia bisa pindah bay aja
+**[26:57]** atau
+**[26:59]** dia cuma
+**[27:01]** di bay yang sama
+**[27:03]** Pindah bay itu apa?
+**[27:05]** Keputusannya dari tim operasi.
+**[27:09]** Mereka yang kira-kira lah ya.
+**[27:13]** Kenapa kita mencatat
+**[27:15]** tadi yang di Malaysia
+**[27:17]** kita bisa ditaruh di kontennya
+**[27:19]** jadi dia nggak ketinggalan.
+**[27:21]** Karena kejadian ketinggalan.
+**[27:23]** Lupa dia balik lagi dulu.
+**[27:27]** Kalau ketinggalan gitu kapalnya bagaimana?
+**[27:29]** Enggak lah.
+**[27:33]** Kalau kejadian buruk lah.
+**[27:35]** Kita ikut kapal lain.
+**[27:43]** Tadi kan kita bicara
+**[27:45]** shifting bay to bay
+**[27:47]** ataupun yang masih di bay yang sama ya pak ya?
+**[27:49]** Bay to bay itu yang sama.
+**[27:53]** Dia kan nanti kan bisa kan udah dipindahin
+**[27:55]** udah di shifting, digeser gitu bahasa ya
+**[27:57]** udah digeser, abis itu kan
+**[27:59]** nanti kita nggak balikin lagi nih
+**[28:02]** dari tim operasinya nggak kita balikin lagi ke posisi semulanya
+**[28:04]** tapi dari
+**[28:06]** hasil shifting
+**[28:08]** itu kan kita catat tuh di report
+**[28:10]** itu nanti dikirimkan ke
+**[28:12]** post berikutnya
+**[28:14]** bay plannya pak
+**[28:16]** updated bay plannya
+**[28:18]** ke pelabuhan tujuan itu posisi terakhir
+**[28:20]** bukan hanya ke pelabuhan tujuan
+**[28:22]** ke kapal
+**[28:24]** jadi setelah saya mau kamu lagi
+**[28:26]** kapal kan punya data
+**[28:28]** kontennya di atas kapalnya itu kayak gimana?
+**[28:30]** kayak gimana sekarang?
+**[28:32]** kalau kapal yang
+**[28:34]** ini terakhir kita dapatin apa ini?
+**[28:36]** poling domestik?
+**[28:38]** poling domestik saya nggak tahu
+**[28:40]** oh jadi
+**[28:42]** oh dikasih lah
+**[28:45]** ini kita langsung ke pemuatan ya
+**[28:47]** mau langsung ke pemuatan
+**[28:49]** nah ini
+**[28:51]** kita halirin dulu ya
+**[28:53]** halir aja pak
+**[28:55]** kita di report
+**[28:57]** ketika di shifting
+**[28:59]** terus dibongkar, jadi ketika dibongkar kan dia akan
+**[29:01]** mengenai kontennya ya
+**[29:03]** ya
+**[29:05]** ada lagi ya
+**[29:07]** shifting ya?
+**[29:09]** oh bongkaran
+**[29:11]** ini kan
+**[29:14]** nah disini
+**[29:16]** harusnya di definisikan pada satu sesuai
+**[29:18]** ini
+**[29:20]** dia kerjanya disitu
+**[29:22]** kapal ini disitu berapa
+**[29:24]** track number itu hanya bisa dipilih yang
+**[29:26]** dialokasikan untuk
+**[29:28]** kapal ini
+**[29:30]** harusnya di drop down
+**[29:32]** karena emang
+**[29:34]** saya nggak set operator, katanya cuma satu
+**[29:36]** pak harusnya di planning 2 kan
+**[29:38]** ya
+**[29:40]** jadi nggak perlu ada yang isi lagi harusnya
+**[29:42]** bisa aja kan dia misalkan
+**[29:44]** ada kadangan gitu ya
+**[29:46]** kalau lebih dari satu
+**[29:48]** tapi ini membatasi
+**[29:50]** sama buat kalau yang truck loosing ya pak
+**[29:52]** kalau truck loosing
+**[29:54]** dia nggak baca track internal
+**[29:56]** dia ngadu track yang external
+**[29:58]** oh
+**[30:00]** jadi pnv mau kita coba
+**[30:02]** kalau truck loosing harusnya ada di track
+**[30:04]** tracknya
+**[30:06]** tracking companynya
+**[30:08]** sama tracknya
+**[30:11]** nomor track
+**[30:33]** jadi kalau di pnv kemarin tuh
+**[30:35]** mereka nggak registernya
+**[30:37]** setelah kontainernya naik ke truck
+**[30:41]** tapi pas get in
+**[30:43]** itu udah ada data
+**[30:45]** truck sama drivernya
+**[30:47]** cuman untuk data kontainer mana yang masuknya setelah
+**[30:49]** ditaro
+**[30:51]** gitu ya
+**[30:53]** kemarin begitu sih komunikasi sama itu
+**[30:55]** sama pnv
+**[30:57]** untuk bongkaran gini ya
+**[30:59]** untuk bongkar di kapal ya
+**[31:01]** setelah dibongkar
+**[31:03]** dia masuk ke pulau itu
+**[31:05]** pak maaf pak
+**[31:07]** disini sama semua ya pak
+**[31:09]** antara 3 posisi
+**[31:11]** nggak ada perbedaan
+**[31:13]** di seluruh jarak
+**[31:15]** oke
+**[31:17]** jadi itu dia hanya
+**[31:19]** sebuah area
+**[31:21]** itu nggak pake ethos
+**[31:23]** jadi dia pake auto
+**[31:26]** jadi itu banyak
+**[31:28]** data yang dihasut
+**[31:30]** kayak
+**[31:32]** kita
+**[31:34]** proses
+**[31:36]** yang melakukan orang
+**[31:40]** orang media
+**[31:42]** kita terima data aja
+**[31:44]** jadi kalau
+**[31:46]** di TXP
+**[31:48]** ketika
+**[31:50]** hal yang penting
+**[31:52]** kita minta data
+**[31:54]** kita upload
+**[31:56]** kalau TXP sih
+**[31:58]** dia nggak pake ethos
+**[32:00]** secara
+**[32:02]** karena semuanya
+**[32:04]** jadinya
+**[32:06]** nah sebenernya
+**[32:08]** kalau di TXP
+**[32:10]** kalau TXP menggunakan ethos
+**[32:12]** secara
+**[32:14]** hmm
+**[32:16]** agak susah juga kalau kita pake
+**[32:18]** ethos
+**[32:20]** nah jadi kita masuk ke TXP
+**[32:23]** dan TNP
+**[32:25]** dalam proses
+**[32:27]** ada perbedaan nggak pak
+**[32:29]** hmm
+**[32:31]** ethosnya beda
+**[32:33]** makanya
+**[32:35]** secara proses ini
+**[32:37]** kita mau
+**[32:39]** ethos
+**[32:41]** dengan ethos
+**[32:43]** lalu lagi kalau kita mau
+**[32:45]** jadi tadi perbedaannya
+**[32:47]** tadi di separator
+**[32:49]** antara TXP dan TNP
+**[32:51]** yang beda tadi di separator aja
+**[32:53]** misalnya sebelumnya sama
+**[32:55]** secara jaris besar
+**[32:57]** prosesnya sih sama
+**[32:59]** cuma dengan perbedaannya
+**[33:01]** di sekitar ethos
+**[33:03]** apology
+**[33:05]** kalau nggak salah
+**[33:07]** di TXP ada
+**[33:09]** API
+**[33:11]** data inbound
+**[33:13]** data inbound itu sumbernya
+**[33:15]** bisa dari upload API
+**[33:17]** atau manifest ya
+**[33:20]** sampai bisa di entry kan
+**[33:24]** langsung ada API buat pelayaran
+**[33:30]** kalau ada API berarti nggak perlu
+**[33:32]** upload ataupun inbound
+**[33:34]** ya
+**[33:36]** inbound
+**[33:38]** jadi setelah itu baru kita langsung planning
+**[33:40]** lalu
+**[33:42]** planning
+**[33:44]** planning discuss
+**[33:47]** jadi tadi di sini
+**[33:49]** proses schedule tiga
+**[33:51]** proses schedule
+**[33:53]** proses berikutnya bisa paralel
+**[33:55]** upload API
+**[33:59]** API yang masuk
+**[34:01]** langsung ada schedule ini juga
+**[34:03]** kita lanjut
+**[34:05]** itu berbeda
+**[34:07]** sebelumnya sama
+**[34:09]** disitu discuss current situation
+**[34:11]** di separator
+**[34:13]** diatas yang masuk
+**[34:15]** di atas itu
+**[34:17]** disitu disitu
+**[34:19]** disitu disitu
+**[34:21]** abis itu
+**[34:23]** yang termasuk yang penyebaran adalah
+**[34:25]** jangan lupa mas
+**[34:27]** Xdisk
+**[34:29]** Xdisk
+**[34:31]** disini
+**[34:33]** oh disini
+**[34:35]** jadi ada tablet kan
+**[34:37]** kemarin tuh
+**[34:39]** dia tablet RPG kan
+**[34:41]** oh disitu aja
+**[34:44]** kalau ini kan untuk yang si tablet
+**[34:46]** CC nya
+**[34:48]** tadi baru sampai CC pak
+**[34:50]** tadi baru sampai CC aja
+**[34:52]** CC aja pak
+**[34:54]** ini kan special dulu
+**[34:56]** baru ini
+**[34:58]** disitu kan ada
+**[35:00]** select tablet to discharge tuh
+**[35:02]** oh iya select B
+**[35:04]** oke
+**[35:06]** nanti ini saya complete dulu ya
+**[35:08]** tapi untuk yang si proses
+**[35:10]** yang pake tablet penerangan
+**[35:12]** ini kan baru PSV doang
+**[35:14]** untuk yang
+**[35:16]** OPNV juga
+**[35:18]** dia pake tablet juga
+**[35:20]** eh handheld
+**[35:22]** tablet
+**[35:24]** nama aplikasi
+**[35:26]** iya deh
+**[35:28]** kenalnya sama si tablet ini soalnya
+**[35:30]** yang pake toast
+**[35:32]** sekarang bicara konsep ini
+**[35:34]** aplikasi itu karena kenapa mereka buat
+**[35:36]** bisa bisa ya
+**[35:38]** mungkin karena
+**[35:40]** salah
+**[35:46]** nah terus setelah
+**[35:48]** beres
+**[35:50]** apa ya
+**[35:52]** proses di tablet konten
+**[35:54]** nanti disini kebagi jadi dua
+**[35:56]** nih pak
+**[35:58]** kebagi jadi dua ada yang
+**[36:00]** stacking sama practicing
+**[36:02]** iya
+**[36:04]** stacking kalau misalnya salah
+**[36:06]** berparek sifat
+**[36:08]** iya sih stacking di parkir
+**[36:10]** di CW kan kontennya
+**[36:12]** sementara practicing itu untuk yang
+**[36:14]** langsung diambil
+**[36:16]** mungkin saya coba dari yang
+**[36:20]** ini ke sini
+**[36:30]** mungkin bisa ke yang
+**[36:32]** CW dulu pak
+**[36:34]** yang gimana pak
+**[36:36]** plus one
+**[36:38]** start
+**[36:40]** oke
+**[36:46]** operasionalnya
+**[36:48]** nah gini
+**[36:50]** ini OPNV juga ya
+**[36:52]** sebenarnya
+**[36:56]** ada namanya
+**[36:58]** yard allocation
+**[37:00]** sama yard allocation
+**[37:02]** disarjain ya
+**[37:04]** jadi kontennya
+**[37:06]** yang mau masuk
+**[37:08]** itu CWnya udah di
+**[37:10]** di PKN
+**[37:12]** kalau
+**[37:14]** kalau hubungannya
+**[37:16]** bisa disarjain ya
+**[37:18]** yard allocation disarjain
+**[37:20]** jadi sekarang ya
+**[37:22]** ketika dia stacking
+**[37:24]** itu
+**[37:26]** itu dimana
+**[37:28]** bisa di
+**[37:30]** dimana
+**[37:32]** jadi
+**[37:34]** ini kemarin yang mas Asmar
+**[37:36]** bilang planning
+**[37:38]** ya planningnya itu dilakuin di luar ethos
+**[37:40]** adresnya kemarin itu
+**[37:42]** ada di ethosnya
+**[37:44]** nah cuman kemarin mas Asmar info
+**[37:46]** ya planningnya itu dibuat di luar ethos
+**[37:48]** karena kalau import
+**[37:50]** biasanya orang gak perlu
+**[37:52]** import ya
+**[37:54]** jadi
+**[37:56]** karena import itu hanya di tempat yang kosong aja
+**[37:58]** jadi
+**[38:00]** kalau static sebenernya harusnya
+**[38:02]** mungkin nyebutnya yard allocation itu namanya pre-port
+**[38:04]** location, jadi lokasi yang
+**[38:06]** harusnya harusnya
+**[38:08]** cuman kalau misalkan dia menempatkan di lokasi lain
+**[38:10]** itu masih bisa sekarang, karena kalau kita
+**[38:12]** buat strict kayak gitu, itu agak rekomen
+**[38:14]** jadi
+**[38:16]** untuk yard allocation masih
+**[38:18]** bisa lurus lah
+**[38:20]** iya, tapi secara real
+**[38:22]** itu harusnya ada di planning
+**[38:24]** untuk
+**[38:26]** kesempatan
+**[38:28]** sama lokasi
+**[38:30]** jadi ketika
+**[38:32]** kontra set itu, itu harusnya udah
+**[38:34]** udah final
+**[38:38]** finalnya ya aktualnya
+**[38:40]** ketika dia ditempatin
+**[38:42]** mungkin di acuan
+**[38:44]** aja ya pas harusnya
+**[38:46]** jadi biar gak
+**[38:48]** copot rontong
+**[38:50]** disini
+**[38:52]** dan
+**[38:54]** traffic nanti
+**[38:56]** jadi kalau ketika
+**[38:58]** rontongnya kalau gak device bay
+**[39:00]** dia punya spesifik blok
+**[39:02]** untuk import ya
+**[39:04]** kalau dia punya spesifik blok lebih enak
+**[39:06]** jadi ketika datang itu
+**[39:08]** jadi gini
+**[39:10]** kaptenya, kalau muatan
+**[39:12]** muatan, truck masuk itu
+**[39:14]** untuk masukin barang, muatan enak
+**[39:16]** jelasnya
+**[39:18]** di masa open track
+**[39:20]** jadi
+**[39:22]** tapi kalau longgaran
+**[39:24]** kita gak tau
+**[39:26]** kita gak tau
+**[39:28]** yang akan datang
+**[39:30]** ngambil yang berat dulu
+**[39:32]** atau yang ini dulu
+**[39:34]** makanya kontennya
+**[39:36]** penataan lokasinya
+**[39:38]** menghindari
+**[39:40]** relokasi
+**[39:42]** kontennya
+**[39:44]** misalkan dia mau ngambil kontennya di bawah nih ya
+**[39:46]** dia tempukan 6
+**[39:48]** dia harus longgar nih
+**[39:50]** kontennya baru ngambil yang ini
+**[39:52]** kalau dia datang ngambil yang ini, dia gak mau
+**[39:54]** makanya ini
+**[39:56]** gak bisa ditanggih
+**[39:58]** makanya
+**[40:00]** kontennya harus ngantur
+**[40:02]** misalnya yang berat ditumpuk
+**[40:04]** yang berat-berat
+**[40:06]** yang agak
+**[40:08]** dengan kualifikasi
+**[40:10]** kita ngomongnya masalah kualifikasi
+**[40:12]** kita membagi kontennya
+**[40:14]** berdasarkan range nya
+**[40:16]** itu nanti baru kita atur
+**[40:18]** ada range ini
+**[40:20]** di blok ini
+**[40:22]** jadi ketika nyari
+**[40:24]** kita gak menghindari
+**[40:26]** longgaran banyak
+**[40:28]** kalau kayak gitu mungkin salah
+**[40:30]** previous courtnya ya pak?
+**[40:32]** kalau previous court
+**[40:34]** gak kaitan
+**[40:36]** kalau longgaran gak kaitan sama penempatan
+**[40:38]** penempatan penempatan penempatan
+**[40:40]** penempatan penempatan
+**[40:42]** oh ini pas penempatan
+**[40:44]** ini pas penempatan
+**[41:02]** kalau yang nentuin
+**[41:04]** misalkan
+**[41:06]** dari customer A ini dia punya ada
+**[41:08]** tiga kontener gitu ya yang harus diambil
+**[41:10]** ada yang kualifikasi berat
+**[41:12]** keringan sama sedang
+**[41:14]** misal gitu ya ada tiga kayak gitu
+**[41:16]** nah terus
+**[41:18]** yang
+**[41:20]** merintahin si trucknya buat
+**[41:22]** kamu udah boleh ambil nih hari ini
+**[41:24]** yang berat gitu
+**[41:26]** itu gak bisa
+**[41:28]** itu tergantung
+**[41:30]** si forwardernya aja gitu
+**[41:36]** kalau internasional ya
+**[41:38]** SP2 itu
+**[41:40]** SP2 itu
+**[41:42]** dengan pengeluaran barang
+**[41:46]** bahkan udah keluar
+**[41:48]** SP2 nya tuh gak pengeluaran luas
+**[41:50]** dijadiin depo, soalnya kan kasus etorik sekarang gitu
+**[41:52]** BID sama apa tuh
+**[41:54]** yang
+**[41:56]** digadiin penumpukan
+**[41:58]** penumpukan
+**[42:00]** jadi dia lebih murah
+**[42:02]** daripada ditaruh keluar mungkin
+**[42:04]** lebih murah
+**[42:06]** akhirnya kan
+**[42:08]** mungkinnya
+**[42:10]** dimatasi
+**[42:20]** sebenernya udah ada aturan tuh
+**[42:22]** kontener keluar
+**[42:24]** ke area DB3 OBS
+**[42:26]** di area B2
+**[42:28]** di luar
+**[42:30]** di sana masih B2
+**[42:32]** di luar lagi
+**[42:34]** di luar
+**[42:52]** oke
+**[42:54]** di atas udah
+**[42:56]** sekarang yang perklusing bener apa?
+**[43:00]** si perklusing sebenernya nyambung sama
+**[43:02]** dia gak ke C1
+**[43:04]** namanya perklusing itu
+**[43:06]** dari kapal
+**[43:08]** langsung get out
+**[43:10]** langsung get out
+**[43:12]** ke C1 ya
+**[43:14]** jadi get in itu maksudnya
+**[43:16]** terposongnya masuk
+**[43:18]** terposongnya masuk
+**[43:24]** terus masuk ke C1
+**[43:28]** ke C1, ke demaga
+**[43:30]** ke demaga
+**[43:32]** ke C1
+**[43:36]** tapi ini
+**[43:38]** biasanya dianggur
+**[43:40]** jadi masuknya tuh harus bener-bener kolunasi
+**[43:42]** karena apa boleh
+**[43:44]** masuknya
+**[43:46]** gak bisa kayak
+**[43:48]** yang biasa ya
+**[43:50]** harus diatur
+**[43:52]** karena kalau gak
+**[43:54]** di dalam kan
+**[43:56]** ini
+**[43:58]** kalau terklusing
+**[44:04]** agak-agak serip
+**[44:06]** biasanya yang terklusing ini kan barang yang
+**[44:10]** yang gak mau
+**[44:12]** atau di pelabuhan
+**[44:14]** gak tau ya, ada di perplaknya gak ya
+**[44:16]** price-nya ada gak?
+**[44:18]** kalau ada
+**[44:20]** dia bisa disetel
+**[44:22]** kalau misalkan
+**[44:24]** atau barang
+**[44:26]** ledak
+**[44:30]** yang kelas berapa
+**[44:32]** itu gak boleh diset
+**[44:34]** jadi harus terklusing
+**[44:36]** nah, terklusing ini
+**[44:38]** dia harus diatur, maksudnya itu
+**[44:40]** bener-bener pas
+**[44:42]** misalkan pas udah ngobongkan
+**[44:44]** barang ini, kira-kira dibayangkan
+**[44:48]** karena gak boleh diset
+**[44:50]** berarti
+**[44:52]** kalau misalkan yang terklusing itu
+**[44:54]** si customernya udah harus keluar
+**[44:56]** untuk bayar
+**[44:58]** maksudnya bayarnya di depan
+**[45:00]** bayar si
+**[45:02]** bilingnya gitu
+**[45:04]** nah, ini sebenarnya
+**[45:06]** kalau di TSI itu
+**[45:08]** itu semua gak terklusing
+**[45:10]** yang terklusing pun dianggapnya gak terklusing
+**[45:12]** jadi tetap ditagi
+**[45:14]** masa 1
+**[45:16]** masa 1 itu tergantikan
+**[45:18]** untuk yang di
+**[45:20]** di TSI
+**[45:22]** kalau di PSP saya gak tau deh
+**[45:28]** tapi intinya
+**[45:30]** kalau misalkan biling sih
+**[45:32]** udah selesai sebelum keluar
+**[45:34]** itu dipas
+**[45:36]** itu kan berarti
+**[45:38]** harusnya si customer itu
+**[45:40]** kalau misalkan dia mau terklusing harus
+**[45:42]** cepet bayar lah istilahnya gitu
+**[45:46]** dia pas bayar
+**[45:48]** masalahnya pembeliannya beda
+**[45:50]** yang CY juga, itu dia harus bayar juga
+**[45:52]** pokoknya itu ini
+**[45:54]** pembayaran Gate Pass harus dibayar sebelum
+**[45:56]** dia terklusing
+**[45:58]** cuma nih, yang kerepot nih
+**[46:00]** di ini, di PNP
+**[46:02]** dia kan pake sitting private
+**[46:04]** jadi bayarannya di belakangnya
+**[46:06]** yang belakangnya itu kenapa? karena sih ada
+**[46:08]** rupah status
+**[46:10]** awalnya dia juga terklusing
+**[46:12]** tapi terakhir pernah gak dateng
+**[46:14]** dikaro lah di CY
+**[46:16]** karena pernah di CY
+**[46:20]** nah itu kan di TSI ada kurangkan gitu
+**[46:22]** kalau misalkan dibayar di depan
+**[46:24]** kalau di TRI dulu
+**[46:26]** di LGSP, itu kan
+**[46:28]** di belakang ya
+**[46:30]** bayarnya di depan tuh
+**[46:32]** di LGSP juga gitu
+**[46:34]** jadi
+**[46:36]** bagusnya namanya di tagih semua dulu
+**[46:38]** mau terklusing, mau gak tagih aja
+**[46:40]** walaupun dia gak set ini tagih, dia gak melakukan yang resiko
+**[46:42]** oh gitu
+**[46:44]** oh tagih yang worst case scenarionnya gitu
+**[46:46]** sebenarnya kalau terklusing
+**[46:48]** dia gak terklusing mas, karena kena kondisi
+**[46:50]** kalau di LGSP
+**[46:52]** kalau di TSI juga pak
+**[46:54]** harus bayar dia
+**[46:56]** kalau PNT
+**[46:58]** karena tagihnya belakang
+**[47:00]** makanya tuh dia gak dateng
+**[47:02]** tapi tagih juga belakang
+**[47:04]** kalau karena tagihnya belakang
+**[47:06]** jadi hitung juga dong
+**[47:08]** iPhone atau TOS
+**[47:10]** Pak, sorry pak, konfigurasi tadi
+**[47:12]** yang depan, yang belakang
+**[47:14]** yang tepat
+**[47:16]** atau konfigurasi hub code di
+**[47:18]** gini, bukan satu
+**[47:20]** nah
+**[47:22]** kita di LGSP
+**[47:24]** kitanya dia yang klasifikasi
+**[47:26]** kita kan ada portal
+**[47:28]** portal yang baru, itu ada
+**[47:30]** dia bisa kredit
+**[47:32]** jadi untuk beberapa
+**[47:34]** kasus yang terbentuk, misalkan
+**[47:36]** bayaran, kita coba kreditkan
+**[47:38]** tapi ini tetap bisa diatasi pas
+**[47:40]** walaupun dia belum selamitkan
+**[47:42]** bayaran
+**[47:44]** kredit limit gitu ya
+**[47:46]** jadi bayarnya bakalan off
+**[47:48]** kalau di TSI sebenarnya dia bilang
+**[47:50]** kalau kita bilangnya
+**[47:52]** ya kustomer ini kena credit
+**[47:54]** jadi gak bayar
+**[47:56]** itu di flagging
+**[47:58]** atau di apa pak?
+**[48:00]** khusus kustomer apa gitu di flagging
+**[48:02]** ada flaggingnya?
+**[48:04]** ada flagging
+**[48:06]** base on customer
+**[48:08]** gitu
+**[48:10]** base on customer
+**[48:16]** mungkin bukan request
+**[48:18]** salah, ini harusnya
+**[48:20]** sekarang sudah ngantuk
+**[48:22]** langsung get out
+**[48:24]** dari sini harusnya ntar dia langsung kesini kan ya
+**[48:26]** ya
+**[48:28]** kesini nih
+**[48:30]** load it
+**[48:32]** into folder
+**[48:34]** lalu get out
+**[48:36]** ini harusnya untuk yang
+**[48:38]** unplacement yang sama ini kan
+**[48:40]** sama yang atas
+**[48:42]** karena sudah di placement
+**[48:44]** kalau trucknya sudah sampai
+**[48:46]** ini kita bicara
+**[48:48]** belum masuk dari carry kan mas
+**[48:50]** kita masuk belum tarang kan
+**[48:52]** kalau belum tarang bener, sudah sampai
+**[48:54]** kalau dari carry
+**[48:56]** baru nanti ada proses lagi
+**[48:58]** ada unplacement dari carry, ada get out
+**[49:00]** oh terpisah
+**[49:02]** saya pikir jadi satu pak
+**[49:04]** jadi satu itu maksudnya satu rangkaian
+**[49:06]** bukan, momen waktunya beda
+**[49:08]** iya sih, enggak
+**[49:10]** momen waktunya satu rangkaian doang
+**[49:12]** kapan-kapan
+**[49:14]** setahun kemudian juga bisa
+**[49:16]** itu gimana pak, boleh jelasin dulu gak pak?
+**[49:18]** yang tadi, yang get out
+**[49:20]** kalau yang ini
+**[49:22]** kan tadi contractnya setahun ya?
+**[49:24]** delivery outnya gimana pak prosesnya?
+**[49:26]** prosesnya ini booking
+**[49:28]** dia booking di portal
+**[49:30]** get pass
+**[49:32]** get pass itu dia masuk tuh
+**[49:34]** masuk
+**[49:36]** unplacement delivery
+**[49:38]** itu udah delivery
+**[49:40]** keluar get out
+**[49:46]** bagus-bagus aja
+**[49:48]** proses bongkaran
+**[49:50]** dari tadi bongkaran, dari carry
+**[49:52]** terus nanti receiving
+**[49:54]** buatan
+**[49:56]** terakhir dari delivery
+**[50:00]** belum
+**[50:12]** oh iya pak, yang bagian
+**[50:14]** healingnya
+**[50:16]** bagaimana
+**[50:18]** harus
+**[50:20]** bagaimana
+**[50:26]** mari kita coba
+**[50:28]** oke pak, yang healing
+**[50:32]** step pertama
+**[50:34]** customer harus masuk
+**[50:36]** ke customer online ini pak
+**[50:38]** dari awal kan
+**[50:40]** pada saat receiving
+**[50:44]** dia harus bayarnya pas kapan tuh
+**[50:46]** kan yang masuk ke customer online
+**[50:48]** yang di bawah itu
+**[50:54]** sebelum dia jemput kontainernya ya
+**[50:56]** yang dipisahkan aja
+**[50:58]** jangan digabung
+**[51:00]** antara tadi bongkaran
+**[51:02]** terus ini delivery
+**[51:10]** hahaha
+**[51:14]** apa ya
+**[51:22]** boleh-boleh
+**[51:24]** itu aja mas
+**[51:26]** oke
+**[51:28]** stop
+**[51:30]** stop
+**[51:32]** step
+**[51:38]** step
+**[51:42]** step
+**[51:48]** step
+**[51:56]** step
+**[51:58]** step
+**[52:04]** step
+**[52:10]** step
+**[52:16]** step
+**[52:20]** step
+**[52:24]** step
+**[52:28]** step
+**[52:32]** step
+**[52:36]** step
+**[52:40]** step
+**[52:44]** step
+**[52:48]** step
+**[52:52]** step
+**[52:54]** step
+**[52:58]** step
+**[53:04]** step
+**[53:08]** step
+**[53:12]** step
+**[53:16]** step
+**[53:20]** step
+**[53:24]** step
+**[53:28]** step
+**[53:32]** step
+**[53:36]** step
+**[53:40]** step
+**[53:44]** step
+**[53:50]** step
+**[53:54]** step
+**[53:58]** step
+**[54:02]** step
+**[54:06]** step
+**[54:10]** step
+**[54:14]** step
+**[54:18]** step
+**[54:24]** step
+**[54:30]** step
+**[54:34]** step
+**[54:38]** step
+**[54:42]** step
+**[54:46]** step
+**[54:54]** step
+**[54:58]** step
+**[55:02]** step
+**[55:06]** step
+**[55:10]** step
+**[55:14]** step
+**[55:18]** step
+**[55:24]** step
+**[55:30]** step
+**[55:36]** step
+**[55:40]** step
+**[55:44]** step
+**[55:48]** step
+**[55:54]** step
+**[55:58]** step
+**[56:02]** step
+**[56:06]** step
+**[56:10]** step
+**[56:14]** step
+**[56:18]** step
+**[56:24]** step
+**[56:30]** step
+**[56:34]** step
+**[56:38]** step
+**[56:42]** step
+**[56:46]** step
+**[56:50]** step
+**[56:54]** step
+**[56:58]** step
+**[57:04]** step
+**[57:08]** step
+**[57:12]** step
+**[57:16]** step
+**[57:20]** step
+**[57:24]** step
+**[57:28]** step
+**[57:32]** step
+**[57:36]** step
+**[57:40]** step
+**[57:44]** step
+**[57:48]** step
+**[57:54]** step
+**[57:58]** step
+**[58:02]** step
+**[58:06]** step
+**[58:10]** step
+**[58:14]** step
+**[58:18]** step
+**[58:20]** step
+**[58:24]** step
+**[58:28]** step
+**[58:32]** step
+**[58:36]** step
+**[58:40]** step
+**[58:44]** step
+**[58:50]** step
+**[58:54]** step
+**[58:58]** step
+**[59:02]** step
+**[59:06]** step
+**[59:10]** step
+**[59:14]** step
+**[59:20]** step
+**[59:24]** step
+**[59:28]** step
+**[59:32]** step
+**[59:36]** step
+**[59:40]** step
+**[59:44]** step
+**[59:46]** step
+**[59:52]** step
+**[59:56]** step
+**[1:00:00]** step
+**[1:00:04]** step
+**[1:00:08]** step
+**[1:00:12]** step
+**[1:00:16]** step
+**[1:00:20]** step
+**[1:00:24]** step
+**[1:00:28]** step
+**[1:00:32]** step
+**[1:00:36]** step
+**[1:00:40]** step
+**[1:00:42]** step
+**[1:00:48]** step
+**[1:00:52]** step
+**[1:00:56]** step
+**[1:01:00]** step
+**[1:01:04]** step
+**[1:01:08]** step
+**[1:01:12]** step
+**[1:01:18]** step
+**[1:01:22]** step
+**[1:01:26]** step
+**[1:01:30]** step
+**[1:01:34]** step
+**[1:01:38]** step
+**[1:01:42]** step
+**[1:01:46]** step
+**[1:01:50]** step
+**[1:01:54]** step
+**[1:01:58]** step
+**[1:02:02]** step
+**[1:02:06]** step
+**[1:02:08]** step
+**[1:02:14]** step
+**[1:02:18]** step
+**[1:02:22]** step
+**[1:02:26]** step
+**[1:02:30]** step
+**[1:02:34]** step
+**[1:02:38]** step
+**[1:02:42]** step
+**[1:02:46]** step
+**[1:02:50]** step
+**[1:02:54]** step
+**[1:02:58]** step
+**[1:03:02]** step
+**[1:03:04]** step
+**[1:03:10]** step
+**[1:03:14]** step
+**[1:03:18]** step
+**[1:03:22]** step
+**[1:03:26]** step
+**[1:03:30]** step
+**[1:03:34]** step
+**[1:03:38]** step
+**[1:03:42]** step
+**[1:03:46]** step
+**[1:03:50]** step
+**[1:03:54]** step
+**[1:04:00]** step
+**[1:04:04]** step
+**[1:04:10]** step
+**[1:04:14]** step
+**[1:04:18]** step
+**[1:04:22]** step
+**[1:04:26]** step
+**[1:04:30]** step
+**[1:04:34]** step
+**[1:04:38]** step
+**[1:04:42]** step
+**[1:04:46]** step
+**[1:04:50]** step
+**[1:04:54]** step
+**[1:04:58]** step
+**[1:05:00]** step
+**[1:05:04]** step
+**[1:05:08]** step
+**[1:05:12]** step
+**[1:05:16]** step
+**[1:05:20]** step
+**[1:05:24]** step
+**[1:05:26]** step
+**[1:05:32]** step
+**[1:05:36]** step
+**[1:05:40]** step
+**[1:05:44]** step
+**[1:05:48]** step
+**[1:05:52]** step
+**[1:05:56]** step
+**[1:06:00]** step
+**[1:06:04]** step
+**[1:06:08]** step
+**[1:06:12]** step
+**[1:06:16]** step
+**[1:06:20]** step
+**[1:06:22]** step
+**[1:06:26]** step
+**[1:06:30]** step
+**[1:06:34]** step
+**[1:06:38]** step
+**[1:06:44]** step
+**[1:06:48]** step
+**[1:06:52]** step
+**[1:06:56]** step
+**[1:07:00]** step
+**[1:07:04]** step
+**[1:07:08]** step
+**[1:07:12]** step
+**[1:07:16]** step
+**[1:07:22]** step
+**[1:07:28]** step
+**[1:07:32]** step
+**[1:07:36]** step
+**[1:07:40]** step
+**[1:07:44]** step
+**[1:07:48]** step
+**[1:07:52]** step
+**[1:07:56]** step
+**[1:08:00]** step
+**[1:08:04]** step
+**[1:08:08]** step
+**[1:08:12]** step
+**[1:08:16]** step
+**[1:08:18]** step
+**[1:08:24]** step
+**[1:08:28]** step
+**[1:08:32]** step
+**[1:08:36]** step
+**[1:08:40]** step
+**[1:08:44]** step
+**[1:08:48]** step
+**[1:08:54]** step
+**[1:09:00]** step
+**[1:09:04]** step
+**[1:09:08]** step
+**[1:09:12]** step
+**[1:09:18]** step
+**[1:09:22]** step
+**[1:09:26]** step
+**[1:09:30]** step
+**[1:09:34]** step
+**[1:09:38]** step
+**[1:09:42]** step
+**[1:09:44]** step
+**[1:09:50]** step
+**[1:09:54]** step
+**[1:09:58]** step
+**[1:10:02]** step
+**[1:10:06]** step
+**[1:10:08]** step
+**[1:10:16]** step
+**[1:10:20]** step
+**[1:10:24]** step
+**[1:10:28]** step
+**[1:10:32]** step
+**[1:10:38]** step
+**[1:10:42]** step
+**[1:10:48]** step
+**[1:10:52]** step
+**[1:10:56]** step
+**[1:11:00]** step
+**[1:11:04]** step
+**[1:11:08]** step
+**[1:11:12]** step
+**[1:11:16]** step
+**[1:11:20]** step
+**[1:11:24]** step
+**[1:11:28]** step
+**[1:11:32]** step
+**[1:11:34]** step
+**[1:11:40]** step
+**[1:11:44]** step
+**[1:11:48]** step
+**[1:11:52]** step
+**[1:11:56]** step
+**[1:12:00]** step
+**[1:12:04]** step
+**[1:12:08]** step
+**[1:12:12]** step
+**[1:12:16]** step
+**[1:12:20]** step
+**[1:12:24]** step
+**[1:12:28]** step
+**[1:12:30]** step
+**[1:12:34]** step
+**[1:12:38]** step
+**[1:12:42]** step
+**[1:12:46]** step
+**[1:12:50]** step
+**[1:12:54]** step
+**[1:13:00]** step
+**[1:13:06]** step
+**[1:13:10]** step
+**[1:13:14]** step
+**[1:13:18]** step
+**[1:13:22]** step
+**[1:13:26]** step
+**[1:13:30]** step
+**[1:13:36]** step
+**[1:13:40]** step
+**[1:13:44]** step
+**[1:13:48]** step
+**[1:13:52]** step
+**[1:13:56]** step
+**[1:14:00]** step
+**[1:14:04]** step
+**[1:14:08]** step
+**[1:14:12]** step
+**[1:14:16]** step
+**[1:14:20]** step
+**[1:14:24]** step
+**[1:14:30]** step
+**[1:14:36]** step
+**[1:14:40]** step
+**[1:14:44]** step
+**[1:14:48]** step
+**[1:14:52]** step
+**[1:14:56]** step
+**[1:15:00]** step
+**[1:15:04]** step
+**[1:15:08]** step
+**[1:15:12]** step
+**[1:15:16]** step
+**[1:15:20]** step
+**[1:15:24]** step
+**[1:15:26]** step
+**[1:15:30]** step
+**[1:15:34]** step
+**[1:15:38]** step
+**[1:15:42]** step
+**[1:15:46]** step
+**[1:15:50]** step
+**[1:15:56]** step
+**[1:16:00]** step
+**[1:16:06]** step
+**[1:16:10]** step
+**[1:16:14]** step
+**[1:16:18]** step
+**[1:16:22]** step
+**[1:16:26]** step
+**[1:16:30]** step
+**[1:16:34]** step
+**[1:16:38]** step
+**[1:16:42]** step
+**[1:16:46]** step
+**[1:16:50]** step
+**[1:16:52]** step
+**[1:16:58]** step
+**[1:17:02]** step
+**[1:17:06]** step
+**[1:17:10]** step
+**[1:17:14]** step
+**[1:17:18]** step
+**[1:17:22]** step
+**[1:17:28]** step
+**[1:17:32]** step
+**[1:17:36]** step
+**[1:17:40]** step
+**[1:17:44]** step
+**[1:17:48]** step
+**[1:17:52]** step
+**[1:17:56]** step
+**[1:18:00]** step
+**[1:18:04]** step
+**[1:18:08]** step
+**[1:18:12]** step
+**[1:18:16]** step
+**[1:18:18]** step
+**[1:18:22]** step
+**[1:18:28]** step
+**[1:18:32]** step
+**[1:18:36]** step
+**[1:18:40]** step
+**[1:18:44]** step
+**[1:18:48]** step
+**[1:18:52]** step
+**[1:18:56]** step
+**[1:19:00]** step
+**[1:19:04]** step
+**[1:19:08]** step
+**[1:19:12]** step
+**[1:19:14]** step
+**[1:19:18]** step
+**[1:19:22]** step
+**[1:19:26]** step
+**[1:19:30]** step
+**[1:19:34]** step
+**[1:19:38]** step
+**[1:19:40]** step
+**[1:19:44]** step
+**[1:19:48]** step
+**[1:19:52]** step
+**[1:19:56]** step
+**[1:20:00]** step
+**[1:20:04]** step
+**[1:20:06]** step
+**[1:20:10]** step
+**[1:20:14]** step
+**[1:20:18]** step
+**[1:20:22]** step
+**[1:20:26]** step
+**[1:20:32]** step
+**[1:20:36]** step
+**[1:20:42]** step
+**[1:20:48]** step
+**[1:20:52]** step
+**[1:20:56]** step
+**[1:21:00]** step
+**[1:21:06]** step
+**[1:21:10]** step
+**[1:21:14]** step
+**[1:21:18]** step
+**[1:21:22]** step
+**[1:21:26]** step
+**[1:21:30]** step
+**[1:21:32]** step
+**[1:21:36]** step
+**[1:21:40]** step
+**[1:21:44]** step
+**[1:21:48]** step
+**[1:21:52]** step
+**[1:21:56]** step
+**[1:21:58]** step
+**[1:22:02]** step
+**[1:22:06]** step
+**[1:22:10]** step
+**[1:22:14]** step
+**[1:22:18]** step
+**[1:22:22]** step
+**[1:22:24]** step
+**[1:22:28]** step
+**[1:22:32]** step
+**[1:22:36]** step
+**[1:22:40]** step
+**[1:22:44]** step
+**[1:22:48]** step
+**[1:22:50]** step
+**[1:22:56]** step
+**[1:23:00]** step
+**[1:23:04]** step
+**[1:23:08]** step
+**[1:23:12]** step
+**[1:23:16]** step
+**[1:23:20]** step
+**[1:23:28]** step
+**[1:23:32]** step
+**[1:23:36]** step
+**[1:23:40]** step
+**[1:23:44]** step
+**[1:23:50]** step
+**[1:23:56]** step
+**[1:24:00]** step
+**[1:24:04]** step
+**[1:24:08]** step
+**[1:24:12]** step
+**[1:24:14]** step
+**[1:24:20]** step
+**[1:24:26]** step
+**[1:24:30]** step
+**[1:24:34]** step
+**[1:24:38]** step
+**[1:24:40]** step
+**[1:24:46]** step
+**[1:24:50]** step
+**[1:24:54]** step
+**[1:24:58]** step
+**[1:25:02]** step
+**[1:25:06]** step
+**[1:25:10]** step
+**[1:25:14]** step
+**[1:25:18]** step
+**[1:25:22]** step
+**[1:25:26]** step
+**[1:25:30]** step
+**[1:25:34]** step
+**[1:25:36]** step
+**[1:25:40]** step
+**[1:25:44]** step
+**[1:25:48]** step
+**[1:25:52]** step
+**[1:25:56]** step
+**[1:26:00]** step
+**[1:26:06]** step
+**[1:26:12]** step
+**[1:26:16]** step
+**[1:26:20]** step
+**[1:26:24]** step
+**[1:26:28]** step
+**[1:26:32]** step
+**[1:26:36]** step
+**[1:26:42]** step
+**[1:26:46]** step
+**[1:26:50]** step
+**[1:26:54]** step
+**[1:26:58]** step
+**[1:27:02]** step
+**[1:27:06]** step
+**[1:27:10]** step
+**[1:27:14]** step
+**[1:27:18]** step
+**[1:27:22]** step
+**[1:27:26]** step
+**[1:27:30]** step
+**[1:27:32]** step
+**[1:27:38]** step
+**[1:27:42]** step
+**[1:27:46]** step
+**[1:27:50]** step
+**[1:27:54]** step
+**[1:27:58]** step
+**[1:28:02]** step
+**[1:28:08]** step
+**[1:28:12]** step
+**[1:28:16]** step
+**[1:28:20]** step
+**[1:28:24]** step
+**[1:28:28]** step
+**[1:28:32]** step
+**[1:28:36]** step
+**[1:28:40]** step
+**[1:28:44]** step
+**[1:28:48]** step
+**[1:28:52]** step
+**[1:28:56]** step
+**[1:29:02]** step
+**[1:29:06]** step
+**[1:29:10]** step
+**[1:29:14]** step
+**[1:29:18]** step
+**[1:29:22]** step
+**[1:29:26]** step
+**[1:29:32]** step
+**[1:29:38]** step
+**[1:29:42]** step
+**[1:29:46]** step
+**[1:29:52]** step
+**[1:29:56]** step
+**[1:30:02]** step
+**[1:30:08]** step
+**[1:30:12]** step
+**[1:30:16]** step
+**[1:30:20]** step
+**[1:30:24]** step
+**[1:30:28]** step
+**[1:30:32]** step
+**[1:30:38]** step
+**[1:30:42]** step
+**[1:30:46]** step
+**[1:30:50]** step
+**[1:30:54]** step
+**[1:30:58]** step
+**[1:31:02]** step
+**[1:31:06]** step
+**[1:31:10]** step
+**[1:31:14]** step
+**[1:31:18]** step
+**[1:31:22]** step
+**[1:31:26]** step
+**[1:31:28]** step
+**[1:31:34]** step
+**[1:31:38]** step
+**[1:31:42]** step
+**[1:31:46]** step
+**[1:31:50]** step
+**[1:31:54]** step
+**[1:31:58]** step
+**[1:32:02]** step
+**[1:32:06]** step
+**[1:32:10]** step
+**[1:32:14]** step
+**[1:32:18]** step
+**[1:32:22]** step
+**[1:32:24]** step
+**[1:32:30]** step
+**[1:32:34]** step
+**[1:32:38]** step
+**[1:32:42]** step
+**[1:32:46]** step
+**[1:32:50]** step
+**[1:32:54]** step
+**[1:32:58]** step
+**[1:33:02]** step
+**[1:33:06]** step
+**[1:33:10]** step
+**[1:33:14]** step
+**[1:33:18]** step
+**[1:33:24]** step
+**[1:33:28]** step
+**[1:33:32]** step
+**[1:33:36]** step
+**[1:33:40]** step
+**[1:33:44]** step
+**[1:33:48]** step
+**[1:33:50]** step
+**[1:33:56]** step
+**[1:34:00]** step
+**[1:34:04]** step
+**[1:34:08]** step
+**[1:34:12]** step
+**[1:34:16]** step
+**[1:34:20]** step
+**[1:34:24]** step
+**[1:34:28]** step
+**[1:34:32]** step
+**[1:34:36]** step
+**[1:34:40]** step
+**[1:34:44]** step
+**[1:34:46]** step
+**[1:34:50]** step
+**[1:34:54]** step
+**[1:34:58]** step
+**[1:35:02]** step
+**[1:35:06]** step
+**[1:35:10]** step
+**[1:35:12]** step
+**[1:35:18]** step
+**[1:35:22]** step
+**[1:35:26]** step
+**[1:35:30]** step
+**[1:35:34]** step
+**[1:35:38]** step
+**[1:35:42]** step
+**[1:35:46]** step
+**[1:35:50]** step
+**[1:35:54]** step
+**[1:35:58]** step
+**[1:36:02]** step
+**[1:36:06]** step
+**[1:36:08]** step
+**[1:36:14]** step
+**[1:36:18]** step
+**[1:36:22]** step
+**[1:36:26]** step
+**[1:36:30]** step
+**[1:36:34]** step
+**[1:36:38]** step
+**[1:36:42]** step
+**[1:36:46]** step
+**[1:36:50]** step
+**[1:36:54]** step
+**[1:36:58]** step
+**[1:37:02]** step
+**[1:37:04]** step
+**[1:37:08]** step
+**[1:37:12]** step
+**[1:37:16]** step
+**[1:37:20]** step
+**[1:37:24]** step
+**[1:37:28]** step
+**[1:37:30]** step
+**[1:37:34]** step
+**[1:37:38]** step
+**[1:37:42]** step
+**[1:37:46]** step
+**[1:37:50]** step
+**[1:37:54]** step
+**[1:37:56]** step
+**[1:38:00]** step
+**[1:38:04]** step
+**[1:38:08]** step
+**[1:38:12]** step
+**[1:38:16]** step
+**[1:38:20]** step
+**[1:38:22]** step
+**[1:38:26]** step
+**[1:38:30]** step
+**[1:38:34]** step
+**[1:38:38]** step
+**[1:38:42]** step
+**[1:38:46]** step
+**[1:38:48]** step
+**[1:38:54]** step
+**[1:38:58]** step
+**[1:39:02]** step
+**[1:39:06]** step
+**[1:39:10]** step
+**[1:39:14]** step
+**[1:39:18]** step
+**[1:39:22]** step
+**[1:39:26]** step
+**[1:39:30]** step
+**[1:39:34]** step
+**[1:39:38]** step
+**[1:39:42]** step
+**[1:39:44]** step
+**[1:39:48]** step
+**[1:39:52]** step
+**[1:39:56]** step
+**[1:40:00]** step
+**[1:40:04]** step
+**[1:40:08]** step
+**[1:40:10]** step
+**[1:40:16]** step
+**[1:40:20]** step
+**[1:40:24]** step
+**[1:40:28]** step
+**[1:40:32]** step
+**[1:40:36]** step
+**[1:40:40]** step
+**[1:40:44]** step
+**[1:40:48]** step
+**[1:40:52]** step
+**[1:40:56]** step
+**[1:41:00]** step
+**[1:41:04]** step
+**[1:41:06]** step
+**[1:41:10]** step
+**[1:41:14]** step
+**[1:41:18]** step
+**[1:41:22]** step
+**[1:41:26]** step
+**[1:41:30]** step

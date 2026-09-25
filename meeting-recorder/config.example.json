@@ -4,6 +4,8 @@
   "language": "auto",
   "gemini_model": "gemini-2.5-flash",
   "auto_draft": true,
+  "upload_audio": false,
+  "_upload_audio_note": "false = transcript + MOM go to Drive, the raw audio stays local only (Clients/<client>/recordings/). A 1h meeting mixes to ~160MB and the Drive upload times out; the .md files are what get read. Set true to push audio too.",
   "draft_model": "",
   "draft_backend": "agy",
   "_draft_note": "MOM draft model, routed through the agy-bridge draft chain. Leave draft_model empty to use the default chain, or name a specific model your agy-bridge is configured for.",

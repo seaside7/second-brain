@@ -1,0 +1,210 @@
+**[00:00]** Ngomong-ngomong situasinya salah satu itu, tapi pengetahuan ini gitu.
+**[00:04]** Jadi gini mas, sebenernya kalau setiap platform yang datang itu ada namanya CVIE.
+**[00:14]** Kita nyebutnya CVIE kalau di JSC ya.
+**[00:16]** CVIE.
+**[00:18]** Pesulap pemberitahuan lah, jadi si pengetahuan yang ditahui.
+**[00:21]** S-C-V-I-E-A.
+**[00:24]** Lajangannya saya lupa.
+**[00:31]** Jadi itu bisa berupa email.
+**[00:33]** Satu ini berupa email.
+**[00:35]** Jadi layaran itu kirim ke terminal.
+**[00:41]** Ini sama sih di semuanya juga ya.
+**[00:44]** Ini juga lagi, dia kirim email ke layaran bahwa saya akan sandar.
+**[00:50]** Layaran kirim ke terminal ya?
+**[00:53]** Saya akan sandar, saya akan dikandal, sekian-sekian.
+**[00:57]** Estimasi buktaran saya, sekian.
+**[01:01]** Estimasi buktaran saya, sekian.
+**[01:03]** Oh ya, nama kapalnya ini.
+**[01:05]** Oh ya, nama kapalnya ini.
+**[01:07]** Saat schedule itu ya?
+**[01:09]** Saat schedule itu.
+**[01:11]** Jadi, schedule ini.
+**[01:15]** Mana bahasa?
+**[01:20]** Kita pertama di ETHOS itu kita pastikan nama kapal itu ada dulu.
+**[01:24]** Oh ya, betul.
+**[01:26]** Di data kapal itu ada nama master special di ETHOS.
+**[01:29]** Master special itu diantaranya sumbernya dari SIP Particular.
+**[01:32]** Apa?
+**[01:33]** SIP Particular. Jadi kalau di layaran itu,
+**[01:35]** setiap kapal itu memiliki nama SIP Particular.
+**[01:37]** Jadi berkomunikasi dengan kapal itu.
+**[01:39]** DWD-nya berapa, jumlah Valkanya berapa.
+**[01:43]** Seperti spek profile-nya.
+**[01:45]** Seperti spek profile-nya kapal itu.
+**[01:47]** Jadinya kalau kapalnya berulang masuk,
+**[01:50]** itu kan cukup sekalian saja karena di master ya.
+**[01:52]** Tapi itu, saya maksud dulu bahwa itu
+**[01:54]** sudah ada dulu nih kapalnya.
+**[01:56]** Jadi ketika kita buat special schedule,
+**[02:01]** special schedule ini mengambil kapal dari master.
+**[02:04]** Bukan yang di kapal.
+**[02:07]** Nah, di situ juga ada yang namanya special profile day.
+**[02:11]** Ini specialnya sama data input ya.
+**[02:13]** Profile day itu penampang kapal.
+**[02:16]** Jadi kalau kapal,
+**[02:19]** ini apa nih ya?
+**[02:21]** Penampang profile day ini ya.
+**[02:23]** Dipotong B1, B3.
+**[02:27]** Susunan kontainer di dalam ini,
+**[02:29]** misalkan bentuknya ada yang mungkin
+**[02:32]** B1 itu cuma berapa row gitu ya.
+**[02:35]** Itu bergantian dari kapal.
+**[02:38]** Nah, itu harus dituliskan dulu di master profile day.
+**[02:42]** Oke.
+**[02:44]** Terus setelah itu ada...
+**[02:47]** Harapan nanti ngaruhnya ke mana?
+**[02:49]** Ngaruhnya ke mana?
+**[02:50]** Ke sini.
+**[02:51]** Ke file.
+**[02:54]** Jadi dia harus mengerti kosisnya
+**[02:57]** atau definisi yang di profile day ini.
+**[02:59]** Misalkan di sebelumnya,
+**[03:01]** ADI yang dia upload ini adalah namanya battery.
+**[03:04]** Battery itu ADI
+**[03:06]** yang diutuk storage kapal.
+**[03:08]** Storage kapal itu posisi kontainer di atas kapal.
+**[03:12]** Jadi kalau ADI itu ada battery,
+**[03:14]** ada kodeco, ada kuari,
+**[03:16]** ada kepan, ada koreo.
+**[03:18]** Nah, bedanya apa itu nanti dibilang.
+**[03:20]** Battery itu terkait sama muatan di dalam kapal.
+**[03:24]** Susunan kontainer di dalam kapal.
+**[03:26]** Kalau misalkan posisi kontainer misalkan
+**[03:29]** di B1, B2, B3, B4, B5 misalnya.
+**[03:33]** Gak ada.
+**[03:34]** Kita definisikan di ini.
+**[03:43]** Setelah itu ada namanya passing route.
+**[03:45]** Passing route itu kapal itu ke mana aja?
+**[03:51]** Nah, saat ini memang
+**[03:54]** passing route itu
+**[03:57]** kita ngomongnya dia gak banyak berubah.
+**[03:59]** Itu hanya passing route.
+**[04:02]** Kita bilangnya passing route.
+**[04:03]** Jadi kapal ini bisa ke mana aja.
+**[04:05]** Passing route itu penting untuk validasi
+**[04:08]** ketika nge-upload,
+**[04:09]** dia harus sudah register di passing route.
+**[04:11]** Jadi ketika ada data pelabuhan,
+**[04:13]** dia harus sudah ada di passing route.
+**[04:15]** Kan logikanya gak mungkin nih kita
+**[04:17]** ngirim kontainer tapi rute kapalnya gak ke situ.
+**[04:25]** Bapak mau nerah?
+**[04:28]** Udah, udah.
+**[04:35]** Oke, sekarang kita masuk ke pembuatan.
+**[04:37]** Kita tadi sudah siap tuh.
+**[04:41]** Sekarang kita buat facial schedule.
+**[04:43]** Sebenarnya kita sudah siapin
+**[04:46]** utama customer bisa buat facial schedule sendiri.
+**[04:51]** Yang kedua, manual.
+**[04:53]** Orang-orang di sini yang buat facial schedule.
+**[04:56]** Customer di sini tuh berarti pelayarannya.
+**[05:01]** Di portal.
+**[05:03]** Sebenarnya di PSK,
+**[05:05]** tidak pernah kita bikinnya.
+**[05:08]** Di PSK sudah kita bikin,
+**[05:10]** di PGT kita udah bikin,
+**[05:12]** tapi belum dipakai memang.
+**[05:22]** Di atas yang lama juga ada kan facial schedule?
+**[05:24]** Dulu PSK pernah kuasian.
+**[05:26]** Tapi gak tahu ya dipakai atau enggak.
+**[05:29]** Ini facial schedule itu maksudnya yang di atas?
+**[05:31]** Iya, ini facial schedule itu ada dua jalan.
+**[05:33]** Pertama, pelayarannya tadi kan saya bilang
+**[05:35]** dia kirim ke PIA itu.
+**[05:37]** PIA bisa ingat, bisa ingat lewat portal.
+**[05:41]** Lewat portal, customer tinggal masukin tuh.
+**[05:43]** Menteri, saya mau datang kapan,
+**[05:45]** kodnya apa aja.
+**[05:47]** Terus nanti dia akan di-review oleh team operation.
+**[05:50]** Ketika sudah di-review dan kadernya ada,
+**[05:56]** dia tinggal approve.
+**[05:58]** Jadi facial schedule.
+**[05:59]** Oke, tapi kalau misalnya via email,
+**[06:02]** kita ingin put-in?
+**[06:03]** Kita ingin put-in.
+**[06:04]** Orang operation ingin put-in.
+**[06:05]** Ada menurutnya namanya anti-facial schedule.
+**[06:07]** Jadi juga buat masukin facial schedule.
+**[06:10]** Team operation-nya PSK.
+**[06:12]** Pertanyaan apa, next-nya mau gimana?
+**[06:14]** Tergantung.
+**[06:15]** Tergantung menjalani kriminal.
+**[06:20]** Maksudnya seperti outlook,
+**[06:23]** untuk sosialisasi juga.
+**[06:25]** Kalau misalkan menurut Pak Agus,
+**[06:28]** best practice-nya itu gimana?
+**[06:30]** Kita menurunkan best practice-nya.
+**[06:32]** Kalau ngomong best practice,
+**[06:34]** ini semuanya manual.
+**[06:35]** PSP, PNP, PSJ,
+**[06:37]** even PGT pun masih manual.
+**[06:40]** Berarti menunggu dari criminal test.
+**[06:46]** Saya nggak tahu,
+**[06:47]** customer-nya nggak mau
+**[06:48]** atau mereka belum sosialisasi.
+**[06:50]** Itu tergantung.
+**[06:55]** Ini dari Facebook.
+**[07:05]** Pak, tanya kalau misal anti-ethos-nya
+**[07:07]** di menu apa ya, Pak?
+**[07:08]** Ultimax?
+**[07:09]** Yang tadi, yang hostile buat si sosialisasi.
+**[07:13]** Di web service-nya.
+**[07:14]** Oh, di web service-nya.
+**[07:16]** Nanti, Pak.
+**[07:17]** Nanti, Pak.
+**[07:22]** Oke, selanjutnya.
+**[07:26]** Yang kedua, upload ADI file.
+**[07:28]** Jadi, nggak semuanya bentuknya ADI.
+**[07:30]** Saya langsung tutorial aja ya.
+**[07:32]** PSP.
+**[07:33]** Jadi, saya nggak ngomong PSP.
+**[07:36]** Jadi, intinya gini.
+**[07:38]** Sebelum kapal sandar,
+**[07:40]** kita harus punya data muatan.
+**[07:46]** Data yang ada di kapal itu.
+**[07:48]** Ini kan kapal sandar.
+**[07:49]** Pasti ada muatan itu.
+**[07:52]** Baik yang mau dibongkar di lokasi tujuan,
+**[07:57]** di PSP atau PNP,
+**[07:58]** maupun yang bongkarnya nggak di situ.
+**[08:01]** Kalau yang nggak bongkarnya di PSP atau PNP,
+**[08:03]** itu namanya ROB.
+**[08:05]** Remain on board.
+**[08:07]** ROB.
+**[08:11]** Padahal yang di kapal,
+**[08:12]** yang memang pelabun bongkar itu bukan di situ.
+**[08:16]** Itu nggak akan dibongkar.
+**[08:18]** Next destination.
+**[08:21]** Itu namanya ROB.
+**[08:22]** Semua data itu,
+**[08:23]** itu ada di file ADI bumpy tadi.
+**[08:27]** Yang standar.
+**[08:28]** Yang dibongkar maupun yang dibongkar.
+**[08:30]** Harus masukin ke sana.
+**[08:31]** Pokoknya ADI bumpy itu harus mengisi kontainer,
+**[08:33]** data kontainer,
+**[08:34]** beserta lokasinya.
+**[08:36]** Yang ada di kapal itu.
+**[08:37]** Yang mau datang ke PNP.
+**[08:40]** Gunanya apa?
+**[08:41]** Itu sebagai transmit.
+**[08:42]** Buat team operation.
+**[08:45]** Jangan salah bongkar.
+**[08:47]** Posisinya tahu dimana.
+**[08:48]** Kedua,
+**[08:49]** semuatan juga.
+**[08:51]** Dia jangan mengempatkan muatan.
+**[08:53]** Kan kita pakenya sekarang,
+**[08:54]** kalau di atas baru ya.
+**[08:55]** Kalau di atas lama mungkin,
+**[08:57]** nggak tahu,
+**[08:58]** di PNP mungkin pakai planningnya.
+**[08:59]** Kalau di PNP nggak pakai planning.
+**[09:01]** Dia semuatin aja dulu,
+**[09:02]** baru kelihatan.
+**[09:03]** Kalau di PSP,
+**[09:04]** karena dia MT,
+**[09:05]** dia planning dulu nih.
+**[09:06]** MT kan nggak di tanda ya.
+**[09:08]** Sama.
+**[09:14]** Terima kasih.

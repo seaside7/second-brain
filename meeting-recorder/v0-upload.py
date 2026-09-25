@@ -117,6 +117,11 @@ def main():
     ap.add_argument("--extra", action="append", default=[],
                     metavar="PATH", help="additional file (transcript .md/.txt, "
                     "MOM .md) uploaded next to the audio under the same slug")
+    ap.add_argument("--no-audio", action="store_true",
+                    help="keep the audio in the local store but do NOT upload it "
+                    "to the cloud; --extra artifacts still upload. Raw meeting "
+                    "audio is large (a 1h call mixes to ~160MB) and regularly "
+                    "times out, while the transcript and MOM are what get read.")
     args = ap.parse_args()
 
     rec, src_path = build_recording(args.target, args.workspace)
@@ -125,7 +130,8 @@ def main():
 
     cloud = (storage.GoogleDriveCloudStore() if args.cloud == "drive"
              else storage.DryRunCloudStore())
-    result = storage.store_recording(src_path, rec, cloud=cloud)
+    result = storage.store_recording(src_path, rec,
+                                     cloud=None if args.no_audio else cloud)
     datamodel.insert_recording(REGISTRY_PATH, rec, overwrite=True)
     print(f"recording {rec.recording_id}")
     print(f"  workspace -> client : {args.workspace or 'work'} -> {rec.client}")

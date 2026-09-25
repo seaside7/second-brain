@@ -372,13 +372,16 @@ def _mom_upload_copy(mom_path):
     shutil.copy2(mom_path, staged)
     return staged
 
-def _upload_artifacts(audio_path, transcript_md, mom_path, workspace):
+def _upload_artifacts(audio_path, transcript_md, mom_path, workspace, cfg=None):
     """Push the audio, transcript, and MOM into the personal drive under
     Meeting Transcripts/<client>/<YYYY>/<MM>/ via v0-upload.py (the single
     upload entry point). Fail-soft: never raises."""
+    cfg = cfg or {}
     staged_mom = None
     argv = [sys.executable, os.path.join(MODULE_DIR, "v0-upload.py"),
             audio_path, "--cloud", "drive"]
+    if not cfg.get("upload_audio", False):
+        argv.append("--no-audio")
     if workspace:
         argv += ["--workspace", workspace]
     if transcript_md and os.path.exists(transcript_md):
@@ -532,7 +535,7 @@ def process(audio_path, cfg, state, workspace=None, output_dir=None):
     save_state(state)
 
     if cfg.get("auto_upload", True):
-        _upload_artifacts(audio_path, transcript_md, mom_path, workspace)
+        _upload_artifacts(audio_path, transcript_md, mom_path, workspace, cfg)
 
     heartbeat("ok", f"{name}: {status} ({rec_id})")
     activity(rec_id, f"local recording {name}: {status}")
