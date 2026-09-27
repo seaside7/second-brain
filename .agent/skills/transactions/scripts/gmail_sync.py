@@ -60,6 +60,11 @@ _SENDER_Q = ' OR '.join(
 )
 _DEFAULT_QUERY = f'({_SENDER_Q}) newer_than:30d'
 
+# Bumped whenever parsing changes in a way that would produce different output
+# for the same email, so source_documents can record which parser produced a
+# row. Stamped onto every document written by _process_message.
+PARSER_VERSION = '3.1'
+
 # Owner names that need stripping from wallet recipients (ours, not the wallet).
 _OWNER_NAMES = {'said', 'sakd', 'sa', 's.'}
 
@@ -227,7 +232,8 @@ def _process_message(conn: sqlite3.Connection, service, msg_id: str, stats: dict
         email_received_at=date_str,
         preview=body_text[:400])
 
-    store.update_source_document(conn, doc_id, status='parsed', parser_version='3.0')
+    store.update_source_document(conn, doc_id, status='parsed',
+                                 parser_version=PARSER_VERSION)
 
     batch_id = store.add_import_batch(conn, doc_id)
     ext_ids = store.add_extracted_rows(conn, batch_id, doc_id, parsed)
@@ -256,7 +262,7 @@ def _process_message(conn: sqlite3.Connection, service, msg_id: str, stats: dict
                 apply_categorization(conn, results[0], ledger_id)
             else:
                 uncategorized = True
-        store.update_source_document(conn, doc_id, parser_version='3.0',
+        store.update_source_document(conn, doc_id, parser_version=PARSER_VERSION,
             error='uncategorized' if uncategorized else '')
 
     stats['synced'] += 1
@@ -284,9 +290,6 @@ def _extract_body(payload: dict) -> str:
         for part in payload.get('parts', []):
             text += _extract_body(part)
     return text
-
-
-PARSER_VERSION = '3.1'
 
 
 def _parse_email(body: str, provider: str, subject: str,
