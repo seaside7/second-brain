@@ -215,7 +215,7 @@
     (s.permanent || []).forEach(cat => (cat.questions || []).forEach(q => {
       rows.push({ text: q, cat: cat.category, icon: cat.icon });
     }));
-    (s.dynamic || []).forEach(q => rows.push({ text: q, cat: 'Context-aware', icon: 'sparkle' }));
+    (s.dynamic || []).forEach(q => rows.push({ text: q, cat: 'Context-aware', icon: '✨' }));
     return rows;
   }
 

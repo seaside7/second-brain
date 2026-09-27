@@ -859,7 +859,7 @@ const Comp = {
     const chips = shown.map(({ url, label }) => {
       const info = Comp._linkInfo(url);
       const text = label || info.label;
-      const icon = `<span class="link-chip-ic">${info.icon}</span>`;
+      const icon = `<span class="link-chip-ic">${Comp.ic(info.icon)}</span>`;
       if (info.kind === 'file') {
         /* relative repo path -> Drawer (markdown renders; other text files
            degrade gracefully through the same viewer) */

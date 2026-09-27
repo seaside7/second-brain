@@ -177,7 +177,7 @@ window.Tabs = window.Tabs || {};
     for (const c of CATS) {
       const active = state.activeCat === c.key;
       parts.push('<a href="#news/' + c.key + '" class="' + (active ? 'is-active' : '') + '">' +
-        '<span>' + c.icon + '</span><span>' + U.esc(c.label) + '</span></a>');
+        '<span>' + Comp.ic(c.icon) + '</span><span>' + U.esc(c.label) + '</span></a>');
     }
     parts.push('</nav>');
 
