@@ -42,6 +42,20 @@ window.Tabs = window.Tabs || {};
     if (state.bound) return;
     state.bound = true;
     document.addEventListener('click', ev => {
+      /* Source link inside the collapsed <summary>. A click on any
+         descendant of <summary> also runs the summary's activation
+         behaviour, so a bare <a> would expand the card AND navigate.
+         preventDefault() cancels that activation, then we open the
+         article ourselves. stopPropagation() is belt-and-braces for
+         the capture-phase siblings below. */
+      const srcLink = ev.target.closest('[data-src-link]');
+      if (srcLink) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const href = srcLink.getAttribute('href') || '';
+        if (isHttpUrl(href)) window.open(href.trim(), '_blank', 'noopener');
+        return;
+      }
       const chip = ev.target.closest('[data-ask-chip]');
       if (chip) {
         ev.preventDefault();
@@ -218,7 +232,7 @@ window.Tabs = window.Tabs || {};
     const verdict = verdictPill(story.verdict);
 
     const topline = [];
-    if (story.source) topline.push('<span class="intel-source">' + U.esc(story.source) + '</span>');
+    if (story.source || isHttpUrl(story.url)) topline.push(sourceLabel(story));
     if (story.market) topline.push('<span class="intel-market intel-market--' + U.esc(marketClass(story.market)) + '">' + U.esc(story.market) + '</span>');
     if (story.stored_on) topline.push('<span class="intel-date">' + U.esc(story.stored_on) + '</span>');
     if (verdict) topline.push(verdict);
@@ -252,6 +266,24 @@ window.Tabs = window.Tabs || {};
 
   function cardKey(story) {
     return (story.url ? story.url.slice(-24) : (story.headline || '').slice(0, 24)).replace(/[^\w-]/g, '');
+  }
+
+  /* The source name doubles as the link to the original article, so the
+     destination is reachable from the collapsed card instead of only
+     after expanding it. http(s) only - the feed is AI-generated, so a
+     stray "javascript:" or "data:" value must never become clickable. */
+  function isHttpUrl(u) {
+    return typeof u === 'string' && /^https?:\/\/\S+$/i.test(u.trim());
+  }
+
+  function sourceLabel(story) {
+    const url = isHttpUrl(story.url) ? story.url.trim() : '';
+    if (!url) return '<span class="intel-source">' + U.esc(story.source) + '</span>';
+    // Fall back to a generic label when the feed has a link but no source name.
+    const name = story.source ? U.esc(story.source) : 'Source';
+    return '<a class="intel-source intel-source--link" data-src-link href="' + U.esc(url) +
+      '" target="_blank" rel="noopener noreferrer" title="Open the original article">' +
+      name + ' <span aria-hidden="true">↗</span></a>';
   }
 
   function marketClass(m) {
@@ -313,9 +345,9 @@ window.Tabs = window.Tabs || {};
   }
 
   function sourceLink(url) {
-    if (!url) return '';
-    return '<div class="intel-foot"><a class="intel-src-link" href="' + U.esc(url) +
-      '" target="_blank" rel="noopener">\uD83D\uDD17 Read source \u2197</a></div>';
+    if (!isHttpUrl(url)) return '';
+    return '<div class="intel-foot"><a class="intel-src-link" href="' + U.esc(url.trim()) +
+      '" target="_blank" rel="noopener noreferrer">\uD83D\uDD17 Read source \u2197</a></div>';
   }
 
   function firstSentence(text) {

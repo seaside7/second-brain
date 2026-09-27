@@ -3030,6 +3030,16 @@ a.ticket-chip:hover { border-color: var(--border-active); color: var(--text-acce
 .intel-main { flex: 1; min-width: 0; }
 .intel-topline { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; margin-bottom: 6px; }
 .intel-source { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text-accent); }
+/* Source name doubles as the link to the original article. Underline +
+   arrow mark it as clickable - it sits in the collapsed <summary>, so it
+   has to read as a link without being a full-width control. */
+.intel-source--link {
+  text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 3px; border-radius: var(--radius-xs);
+  transition: color .15s, text-decoration-color .15s;
+}
+.intel-source--link:hover { color: var(--accent); text-decoration-color: currentColor; }
+.intel-source--link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .intel-date { font-size: var(--fs-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .intel-market {
   font-size: 10px; font-weight: 700; letter-spacing: .06em;
