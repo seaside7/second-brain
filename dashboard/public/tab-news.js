@@ -53,7 +53,7 @@ window.Tabs = window.Tabs || {};
         ev.preventDefault();
         ev.stopPropagation();
         const href = srcLink.getAttribute('href') || '';
-        if (isHttpUrl(href)) window.open(href.trim(), '_blank', 'noopener');
+        if (safeUrl(href)) window.open(safeUrl(href), '_blank', 'noopener');
         return;
       }
       const chip = ev.target.closest('[data-ask-chip]');
@@ -232,7 +232,7 @@ window.Tabs = window.Tabs || {};
     const verdict = verdictPill(story.verdict);
 
     const topline = [];
-    if (story.source || isHttpUrl(story.url)) topline.push(sourceLabel(story));
+    if (story.source || safeUrl(story.url)) topline.push(sourceLabel(story));
     if (story.market) topline.push('<span class="intel-market intel-market--' + U.esc(marketClass(story.market)) + '">' + U.esc(story.market) + '</span>');
     if (story.stored_on) topline.push('<span class="intel-date">' + U.esc(story.stored_on) + '</span>');
     if (verdict) topline.push(verdict);
@@ -270,14 +270,31 @@ window.Tabs = window.Tabs || {};
 
   /* The source name doubles as the link to the original article, so the
      destination is reachable from the collapsed card instead of only
-     after expanding it. http(s) only - the feed is AI-generated, so a
-     stray "javascript:" or "data:" value must never become clickable. */
-  function isHttpUrl(u) {
-    return typeof u === 'string' && /^https?:\/\/\S+$/i.test(u.trim());
+     after expanding it.
+
+     This is the single gate every href passes through, and the feed is
+     AI-generated, so a story's url is untrusted input on two counts:
+
+       - a stray "javascript:" or "data:" value must never become clickable,
+         so only an http(s) substring is ever accepted;
+       - the model sometimes returns SEVERAL urls joined into one string
+         ("https://a.com/x; https://b.com/y") when it merged two stories
+         into one card. A whole-value regex would reject that and cost the
+         card its link, so extract the first http(s) run instead - the
+         character class stops at the separator.
+
+     Returns '' for anything unusable, which callers render as plain text. */
+  const _URL_RE = /https?:\/\/[^\s;"'<>`]+/i;
+  function safeUrl(raw) {
+    if (typeof raw !== 'string') return '';
+    const m = raw.match(_URL_RE);
+    if (!m) return '';
+    // A trailing separator is never part of a real path segment.
+    return m[0].replace(/[;,]+$/, '');
   }
 
   function sourceLabel(story) {
-    const url = isHttpUrl(story.url) ? story.url.trim() : '';
+    const url = safeUrl(story.url);
     if (!url) return '<span class="intel-source">' + U.esc(story.source) + '</span>';
     // Fall back to a generic label when the feed has a link but no source name.
     const name = story.source ? U.esc(story.source) : 'Source';
@@ -345,8 +362,9 @@ window.Tabs = window.Tabs || {};
   }
 
   function sourceLink(url) {
-    if (!isHttpUrl(url)) return '';
-    return '<div class="intel-foot"><a class="intel-src-link" href="' + U.esc(url.trim()) +
+    const href = safeUrl(url);
+    if (!href) return '';
+    return '<div class="intel-foot"><a class="intel-src-link" data-src-link href="' + U.esc(href) +
       '" target="_blank" rel="noopener noreferrer">\uD83D\uDD17 Read source \u2197</a></div>';
   }
 
