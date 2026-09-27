@@ -22,16 +22,16 @@
     return 'muted';
   }
 
-  const KIND_ICON = { commitments: '✅', waiting_on: '⏳', decisions: '⚖️' };
+  const KIND_ICON = { commitments: '✅', waiting_on: '⏳', decisions: '⚖' };
 
   /* a source link: repo-relative path -> Drawer opener; http(s) -> new tab */
   function sourceLink(link) {
     if (!link) return '';
     if (/^https?:\/\//i.test(link)) {
-      return `<a class="doc-link" href="${U.esc(link)}" target="_blank" rel="noopener">🔗 source</a>`;
+      return `<a class="doc-link" href="${U.esc(link)}" target="_blank" rel="noopener">${Comp.ic('link')} source</a>`;
     }
     return `<button class="prep-link" data-drawer-path="${U.esc(link)}" ` +
-      `data-drawer-title="${U.esc(link.split('/').pop())}">📄 source</button>`;
+      `data-drawer-title="${U.esc(link.split('/').pop())}">${Comp.ic('file')} source</button>`;
   }
 
   /* one label:value line inside the detail card; skipped when value empty */
@@ -105,7 +105,7 @@
 
     if (!results.length) {
       parts.push(Comp.emptyState({
-        icon: '🔍', title: `No ledger item matches "${U.esc(q)}"`,
+        icon: 'search', title: `No ledger item matches "${U.esc(q)}"`,
         hint: data.jira ? 'Not in the local ledgers — try the Jira link above.'
           : 'Try a full ID (COM-0284) or a keyword (ExampleVendor, OTP).',
       }));
@@ -113,7 +113,7 @@
       parts.push(`<div class="section-label">${results.length} match${results.length === 1 ? '' : 'es'}</div>`);
       parts.push(`<div class="rows">${results.map(resultRow).join('')}</div>`);
     }
-    Drawer.openHtml(`🔎 Find: ${U.esc(q)}`, parts.join(''));
+    Drawer.openHtml(`${Comp.ic('search')} Find: ${U.esc(q)}`, parts.join(''));
   }
 
   async function run(q) {
@@ -125,7 +125,7 @@
       if (q !== lastQuery) return;   // a newer query superseded this one
       renderResults(data);
     } catch (err) {
-      Drawer.openHtml(`🔎 Find: ${U.esc(q)}`,
+      Drawer.openHtml(`${Comp.ic('search')} Find: ${U.esc(q)}`,
         `<div class="load-error">${U.esc(err.message || 'search failed')}</div>`);
     }
   }

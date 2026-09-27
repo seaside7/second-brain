@@ -48,9 +48,9 @@ window.Reminders = (() => {
         <button class="rem-check" data-act="${r.done ? 'reopen' : 'close'}" title="${checkTitle}">${checkIcon}</button>
         <div class="rem-body">
           <div class="rem-text">${U.esc(r.text)}</div>
-          <div class="rem-meta"><span class="rem-due">📅 ${fmtDue(r.due)}</span></div>
+          <div class="rem-meta"><span class="rem-due">${Comp.ic('calendar')} ${fmtDue(r.due)}</span></div>
         </div>
-        <button class="rem-del" data-act="delete" title="Delete">✕</button>
+        <button class="rem-del" data-act="delete" title="Delete" aria-label="Delete reminder">${Comp.ic('close')}</button>
       </div>`;
   }
 
@@ -96,7 +96,7 @@ window.Reminders = (() => {
         section('Upcoming', groups.upcoming),
         section('Done', groups.done.slice(-20), false),
         (!cache.all.length
-          ? Comp.emptyState({ icon: '⏰', title: 'No reminders yet',
+          ? Comp.emptyState({ icon: 'clock', title: 'No reminders yet',
                               hint: 'Add one above, or just tell the chat: "remind me … tomorrow at 3".' })
           : ''),
       ].join('\n');
@@ -112,7 +112,7 @@ window.Reminders = (() => {
     const rows = live.map(row).join('');
     return Comp.card({
       key: 'today-reminders-card',
-      icon: '⏰', title: "Today's reminders",
+      icon: 'clock', title: "Today's reminders",
       count: String(live.length),
       status: live.some(r => r.bucket === 'overdue') ? 'serious' : '',
       open: true,

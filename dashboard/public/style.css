@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════
    PSB DASHBOARD — design tokens + component CSS
-   Stage 1 of the 4-tab redesign. Stage 2 tab modules use ONLY the
-   classes below via components.js — no inline styles except --pct.
+   Tab modules use ONLY the classes below via components.js — no inline
+   styles except per-component custom props (--pct, --tx, --tc, …).
 
    Palette gate (dataviz skill): validate_palette.js
    "#3987e5,#199e70,#c98500,#008300,#9085e9,#e66767,#d55181,#d95926"
@@ -9,75 +9,110 @@
    Final categorical hexes = as listed (no snapping needed). CVD worst
    adjacent ΔE 10.3 sits in the legal floor band; mitigation = icons +
    labels always accompany color (Comp.badge auto-prefixes ✓ ⚠ ⏳ ⛔).
+
+   ⚠ --cat-1..8, --st-* and --surface-opaque are LOAD-BEARING: the
+   categorical set above was validated against surface #14151F. Changing
+   any of them invalidates that result — re-run the validator first.
+
+   Neutrals below moved to a true slate ramp (no indigo cast) so the
+   reserved data palettes above sit on neutral grey, per the financial-
+   dashboard spec. Chrome only.
    ═══════════════════════════════════════════ */
 :root {
-  /* HSL System for Precision (seed kept from v1) */
+  /* Hue seeds — kept because accents/aurora derive from them by hue.
+     These are NOT the reserved data palettes (see --cat-* / --st-*). */
   --h-indigo: 235;
   --h-violet: 265;
   --h-emerald: 160;
   --h-amber: 40;
   --h-rose: 350;
+  --h-blue: 212;
+  --h-green: 145;
 
   /* Shared accent (used by .tx-* etc.) */
-  --accent: hsl(var(--h-indigo), 70%, 55%);
-  --bg-hover: hsla(var(--h-indigo), 20%, 14%, 0.8);
+  --accent: hsl(var(--h-indigo), 72%, 62%);
+  --accent-hover: hsl(var(--h-indigo), 72%, 68%);
+  --bg-hover: hsla(var(--h-indigo), 24%, 16%, 0.85);
 
-  /* Backgrounds */
-  --bg-primary: hsl(var(--h-indigo), 30%, 4%);
-  --bg-secondary: hsl(var(--h-indigo), 25%, 7%);
-  --bg-card: hsla(var(--h-indigo), 20%, 10%, 0.6);
-  --bg-card-hover: hsla(var(--h-indigo), 20%, 14%, 0.8);
-  --bg-input: rgba(255, 255, 255, 0.03);
-  --bg-glass: rgba(255, 255, 255, 0.04);
+  /* Backgrounds — slate ramp, cool-neutral */
+  --bg-primary: #020617;   /* slate-950: page */
+  --bg-secondary: #0B1220; /* slate-900: raised chrome */
+  --bg-soft: #0F172A;      /* slate-900 alt: inputs, wells */
+  --bg-card: hsla(15, 23, 47, 0.62);
+  --bg-card-hover: hsla(30, 41, 59, 0.72);
+  --bg-input: rgba(255, 255, 255, 0.04);
+  --bg-glass: rgba(255, 255, 255, 0.05);
 
   /* Text */
-  --text-primary: hsl(var(--h-indigo), 15%, 94%);
-  --text-secondary: hsl(var(--h-indigo), 12%, 65%);
-  --text-muted: hsl(var(--h-indigo), 10%, 45%);
-  --text-accent: hsl(var(--h-violet), 80%, 85%);
+  --text-primary: #F8FAFC;
+  --text-secondary: #B6C2D4;
+  --text-muted: #8494AC;
+  --text: #F8FAFC;         /* shorthand used by .ov-* */
+  --text-accent: #A5B4FC;
 
-  /* Priority Colors */
-  --p0: hsl(var(--h-rose), 90%, 65%);
-  --p0-bg: hsla(var(--h-rose), 90%, 65%, 0.1);
-  --p0-border: hsla(var(--h-rose), 90%, 65%, 0.25);
+  /* Borders & surfaces */
+  --border: rgba(148, 163, 184, 0.14);
+  --border-subtle: rgba(148, 163, 184, 0.09);
+  --border-active: rgba(148, 163, 184, 0.28);
+  --focus-ring: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--accent);
 
-  --p1: hsl(var(--h-amber), 90%, 60%);
-  --p1-bg: hsla(var(--h-amber), 90%, 60%, 0.1);
-  --p1-border: hsla(var(--h-amber), 90%, 60%, 0.25);
-
-  --p2: hsl(210, 90%, 65%);
-  --p2-bg: hsla(210, 90%, 65%, 0.1);
-  --p2-border: hsla(210, 90%, 65%, 0.25);
-
-  /* Client Colors */
-  --work: hsl(var(--h-emerald), 70%, 55%);
-  --work-bg: hsla(var(--h-emerald), 70%, 55%, 0.08);
-  --work-border: hsla(var(--h-emerald), 70%, 55%, 0.2);
-
-  --secondary: hsl(var(--h-violet), 70%, 75%);
-  --secondary-bg: hsla(var(--h-violet), 70%, 75%, 0.08);
-  --secondary-border: hsla(var(--h-violet), 70%, 75%, 0.2);
-
-  /* Borders & Surfaces */
-  --border: rgba(255, 255, 255, 0.07);
-  --border-active: rgba(255, 255, 255, 0.14);
-  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.36);
+  --shadow-raised: 0 2px 4px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.44);
   --shadow-glow: 0 0 80px hsla(var(--h-violet), 50%, 50%, 0.05);
 
-  /* Sizing */
-  --radius: 20px;
-  --radius-sm: 12px;
-  --radius-xs: 8px;
+  /* Priority Colors — chrome tints for P0/P1/P2 chips */
+  --p0: hsl(var(--h-rose), 90%, 68%);
+  --p0-bg: hsla(var(--h-rose), 90%, 68%, 0.12);
+  --p0-border: hsla(var(--h-rose), 90%, 68%, 0.28);
+
+  --p1: hsl(var(--h-amber), 90%, 62%);
+  --p1-bg: hsla(var(--h-amber), 90%, 62%, 0.12);
+  --p1-border: hsla(var(--h-amber), 90%, 62%, 0.28);
+
+  --p2: hsl(212, 90%, 68%);
+  --p2-bg: hsla(212, 90%, 68%, 0.12);
+  --p2-border: hsla(212, 90%, 68%, 0.28);
+
+  /* Client Colors */
+  --work: hsl(var(--h-emerald), 70%, 58%);
+  --work-bg: hsla(var(--h-emerald), 70%, 58%, 0.1);
+  --work-border: hsla(var(--h-emerald), 70%, 58%, 0.24);
+
+  --secondary: hsl(var(--h-violet), 70%, 78%);
+  --secondary-bg: hsla(var(--h-violet), 70%, 78%, 0.1);
+  --secondary-border: hsla(var(--h-violet), 70%, 78%, 0.24);
 
   /* ── Status palette (fixed, reserved — never themed, never color-alone) ── */
-  --st-good: #0CA30C;
+  --st-good: #22C55E;
   --st-warn: #FAB219;
-  --st-serious: #EC835A;
-  --st-crit: #D03B3B;
-  --st-good-bg: rgba(12, 163, 12, 0.12);
-  --st-warn-bg: rgba(250, 178, 25, 0.12);
-  --st-serious-bg: rgba(236, 131, 90, 0.12);
-  --st-crit-bg: rgba(208, 59, 59, 0.12);
+  --st-serious: #FB923C;
+  --st-crit: #F87171;
+  --st-info: #60A5FA;
+  --st-ok: #22C55E;
+  --st-good-bg: rgba(34, 197, 94, 0.13);
+  --st-warn-bg: rgba(250, 178, 25, 0.13);
+  --st-serious-bg: rgba(251, 146, 60, 0.13);
+  --st-crit-bg: rgba(248, 113, 113, 0.13);
+  --st-info-bg: rgba(96, 165, 250, 0.13);
+  --danger: var(--st-crit);
+  --warn: var(--st-warn);
+
+  /* ── Sizing ──
+     Radii tightened for a data-dense tool: 20px read as a consumer app
+     and wasted vertical space in tables the eye scans daily. */
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-xs: 6px;
+  --rd-lg: 12px;
+  --row-h: 36px;        /* data-dense spec: compact table rows */
+  --control-h: 30px;    /* standard control height */
+
+  /* ── CSS-mask icons ──
+     For the few places that must inject a mark into a plain text node
+     (toasts) and so cannot use innerHTML. Paths mirror icons.js; the
+     wrapper is supplied by mask-image. */
+  --ico-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 12.5 9.5 17.5 19.5 6.5'/%3E%3C/svg%3E");
+  --ico-ban: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='8.5'/%3E%3Cpath d='M6 6l12 12'/%3E%3C/svg%3E");
 
   /* ── Categorical palette (fixed order, never cycled) ──
      project map: 1 Marketplace · 2 B2C · 3 PIM · 4 Seller Portal ·
@@ -106,18 +141,38 @@
   --sp-4: 16px;
   --sp-5: 24px;
   --sp-6: 32px;
+  --sp-8: 48px;   /* was referenced by .intel-empty but never defined */
 
-  /* ── Type scale ── */
-  --fs-xs: 11.5px;
-  --fs-sm: 12.5px;
-  --fs-base: 14px;
-  --fs-md: 16px;
-  --fs-lg: 20px;
-  --fs-xl: 26px;
-  --fs-hero: 36px;
+  /* ── Type scale ──
+     base 14→13px and the small steps compressed for density; --fs-xxs
+     was referenced with a fallback but is now a real token. */
+  --fs-xxs: 10.5px;
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-base: 13px;
+  --fs-md: 15px;
+  --fs-lg: 19px;
+  --fs-xl: 24px;
+  --fs-hero: 32px;
 
   --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --sans: var(--font);   /* was referenced by .settings-* but never defined */
   --font-mono: ui-monospace, SFMono-Regular, "Cascadia Code", Menlo, Consolas, monospace;
+
+  /* ── Motion ──
+     Durations were previously ad-hoc per rule (.15s, .18s, .25s, 1.4s…).
+     Two tiers only: anything the pointer triggers, and long ambient loops. */
+  --dur-fast: 120ms;     /* hover / press feedback */
+  --dur: 180ms;          /* state change (open, selected) */
+  --dur-slow: 320ms;     /* panel, drawer */
+  --ease: cubic-bezier(.2, .7, .3, 1);
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+
+  /* ── Density ──
+     One knob for the compactness of repeated data rows. Changing
+     --row-h retunes every list/table row without hunting for each rule. */
+  --row-h: 34px;
+  --row-pad: 7px;
 }
 
 /* ═══════════════════════════════════════════
@@ -181,6 +236,164 @@ button {
   cursor: pointer;
 }
 
+/* ═══════════════════════════════════════════
+   ICONS
+   Inline SVG from icons.js. Sized in em so an icon tracks whatever
+   font-size it lands in — the property emoji never had.
+   ═══════════════════════════════════════════ */
+.ico {
+  display: inline-block;
+  vertical-align: -0.15em;
+  flex: none;
+  width: 1.05em;
+  height: 1.05em;
+}
+/* Explicit-size icons get an inline width/height (see Icons.icon), which
+   outranks this class rule — so only un-sized icons scale with font-size. */
+
+/* Tab bar: icon over label, stacked. */
+.tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tab-btn .ico { width: 15px; height: 15px; }
+.tab-btn .tab-label { display: inline-block; }
+
+/* Header action buttons. */
+.btn-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-refresh .ico { width: 13px; height: 13px; }
+
+/* Stat tile / card / row icon slots. */
+.stat-label .ico,
+.row-icon .ico,
+.card-icon .ico { width: 1em; height: 1em; }
+.stat-label { display: flex; align-items: center; gap: 6px; }
+.stat-label .ico { color: var(--text-muted); }
+.row-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+/* Status badges keep the icon+label pairing that the validated
+   categorical palette depends on for CVD mitigation. */
+.badge .ico,
+.tx-badge .ico { width: 1em; height: 1em; }
+.badge--good .ico { color: var(--st-good); }
+.badge--warn .ico { color: var(--st-warn); }
+.badge--serious .ico { color: var(--st-serious); }
+.badge--critical .ico { color: var(--st-crit); }
+
+/* ═══════════════════════════════════════════
+   FOCUS VISIBILITY
+   13 rules across this file set `outline: none` on inputs/selects and
+   signal focus with a border-colour change instead. That reads fine for
+   mouse users but leaves keyboard users with no visible focus at all,
+   because :focus-visible does not paint a native ring once the outline
+   is suppressed. These two rules restore it WITHOUT changing the
+   mouse-focus appearance: the accent border still wins, the ring only
+   appears for keyboard interaction.
+   ═══════════════════════════════════════════ */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+/* Where a component already paints its own focus border, keep the ring
+   but let it sit tight so the two don't fight visually. */
+.action-bar select:focus-visible,
+.action-bar input:focus-visible,
+.draft-area:focus-visible,
+.quickfind-input:focus-visible,
+.chat-input:focus-visible,
+.notes-input:focus-visible,
+.mem-search-input:focus-visible,
+.intel-ask-input:focus-visible,
+.rem-add-input:focus-visible,
+.coding-field select:focus-visible,
+.coding-field input:focus-visible,
+.coding-field textarea:focus-visible,
+.tx-cat:focus-visible,
+.tx-form-row select:focus-visible,
+.tx-form-row input:focus-visible,
+.tx-newcat input:focus-visible,
+.tx-pager-size:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* Mouse focus on those same controls: border only, no ring. */
+.action-bar select:focus,
+.action-bar input:focus,
+.draft-area:focus,
+.quickfind-input:focus,
+.chat-input:focus,
+.notes-input:focus,
+.mem-search-input:focus,
+.intel-ask-input:focus,
+.rem-add-input:focus,
+.tx-form-row select:focus,
+.tx-form-row input:focus,
+.tx-newcat input:focus,
+.tx-pager-size:focus { outline: none; }
+
+/* Inline glyphs inside prose (news summaries, chat, log lines). */
+.ico-inline {
+  display: inline-block;
+  vertical-align: -0.15em;
+  width: 1em;
+  height: 1em;
+  opacity: .85;
+}
+
+/* ── Inline layout for elements that now hold an SVG child ──
+   These were text-only before the icon migration, so they were block/inline
+   with no alignment. Scoped deliberately: a blanket rule here would clobber
+   .coding-field (flex-direction: column) and .row-note (pre-wrap), so each
+   entry below opts in only if it really is icon+label on one line. */
+.prep-link,
+.section-label,
+.coding-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+}
+/* .prep-link is also used as a bare block wrapper; keep it wrapping-safe. */
+.prep-link { flex-wrap: wrap; }
+.section-label { line-height: 1.35; }
+
+/* A label followed by an icon-only control shouldn't stretch. */
+.prep-link > .ico:last-child:not(:only-child) { margin-left: 1px; }
+
+/* Clickable affordances that are not <button>/<a> and so don't inherit the
+   reset's cursor:pointer. Without this they advertise "read-only" while
+   being the primary way to act in several tabs. */
+.action-save,
+.ai-pill,
+.ai-btn,
+.agents-link,
+.badge--cat,
+.hours-block,
+.hours-hit,
+.hours-commit,
+.hours-day-link,
+.settings-row,
+.tx-cat,
+.jira-chip,
+.ticket-chip,
+.task-row,
+.person-chip,
+.chase-btn { cursor: pointer; }
+
+/* Non-interactive status marks should not invite a click. */
+.badge, .stat-tile .badge, .tx-badge, .badge-dot { cursor: default; }
+
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -193,7 +406,7 @@ button {
 .shell {
   max-width: 1280px;
   margin: 0 auto;
-  padding: var(--sp-5) var(--sp-5) 80px;
+  padding: var(--sp-4) var(--sp-4) 80px;
 }
 
 .app-header {
@@ -202,8 +415,8 @@ button {
   align-items: baseline;
   gap: var(--sp-3);
   flex-wrap: wrap;
-  padding-bottom: var(--sp-3);
-  margin-bottom: var(--sp-4);
+  padding-bottom: var(--sp-2);
+  margin-bottom: var(--sp-3);
 }
 
 /* ── SIGNATURE RGB ELEMENT: 2px spectrum hairline under the header,
@@ -230,12 +443,16 @@ button {
 }
 
 .app-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font-size: var(--fs-lg);
   font-weight: 700;
   letter-spacing: -0.01em;
   /* brand glow — hue cycles under no-preference; static violet fallback */
   filter: drop-shadow(0 0 14px hsla(var(--h-violet), 90%, 65%, 0.55));
 }
+.app-title .ico { width: 20px; height: 20px; }
 
 .app-date { color: var(--text-secondary); font-size: var(--fs-sm); }
 
@@ -263,24 +480,28 @@ button {
 /* ── Tab nav ── */
 .tab-nav {
   display: flex;
-  gap: var(--sp-2);
-  margin-bottom: var(--sp-5);
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-4);
   border-bottom: 1px solid var(--border);
   padding-bottom: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.tab-nav::-webkit-scrollbar { display: none; }
 
 .tab-btn {
   position: relative;
-  padding: var(--sp-2) var(--sp-4) 10px;
-  font-size: var(--fs-base);
+  padding: 7px var(--sp-3) 9px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-muted);
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
-  transition: color .15s;
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+  transition: color .15s, background .15s;
   white-space: nowrap;
 }
-.tab-btn:hover { color: var(--text-secondary); }
+.tab-btn:hover { color: var(--text-secondary); background: var(--bg-glass); }
 .tab-btn.is-active {
   color: var(--text-primary);
   border-bottom-color: transparent;   /* the RGB ::after IS the underline */
@@ -361,7 +582,7 @@ button {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: var(--sp-4);
+  padding: var(--sp-3) var(--sp-3);
   color: inherit;
   text-decoration: none;
   transition: border-color .15s, background .15s, transform .1s;
@@ -433,14 +654,21 @@ a.stat-tile:hover {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  padding: var(--sp-4) var(--sp-4);
+  padding: 10px var(--sp-3);
   background: linear-gradient(180deg, var(--wash), transparent);
   user-select: none;
 }
 .card > summary::-webkit-details-marker { display: none; }
 .card > summary:hover { background: linear-gradient(180deg, var(--wash), var(--bg-glass)); }
 
-.card-icon { font-size: var(--fs-md); line-height: 1; }
+.card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  line-height: 1;
+}
+.card-icon .ico { width: 15px; height: 15px; }
 
 /* TRUNCATION POLICY: titles/names wrap up to 2 lines, NEVER single-line
    ellipsis — the owner must be able to read "ExampleCo …" / "Catal…" in full.
@@ -482,8 +710,6 @@ a.stat-tile:hover {
   border: 1px solid var(--border);
   background: var(--bg-glass);
   color: var(--text-secondary);
-  font-size: 11px;
-  line-height: 1;
   transition: transform .18s ease, color .15s, border-color .15s, background .15s;
 }
 .card > summary:hover .card-chevron {
@@ -493,7 +719,7 @@ a.stat-tile:hover {
 }
 .card[open] > summary .card-chevron { transform: rotate(90deg); }
 
-.card-body { padding: 0 var(--sp-4) var(--sp-4); }
+.card-body { padding: var(--sp-3) var(--sp-3) var(--sp-3); }
 
 /* soft hue wash per domain (0.07 alpha of the categorical hue) */
 .card[data-key="tracker"] > summary,
@@ -775,7 +1001,14 @@ details.row[open] > summary::after { transform: rotate(90deg); }
   text-align: center;
   color: var(--text-muted);
 }
-.empty-icon { font-size: 22px; margin-bottom: var(--sp-2); opacity: 0.7; }
+.empty-icon {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--sp-2);
+  opacity: .55;
+  color: var(--text-muted);
+}
+.empty-icon .ico { width: 26px; height: 26px; stroke-width: 1.4; }
 .empty-title { font-size: var(--fs-base); color: var(--text-secondary); font-weight: 550; }
 .empty-hint { font-size: var(--fs-xs); margin-top: var(--sp-1); }
 
@@ -785,6 +1018,14 @@ details.row[open] > summary::after { transform: rotate(90deg); }
 .is-dim { opacity: 0.55; }
 
 .stale-wrap { position: relative; }
+/* Icon + count pairs inside text (open commitments / decisions). */
+.ov-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.ov-count .ico { width: 12px; height: 12px; opacity: .7; }
+
 .stale-note {
   display: inline-flex;
   align-items: center;
@@ -1099,8 +1340,34 @@ details.row[open] > summary::after { transform: rotate(90deg); }
   box-shadow: var(--shadow-card);
   animation: toastIn .18s ease;
 }
-.toast--ok  { border-color: rgba(12,163,12,0.4); }
-.toast--err { border-color: rgba(208,59,59,0.5); }
+/* Status mark as an inline SVG background so the toast's text node stays
+   clean (SR announces the message only) while still reading as ✓/⛔.
+   Percent-encoded, stroke=currentColor via mask-free `background-image`. */
+.toast::before {
+  content: "";
+  flex: none;
+  width: 15px;
+  height: 15px;
+  background: currentColor;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+.toast--ok::before {
+  color: var(--st-good);
+  -webkit-mask-image: var(--ico-check);
+  mask-image: var(--ico-check);
+}
+.toast--err::before {
+  color: var(--st-crit);
+  -webkit-mask-image: var(--ico-ban);
+  mask-image: var(--ico-ban);
+}
+.toast--ok  { border-color: rgba(34,197,94,0.4); }
+.toast--err { border-color: rgba(248,113,113,0.5); }
 .toast.is-leaving { opacity: 0; transition: opacity .25s; }
 /* toasts carrying an Undo/action button stay clickable + linger longer */
 .toast.has-action { pointer-events: auto; }
@@ -2201,7 +2468,7 @@ a.ticket-chip:hover { border-color: var(--border-active); color: var(--text-acce
   border-color: var(--border-active);
   box-shadow: 0 0 0 3px hsla(var(--h-violet), 60%, 60%, 0.12);
 }
-.quickfind-icon { font-size: 12px; opacity: .7; }
+.quickfind-icon { width: 13px; height: 13px; opacity: .65; flex: none; }
 .quickfind-input {
   background: transparent; border: 0; outline: 0; color: var(--text-primary);
   font-size: var(--fs-xs); width: 240px; max-width: 44vw;

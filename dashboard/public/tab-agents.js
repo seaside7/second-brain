@@ -69,7 +69,7 @@ window.Tabs = window.Tabs || {};
 
     panel.innerHTML = `
       <div class="row" data-key="agents-toolbar">
-        <span class="row-icon">🤖</span>
+        <span class="row-icon">${Comp.ic('bot')}</span>
         <span class="row-title"><b>Agents & AI Architecture</b> — bagaimana executive AI lo disusun</span>
         <span class="row-meta">${nodes.length} node · ${nActive} aktif · ${nPlanned} planned${join}</span>
       </div>
@@ -87,7 +87,7 @@ window.Tabs = window.Tabs || {};
 
   function flowHtml(nodes) {
     if (!nodes.length) {
-      return Comp.emptyState({ icon: '🤖', title: 'Tidak ada node', hint: 'Tidak ada agent di kategori ini.' });
+      return Comp.emptyState({ icon: 'bot', title: 'Tidak ada node', hint: 'Tidak ada agent di kategori ini.' });
     }
     const byLevel = {};
     nodes.forEach(n => { (byLevel[n.level] = byLevel[n.level] || []).push(n); });
@@ -190,7 +190,7 @@ window.Tabs = window.Tabs || {};
       if (d.node.status === 'planned') return '';
       if (!d.files || !d.files.length) {
         return section('Prompt (SKILL.md)',
-          `<p class="row-note">⚠️ Skill ${U.esc((d.skill && d.skill.name) || '')} belum punya file
+          `<p class="row-note">${Comp.ic('alert')} Skill ${U.esc((d.skill && d.skill.name) || '')} belum punya file
             instruksi markdown — belum ada prompt yang bisa diedit dari panel ini.</p>`);
       }
       const fileChips = d.files.map(f =>
@@ -203,7 +203,7 @@ window.Tabs = window.Tabs || {};
             <span class="row-note">${U.esc(d.markdown_path || '')}</span></div>
           <div class="md agents-prompt-md agents-prompt-raw">${U.esc(d.markdown || '')}</div>
           <div class="action-bar">
-            <button class="prep-link agents-detail-edit">✏️ Edit prompt</button>
+            <button class="prep-link agents-detail-edit">✏ Edit prompt</button>
             <span class="row-note">Edit menulis ulang file ini di repo — file tetap source of truth.
               Routing code tidak pernah bisa diedit dari sini.</span>
           </div>
@@ -223,7 +223,7 @@ window.Tabs = window.Tabs || {};
       <textarea id="agents-prompt-editor" class="draft-area" rows="24" spellcheck="false">${U.esc(d.markdown || '')}</textarea>
       <div class="action-bar">
         <button class="prep-link agents-detail-save">💾 Simpan</button>
-        <button class="prep-link agents-detail-cancel">✋ Batal</button>
+        <button class="prep-link agents-detail-cancel">${Comp.ic('hand')} Batal</button>
         <span class="row-note">Simpan = menulis ulang file di repo (UTF-8). Batal = kembali tanpa mengubah file.</span>
       </div>
     </div>`;

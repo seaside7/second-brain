@@ -215,7 +215,7 @@
     (s.permanent || []).forEach(cat => (cat.questions || []).forEach(q => {
       rows.push({ text: q, cat: cat.category, icon: cat.icon });
     }));
-    (s.dynamic || []).forEach(q => rows.push({ text: q, cat: 'Context-aware', icon: '✨' }));
+    (s.dynamic || []).forEach(q => rows.push({ text: q, cat: 'Context-aware', icon: 'sparkle' }));
     return rows;
   }
 
@@ -269,7 +269,7 @@
       }
     }
     if (!Chat.messages.length && !Chat.pendingText) {
-      parts.push(`<div class="chat-hint">Ask the Second Brain anything. It recalls memory from every workspace. Use 💡 or type "/" for suggestions, Shift+Enter for a new line.</div>`);
+      parts.push(`<div class="chat-hint">Ask the Second Brain anything. It recalls memory from every workspace. Use ${Comp.ic('info')} or type "/" for suggestions, Shift+Enter for a new line.</div>`);
     }
     if (Chat.pendingText) {
       parts.push(`<div class="chat-msg chat-msg-ai"><div class="chat-bubble chat-bubble-ai chat-typing">…</div></div>`);
@@ -291,7 +291,7 @@
       `<div id="chat-palette" class="chat-palette"></div>
        <div class="chat-input-row">
          <button id="chat-new" class="chat-sugg-btn" title="Start a new conversation">＋</button>
-         <button id="chat-sugg" class="chat-sugg-btn" title="Suggested questions">💡</button>
+         <button id="chat-sugg" class="chat-sugg-btn" title="Suggested questions" aria-label="Show suggested questions">${Comp.ic('info')}</button>
          <textarea id="chat-input" class="chat-input" rows="1"
                 placeholder='Ask anything… type "/" for suggestions (Shift+Enter for new line)'
                 autocomplete="off" spellcheck="false"></textarea>
@@ -313,7 +313,7 @@
       return `<div class="chat-convo${active}" data-id="${U.esc(c.id)}">
         <button class="chat-convo-title" title="${U.esc(c.title)}">${U.esc(c.title)}</button>
         <span class="chat-convo-ws">${U.esc(ws)}</span>
-        <button class="chat-convo-del" data-del="${U.esc(c.id)}" title="Delete conversation">✕</button>
+        <button class="chat-convo-del" data-del="${U.esc(c.id)}" title="Delete conversation" aria-label="Delete conversation">${Comp.ic('close')}</button>
         <span class="chat-convo-time">${ageLabel(c.updated)}</span>
       </div>`;
     }).join('');
@@ -378,7 +378,7 @@
         localStorage.setItem(ACTIVE_KEY, res.conversation_id);
       }
     } catch (err) {
-      Chat.messages.push({ role: 'ai', text: `⚠️ **Could not get an answer:** ${U.esc(err.message)}` });
+      Chat.messages.push({ role: 'ai', text: `${Comp.ic('alert')} **Could not get an answer:** ${U.esc(err.message)}` });
     }
     Chat.pendingText = '';
     await refreshConvos();

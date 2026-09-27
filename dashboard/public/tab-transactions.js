@@ -138,12 +138,12 @@ const TransactionsTab = (() => {
 
   /* ── nav chips ──────────────────────────────────────────────────── */
   const VIEWS = [
-    { id: 'overview',  label: 'Overview',  icon: '📊' },
-    { id: 'all',       label: 'All Txns',  icon: '📋' },
-    { id: 'transfers', label: 'Transfers', icon: '🔄' },
-    { id: 'review',    label: 'Review',    icon: '✅', badge: true },
-    { id: 'imports',   label: 'Imports',   icon: '📥' },
-    { id: 'rules',     label: 'Rules',     icon: '⚙️' },
+    { id: 'overview',  label: 'Overview',  icon: 'chart' },
+    { id: 'all',       label: 'All Txns',  icon: 'list' },
+    { id: 'transfers', label: 'Transfers', icon: 'refresh' },
+    { id: 'review',    label: 'Review',    icon: 'checkCircle', badge: true },
+    { id: 'imports',   label: 'Imports',   icon: 'download' },
+    { id: 'rules',     label: 'Rules',     icon: 'cog' },
   ];
 
   /* ── helpers ────────────────────────────────────────────────────── */
@@ -300,12 +300,12 @@ const rpSigned = n => {
             <span class="tx-dates" id="tx-dates" ${_period==='custom' ? '' : 'hidden'}>
               <input id="tx-from" class="tx-select tx-date" type="date" value="${_from}" title="From">
               <input id="tx-to" class="tx-select tx-date" type="date" value="${_to}" title="To">
-              <button id="tx-dates-clear" class="btn tx-btn-outline" title="Reset to This Month">✕</button>
+              <button id="tx-dates-clear" class="btn tx-btn-outline" title="Reset to This Month" aria-label="Reset date filter to this month">${Comp.ic('close')}</button>
             </span>
-            <button id="tx-sync-btn" class="btn tx-btn-outline">🔄 Sync Gmail</button>
-            <button id="tx-reprocess-btn" class="btn tx-btn-outline" title="Re-fetch imported emails and re-run the v3 parser + deterministic categorizer in place">♻️ Reprocess</button>
-            <button id="tx-add-btn" class="btn tx-btn-primary" title="Record income/expense by hand (emails can be missed)">➕ Add</button>
-            <button id="tx-upload-btn" class="btn tx-btn-outline">📄 Upload</button>
+            <button id="tx-sync-btn" class="btn tx-btn-outline">${Comp.ic('refresh')} Sync Gmail</button>
+            <button id="tx-reprocess-btn" class="btn tx-btn-outline" title="Re-fetch imported emails and re-run the v3 parser + deterministic categorizer in place">${Comp.ic('refresh')} Reprocess</button>
+            <button id="tx-add-btn" class="btn tx-btn-primary" title="Record income/expense by hand (emails can be missed)">${Comp.ic('plus')} Add</button>
+            <button id="tx-upload-btn" class="btn tx-btn-outline">${Comp.ic('file')} Upload</button>
           </div>
         </div>
         <div id="tx-progress" class="tx-progress" hidden><div class="tx-progress-bar"></div></div>
@@ -1086,7 +1086,9 @@ const rpSigned = n => {
     input.accept = '.pdf';
     input.onchange = () => {
       file = input.files[0];
-      fileLabel.textContent = file ? `📄 ${file.name}` : 'Choose PDF…';
+      /* innerHTML, not textContent: the icon is inline SVG markup. */
+      if (file) fileLabel.innerHTML = `${Comp.ic('file')}<span>${U.esc(file.name)}</span>`;
+      else fileLabel.textContent = 'Choose PDF…';
     };
 
     card.querySelector('#tx-up-submit').addEventListener('click', async () => {
@@ -1162,7 +1164,7 @@ const rpSigned = n => {
       'This can take a minute.');
     if (!okBtn) return;
     const btn = document.getElementById('tx-reprocess-btn');
-    if (btn) { btn.disabled = true; btn.textContent = '♻️ Reprocessing...'; }
+    if (btn) { btn.disabled = true; btn.textContent = '♻ Reprocessing...'; }
     _busy(true);
     try {
       const res = await _post('/api/transactions/reprocess', { provider: null }, 120000);
@@ -1177,7 +1179,7 @@ const rpSigned = n => {
       toast(e.message, false);
     } finally {
       _busy(false);
-      if (btn) { btn.disabled = false; btn.textContent = '♻️ Reprocess'; }
+      if (btn) { btn.disabled = false; btn.textContent = '♻ Reprocess'; }
     }
   }
 

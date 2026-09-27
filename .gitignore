@@ -23,6 +23,13 @@ credentials.json
 *.token
 cred.txt
 
+# === AUTH (never commit) ===
+# Password hashes + session tokens. Mode 0600, but never let it reach git.
+.agent/state/auth.db
+.agent/state/auth.db-wal
+.agent/state/auth.db-shm
+psb_auth_password
+
 # === WORKSPACE CREDENTIALS (explicit, never commit) ===
 .agent/workspaces/*/credentials.json
 .agent/workspaces/*/token_*.json

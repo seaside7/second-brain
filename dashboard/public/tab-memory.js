@@ -112,7 +112,7 @@ const MemoryTab = (() => {
     slot.innerHTML = `
       <div class="mem-container">
         <div class="mem-search-panel">
-          <h3 class="mem-section-title">🧠 Unified Memory Search</h3>
+          <h3 class="mem-section-title">${Comp.ic('brain')} Unified Memory Search</h3>
           <div class="mem-search-row">
             <input type="search" id="mem-search-q" class="mem-search-input"
                    placeholder="Search knowledge, Drive, tasks…" autocomplete="off" />
@@ -140,7 +140,7 @@ const MemoryTab = (() => {
 
           <div class="mem-knowledge-panel">
             <div class="mem-panel-header">
-              <h3 class="mem-section-title">📚 Knowledge Store</h3>
+              <h3 class="mem-section-title">${Comp.ic('book')} Knowledge Store</h3>
               <button id="mem-kb-build" class="btn mem-btn-sm">🏗 Build Embeddings</button>
             </div>
             <div id="mem-kb-status" class="mem-status-line"></div>

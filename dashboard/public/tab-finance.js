@@ -77,11 +77,11 @@ window.Tabs.finance = {
          <div class="fin-hero-value">${this.rp(d.cash)}</div>
          ${updated ? `<div class="fin-hero-updated">sheet sync ${U.esc(updated)} WIB</div>` : ''}
        </div>`,
-      Comp.card({ key: 'fin-scenarios', icon: '📈', title: 'Income scenarios', open: true, body: scenRows }),
-      Comp.card({ key: 'fin-income', icon: '💼', title: 'Income sources', body: income }),
-      Comp.card({ key: 'fin-obligations', icon: '🏦', title: 'Obligations', count: String((d.obligations || []).length), open: true, body: obligations }),
+      Comp.card({ key: 'fin-scenarios', icon: 'chart', title: 'Income scenarios', open: true, body: scenRows }),
+      Comp.card({ key: 'fin-income', icon: 'briefcase', title: 'Income sources', body: income }),
+      Comp.card({ key: 'fin-obligations', icon: 'bank', title: 'Obligations', count: String((d.obligations || []).length), open: true, body: obligations }),
       Comp.card({
-        key: 'fin-debts', icon: '🤝', title: 'Friend debts',
+        key: 'fin-debts', icon: 'handshake', title: 'Friend debts',
         count: `${(d.friend_debts || []).length} · ${this.rp(d.friend_debts_total)}`,
         open: true, body: debts,
       }),

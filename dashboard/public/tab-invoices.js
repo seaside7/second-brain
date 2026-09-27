@@ -42,19 +42,19 @@ const InvoiceTab = (() => {
     slot.innerHTML = `
       <div class="inv-container">
         <div class="inv-card">
-          <h3 class="mem-section-title">🧾 Generate Invoice</h3>
+          <h3 class="mem-section-title">${Comp.ic('receipt')} Generate Invoice</h3>
           <p class="inv-hint">Generate a Catalyze invoice from the monthly time-log sheet
             (108,000→ per month, Rp175,000/hr).</p>
           <div class="inv-generate-row">
             <select id="inv-month" class="inv-select"></select>
-            <button id="inv-generate-btn" class="btn inv-btn">⚡ Generate</button>
+            <button id="inv-generate-btn" class="btn inv-btn">${Comp.ic('zap')} Generate</button>
           </div>
           <div id="inv-result" class="inv-result"></div>
         </div>
 
         <div class="inv-card">
           <div class="mem-panel-header">
-            <h3 class="mem-section-title">📄 Generated Invoices</h3>
+            <h3 class="mem-section-title">${Comp.ic('file')} Generated Invoices</h3>
             <button id="inv-refresh" class="btn inv-btn-sm">↻ Refresh</button>
           </div>
           <div id="inv-list" class="inv-list"></div>
@@ -106,7 +106,7 @@ const InvoiceTab = (() => {
       for (const key of ['invoice_number','invoice_date','total_hours','total_amount']) {
         if (data[key]) lines.push(`<div class="inv-sum"><span>${key.replace(/_/g,' ')}</span><b>${U.esc(data[key])}</b></div>`);
       }
-      res.innerHTML = `<div class="inv-success">✅ ${U.esc(data.invoice_number || 'Invoice')} generated</div>` +
+      res.innerHTML = `<div class="inv-success">${Comp.ic('checkCircle')} ${U.esc(data.invoice_number || 'Invoice')} generated</div>` +
         (lines.length ? `<div class="inv-sums">${lines.join('')}</div>` : '');
       refreshList();
     }).catch(err => {
@@ -130,7 +130,7 @@ const InvoiceTab = (() => {
     el.innerHTML = items.map(it => `
       <div class="inv-row">
         <div class="inv-row-info">
-          <div class="inv-row-title">📄 ${U.esc(it.name)}</div>
+          <div class="inv-row-title">${Comp.ic('file')} ${U.esc(it.name)}</div>
           <div class="inv-row-meta">${it.mtime_wib || ''} · ${U.esc(_fmtSize(it.size))}</div>
         </div>
         <a class="btn inv-btn-sm" href="${it.url}" download>⬇ Download</a>

@@ -101,7 +101,7 @@ window.Tabs = window.Tabs || {};
       ? prev7.reduce((a, d) => a + outX(d), 0) / prev7.length : null;
     const tiles = [
       Comp.statTile({
-        key: 'wh-start', icon: '🌅', label: 'Started', value: day.start,
+        key: 'wh-start', icon: 'sunrise', label: 'Started', value: day.start,
         sub: 'first activity',
       }),
       Comp.statTile({
@@ -109,15 +109,15 @@ window.Tabs = window.Tabs || {};
         value: day.end, sub: isToday ? 'still on the clock' : 'last activity',
       }),
       Comp.statTile({
-        key: 'wh-actual', icon: '⏱', label: 'Actual hours', value: hFmt(day.actual_h),
+        key: 'wh-actual', icon: 'clock', label: 'Actual hours', value: hFmt(day.actual_h),
         sub: `hands-on ≥ ${hFmt(day.attention_h)} · wall ${hFmt(day.wall_h)}`,
       }),
       Comp.statTile({
-        key: 'wh-effective', icon: '🔀', label: 'Parallel output', value: hFmt(day.effective_h),
+        key: 'wh-effective', icon: 'swap', label: 'Parallel output', value: hFmt(day.effective_h),
         sub: `${day.sessions} AI streams + ${day.meetings_count} meetings`,
       }),
       Comp.statTile({
-        key: 'wh-leverage', icon: '🚀', label: 'Productivity', value: `${outX(day)}×`,
+        key: 'wh-leverage', icon: 'rocket', label: 'Productivity', value: `${outX(day)}×`,
         sub: `≈ ${hFmt(day.human_equiv_h != null ? day.human_equiv_h : day.effective_h)} manual solo · parallel ${day.leverage}× · AI ×${day.ai_speed || 1} assumed${avgOut ? ` · 7d avg ${avgOut.toFixed(1)}×` : ''}`,
         status: avgOut && outX(day) >= avgOut ? 'good' : null,
       }),
@@ -141,7 +141,7 @@ window.Tabs = window.Tabs || {};
       <span class="chip is-active">${U.esc(niceDate(sel, d && d.weekday))}</span>
       <button class="chip hours-nav-btn" data-goto="${next ? U.esc(next) : ''}" ${next ? '' : 'disabled'}>›</button>
       ${sel !== latest ? `<button class="chip hours-nav-btn" data-goto="${U.esc(latest)}">today</button>` : ''}
-      <button class="chip hours-nav-btn" data-nav="hours/week/${U.esc(mondayOf(sel))}">📅 week view</button>
+      <button class="chip hours-nav-btn" data-nav="hours/week/${U.esc(mondayOf(sel))}">${Comp.ic('calendar')} week view</button>
       <span class="hours-updated">${U.esc(upd)}</span>
     </div>`;
   }
@@ -174,24 +174,24 @@ window.Tabs = window.Tabs || {};
       ? ` · prev wk ${hFmt(prv)}` : '';
     const tiles = [
       Comp.statTile({
-        key: 'wkh-days', icon: '📅', label: 'Days worked',
+        key: 'wkh-days', icon: 'calendar', label: 'Days worked',
         value: String(agg.dates.length), sub: `${weekLabel(sel)}${isCurrent ? ' · so far' : ''}`,
       }),
       Comp.statTile({
-        key: 'wkh-actual', icon: '⏱', label: 'Actual hours', value: hFmt(agg.actual_h),
+        key: 'wkh-actual', icon: 'clock', label: 'Actual hours', value: hFmt(agg.actual_h),
         sub: `avg ${hFmt(agg.actual_h / Math.max(agg.dates.length, 1))}/day · hands-on ≥ ${hFmt(agg.attention_h)}${delta(agg.actual_h, prevAgg && prevAgg.actual_h)}`,
       }),
       Comp.statTile({
-        key: 'wkh-eff', icon: '🔀', label: 'Parallel output', value: hFmt(agg.effective_h),
+        key: 'wkh-eff', icon: 'swap', label: 'Parallel output', value: hFmt(agg.effective_h),
         sub: `${agg.sessions} AI streams + ${agg.meetings_count} meetings · leverage ${agg.leverage}×`,
       }),
       Comp.statTile({
-        key: 'wkh-prod', icon: '🚀', label: 'Productivity', value: `${agg.output_x}×`,
+        key: 'wkh-prod', icon: 'rocket', label: 'Productivity', value: `${agg.output_x}×`,
         sub: `≈ ${hFmt(agg.human_equiv_h)} manual solo · AI ×${agg.ai_speed} assumed${prevAgg ? ` · prev wk ${prevAgg.output_x}×` : ''}`,
         status: prevAgg && agg.output_x >= prevAgg.output_x ? 'good' : null,
       }),
       Comp.statTile({
-        key: 'wkh-meet', icon: '🎥', label: 'Meetings', value: hFmt(agg.meeting_h),
+        key: 'wkh-meet', icon: 'video', label: 'Meetings', value: hFmt(agg.meeting_h),
         sub: `${agg.meetings_count} meetings · ${agg.actual_h ? Math.round(agg.meeting_h / agg.actual_h * 100) : 0}% of actual`,
       }),
     ];
@@ -216,7 +216,7 @@ window.Tabs = window.Tabs || {};
 
   function timeline(day) {
     const streams = day.streams || [];
-    if (!streams.length) return Comp.emptyState({ icon: '⏱', title: 'No activity recorded' });
+    if (!streams.length) return Comp.emptyState({ icon: 'clock', title: 'No activity recorded' });
     const isToday = day.date === todayWorkday();
     const nowMin = wibNowMin() < 4 * 60 ? wibNowMin() + 1440 : wibNowMin();  // past-midnight -> same workday axis
 
@@ -378,7 +378,7 @@ window.Tabs = window.Tabs || {};
         ${gridLines}${yLabels}${bars}${levLabel}${xLabels}${hits}
       </svg></div>`;
     return Comp.card({
-      key: opts.key || 'hours-trend', icon: '📈', title: opts.title || 'Leverage trend',
+      key: opts.key || 'hours-trend', icon: 'chart', title: opts.title || 'Leverage trend',
       count: `${ds.length}${opts.weekBars ? 'w' : 'd'}`, body, open: true,
     });
   }
@@ -404,7 +404,7 @@ window.Tabs = window.Tabs || {};
       productivity = (meetings + AI hours × ${day.ai_speed || 1}) ÷ actual — the ×${day.ai_speed || 1}
       AI-speed factor is an assumption, tune it via sweep --ai-speed.</div>`;
     return Comp.card({
-      key: 'hours-streams', icon: '🧵', title: 'Streams detail',
+      key: 'hours-streams', icon: 'thread', title: 'Streams detail',
       count: String((day.streams || []).length), body, open: false,
     });
   }
@@ -431,7 +431,7 @@ window.Tabs = window.Tabs || {};
       <div class="hours-footnote">Click a day to open its timeline · totals are sums over the week's workdays ·
       weekly leverage and productivity are recomputed from the sums, not averaged per day.</div>`;
     return Comp.card({
-      key: 'hours-week-days', icon: '🗓', title: 'Days in this week',
+      key: 'hours-week-days', icon: 'calendar', title: 'Days in this week',
       count: String(agg.dates.length), body, open: true,
     });
   }
@@ -471,7 +471,7 @@ window.Tabs = window.Tabs || {};
         Factor is model-era specific — revisit quarterly. Tune per sweep: <code>--ai-speed N</code>.</p>
       </div>`;
     return Comp.card({
-      key: 'hours-method', icon: '📚', title: 'Methodology & sources',
+      key: 'hours-method', icon: 'book', title: 'Methodology & sources',
       count: `AI ×${f}`, body, open: false,
     });
   }
@@ -584,7 +584,7 @@ window.Tabs = window.Tabs || {};
     const sel = currentDate(filter);
     if (!sel) {
       panel.innerHTML = Comp.emptyState({
-        icon: '⏱', title: 'No work-hours data yet',
+        icon: 'clock', title: 'No work-hours data yet',
         hint: 'python3 .agent/skills/work-hours/scripts/work_hours.py sweep --backfill 14',
       });
       return;
@@ -595,7 +595,7 @@ window.Tabs = window.Tabs || {};
       ${dayChips(sel)}
       ${kpiRow(day, daysArr)}
       ${Comp.card({
-        key: 'hours-timeline', icon: '🗓', title: `Timeline — ${niceDate(sel, day.weekday)}`,
+        key: 'hours-timeline', icon: 'calendar', title: `Timeline — ${niceDate(sel, day.weekday)}`,
         count: `${(day.streams || []).length} streams`, body: timeline(day), open: true,
       })}
       ${trendCard(daysArr, sel)}

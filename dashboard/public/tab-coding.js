@@ -112,7 +112,7 @@ const CodingTab = (() => {
     panel.innerHTML = `
       <div id="coding-shell">
         <div class="coding-intro">
-          <strong>🤖 Coding Agent</strong>
+          <strong>${Comp.ic('bot')} Coding Agent</strong>
           <span class="coding-intro-sub ${T.configured ? '' : 'is-warn'}">
             ${T.configured ? `repos: ${esc(T.root)}` : 'not configured — set CODING_PROJECTS_ROOT on the server'}
           </span>
@@ -131,7 +131,7 @@ const CodingTab = (() => {
   /* ── grid: repo cards only ───────────────────────────────────────── */
   function renderGrid(body) {
     if (!T.configured) {
-      body.innerHTML = `<div class="empty-state"><div class="empty-icon">⚙️</div>
+      body.innerHTML = `<div class="empty-state"><div class="empty-icon">${Comp.ic('cog')}</div>
         <div class="empty-title">Coding Agent not configured</div>
         <div class="empty-hint">Set CODING_PROJECTS_ROOT (and CODING_OPENCODE_BIN) on the server, then restart.</div></div>`;
       return;
@@ -193,7 +193,7 @@ const CodingTab = (() => {
             <span class="coding-type-label">Mode:</span>
             <span class="coding-mode-toggle" id="coding-mode-toggle">
               <button class="coding-type-btn${s.mode === 'plan' ? ' is-active' : ''}" data-coding-action="mode"
-                data-mode="plan">📋 Plan</button>
+                data-mode="plan">${Comp.ic('list')} Plan</button>
               <button class="coding-type-btn${s.mode !== 'plan' ? ' is-active' : ''}" data-coding-action="mode"
                 data-mode="build">🔨 Build</button>
             </span>
@@ -203,7 +203,7 @@ const CodingTab = (() => {
         <div class="card-body">
           <div id="coding-preview-bar"></div>
           <div id="coding-questions"></div>
-          <div class="coding-field"><label>💬 Conversation</label>
+          <div class="coding-field"><label>${Comp.ic('chat')} Conversation</label>
             <div id="coding-stream" class="coding-stream"></div>
           </div>
           <div id="coding-diff-wrap"></div>
@@ -248,7 +248,7 @@ const CodingTab = (() => {
       qBox.innerHTML = qs.length ? `<div class="coding-field"><label>🔐 Permission requests</label>` +
         qs.map(q => `
           <div class="coding-q">
-            <strong>⚠️ ${esc(q.event || 'permission')}</strong>
+            <strong>${Comp.ic('alert')} ${esc(q.event || 'permission')}</strong>
             <pre>${esc(q.text)}</pre>
             <div class="coding-actions">
               <button class="coding-btn coding-btn--primary" data-coding-action="permission"
@@ -278,7 +278,7 @@ const CodingTab = (() => {
     const msgs = (s.messages || []);
     const nearBottom = stream.scrollTop + stream.clientHeight >= stream.scrollHeight - 40;
     const progressLine = s.progress
-      ? `<div class="coding-progress">⚙️ ${esc(s.progress)}</div>` : '';
+      ? `<div class="coding-progress">${Comp.ic('cog')} ${esc(s.progress)}</div>` : '';
     const liveBlock = s.live
       ? `<div class="coding-msg assistant coding-live"><div class="role">agent · typing…</div>
          <div class="body">${U.mdToHtml(s.live)}</div></div>` : '';
@@ -295,7 +295,7 @@ const CodingTab = (() => {
   function bindDiff(repo, wrap) {
     if (!wrap) return;
     wrap.innerHTML = `<details class="coding-collapse" data-key="coding:diff:${esc(repo)}">
-      <summary>🔀 Changed files / diff vs HEAD</summary>
+      <summary>${Comp.ic('swap')} Changed files / diff vs HEAD</summary>
       <div id="coding-diff-body"><span class="coding-hint">load on open…</span></div>
     </details>`;
     const details = wrap.querySelector('details');

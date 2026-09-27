@@ -6,8 +6,8 @@
   if (!btnNotes) return;
 
   const TYPE_ICONS = {
-    definition: '📖', fact: '📝', project_knowledge: '🏗️',
-    decision: '⚖️', observation: '👁️', strategy: '🎯',
+    definition: '📖', fact: '📝', project_knowledge: '🏗',
+    decision: '⚖', observation: '👁', strategy: '🎯',
     task: '✅', milestone: '🏁', reminder: '⏰',
   };
 
@@ -55,10 +55,10 @@
 
   function resultHTML(result) {
     if (result.duplicate) {
-      return `<div class="notes-result notes-duplicate">📌 Already stored: ${U.esc(result.message || 'duplicate')}</div>`;
+      return `<div class="notes-result notes-duplicate">${Comp.ic('pin')} Already stored: ${U.esc(result.message || 'duplicate')}</div>`;
     }
     if (!result.ok) {
-      return `<div class="notes-result notes-error">⚠️ ${U.esc(result.error || result.message || 'Failed to store')}</div>`;
+      return `<div class="notes-result notes-error">${Comp.ic('alert')} ${U.esc(result.error || result.message || 'Failed to store')}</div>`;
     }
     const cls = result.classification || {};
     const icon = TYPE_ICONS[result.type] || '📝';
@@ -69,7 +69,7 @@
     if (result.date) detail += `<div>Date: ${U.esc(result.date)}</div>`;
     if (result.stored_to) detail += `<div>Stored to: ${U.esc(result.stored_to)}</div>`;
     return `<div class="notes-result notes-ok">`
-      + `<div class="notes-result-header">✅ Stored</div>`
+      + `<div class="notes-result-header">${Comp.ic('checkCircle')} Stored</div>`
       + `<div class="notes-result-type">${icon} ${label}</div>`
       + `<div class="notes-result-title">${U.esc(result.title || '')}</div>`
       + (result.summary ? `<div class="notes-result-summary">${U.esc(result.summary)}</div>` : '')

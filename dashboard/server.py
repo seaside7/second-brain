@@ -18,6 +18,7 @@ import tempfile
 import threading
 import time
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
+from http.cookies import SimpleCookie
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.request import Request, urlopen
@@ -72,6 +73,9 @@ import trading_api  # noqa: E402
 # module. resolve_module/list_modules/execute power /api/models*; provider
 # adapters delegate back here when called with module= instead of model=.
 import model_router as model_router  # noqa: E402
+
+# Auth: password (scrypt) + server-side sessions. See dashboard/auth.py.
+import auth as auth_mod  # noqa: E402
 
 DASHBOARD_PATH = BASE_DIR / 'Dashboard.md'
 PUBLIC_DIR = Path(__file__).resolve().parent / 'public'
@@ -454,6 +458,16 @@ def _build_allowed_ips():
     return ips
 
 ALLOWED_IPS = _build_allowed_ips()
+
+# ── Authentication ───────────────────────────────────────────────────────
+# Password + server-side sessions (dashboard/auth.py). The IP allowlist above
+# answers "which network"; this answers "which person". Both are required.
+#
+# AUTH_DISABLED=1 is the escape hatch for local development and for the
+# one-shot case of being locked out on the box itself — deliberately an env
+# var rather than a flag file, so it cannot be left on by accident.
+AUTH_DISABLED = os.environ.get('AUTH_DISABLED', '') == '1'
+AUTH_USER = os.environ.get('PSB_AUTH_USER', 'said')
 
 # CIDR ranges from DASHBOARD_ALLOWED_IPS (entries containing '/'), e.g.
 # 103.77.225.0/24 — covers dynamic ISP assignments at home/office so the
@@ -3175,6 +3189,97 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self._send_json(403, json.dumps({'error': 'forbidden ip'}))
         return False
 
+    # ── session helpers ──────────────────────────────────────────────────
+    def _cookie(self, name):
+        """Read one cookie from the Cookie header. http.cookies is used rather
+        than a hand-rolled split so a value containing '=' survives."""
+        raw = self.headers.get('Cookie')
+        if not raw:
+            return None
+        jar = SimpleCookie()
+        try:
+            jar.load(raw)
+        except Exception:
+            return None
+        m = jar.get(name)
+        return m.value if m else None
+
+    def _session(self):
+        """Resolve the session for this request, or None."""
+        if AUTH_DISABLED:
+            return {'username': AUTH_USER, 'must_change': False, 'expires_in': 0}
+        return auth_mod.validate_session(self._cookie(auth_mod.SESSION_COOKIE))
+
+    def _is_secure(self):
+        """True when the browser reached us over TLS, so the session cookie may
+        carry the Secure flag. Trusts X-Forwarded-Proto because a
+        TLS-terminating reverse proxy is how the public hostname is served;
+        the fallback covers a direct TLS listener."""
+        proto = (self.headers.get('X-Forwarded-Proto') or '').split(',')[0].strip().lower()
+        if proto:
+            return proto == 'https'
+        return bool(getattr(self.connection, 'getpeercert', lambda: None)())
+
+    def _send_login_redirect(self):
+        """Unauthenticated browser navigation -> the login page, preserving
+        where they were headed so they land there after signing in."""
+        nxt = self.path if (self.path.startswith('/') and not self.path.startswith('//')) else '/'
+        self.send_response(302)
+        self.send_header('Location', '/login?next=' + quote(nxt, safe='/?=&%'))
+        self.send_header('Content-Length', '0')
+        self.end_headers()
+
+    def _require_auth(self):
+        """Gate every request. Order matters: the IP allowlist first (cheapest,
+        and it stays the outer boundary), then the session.
+
+        Unauthenticated requests get a 302 to /login for page navigations and a
+        401 JSON for fetch() calls, so the frontend's normal failed-fetch path
+        renders its empty state instead of a raw error page.
+
+        While a user's must_change flag is set, only logout, /api/session and
+        the change-password call are allowed: the bootstrap password was shown
+        once in chat and must not stay usable afterwards."""
+        if AUTH_DISABLED:
+            return True
+        sess = self._session()
+        route = self.path.split('?')[0]
+        if sess is None:
+            if route in ('/api/login', '/api/logout', '/api/session'):
+                return True
+            # The sign-in screen must render before a session exists, so its
+            # own stylesheet is public. Scoped to this one file on purpose:
+            # style.css holds the dashboard's component CSS and stays gated.
+            if route == '/auth.css':
+                return True
+            if route.startswith('/api/') or route == '/logout':
+                self._send_json(401, json.dumps({
+                    'error': 'authentication required',
+                    'login': '/login',
+                }))
+            else:
+                self._send_login_redirect()
+            return False
+        if sess.get('must_change'):
+            if route in ('/api/change-password', '/api/logout', '/api/session'):
+                return True
+            if route.startswith('/api/'):
+                # fetch() callers get JSON they can act on.
+                self._send_json(403, json.dumps({
+                    'error': 'password change required',
+                    'reason': 'this account still uses its bootstrap password',
+                    'change': '/change-password',
+                }))
+            else:
+                # A browser navigating here must land on the form, not on a
+                # page of raw JSON.
+                self.send_response(302)
+                self.send_header('Location', '/change-password')
+                self.send_header('Content-Length', '0')
+                self.end_headers()
+            return False
+        return True
+
     def _request_ws(self):
         """Workspace requested by the page. The /samudera page sends the
         X-PSB-Workspace: samudera header on every fetch (app.js fetchJSON
@@ -3269,8 +3374,144 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                         'not callable from a script or a local process'}))
         return ok
 
+    # ── auth endpoints ───────────────────────────────────────────────────
+    # These deliberately run BEFORE _require_auth (that gate lets them through
+    # by route) and after _check_client_ip, so the allowlist still applies.
+    def _read_json_body(self, limit=64 * 1024):
+        try:
+            n = int(self.headers.get('Content-Length') or 0)
+        except ValueError:
+            return {}
+        if n <= 0 or n > limit:
+            return {}
+        try:
+            return json.loads(self.rfile.read(n).decode('utf-8')) or {}
+        except Exception:
+            return {}
+
+    def _set_session_cookie(self, token):
+        parts = [
+            f'{auth_mod.SESSION_COOKIE}={token}',
+            'Path=/',
+            'HttpOnly',          # unreadable from JS, so XSS cannot exfiltrate it
+            'SameSite=Lax',     # not sent on cross-site POSTs (CSRF mitigation)
+            f'Max-Age={auth_mod.SESSION_TTL}',
+        ]
+        # Secure would silently break login if the site were ever reached over
+        # plain HTTP, so it is tied to how this request actually arrived.
+        if self._is_secure():
+            parts.append('Secure')
+        self.send_header('Set-Cookie', '; '.join(parts))
+
+    def _clear_session_cookie(self):
+        self.send_header(
+            'Set-Cookie',
+            f'{auth_mod.SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0'
+            + ('; Secure' if self._is_secure() else ''))
+
+    def _handle_login(self):
+        body = self._read_json_body()
+        username = str(body.get('username') or '').strip()
+        password = str(body.get('password') or '')
+        nxt = str(body.get('next') or '/')
+        # Only same-origin absolute paths, so ?next= cannot be used as an
+        # open redirect to another site.
+        if not nxt.startswith('/') or nxt.startswith('//'):
+            nxt = '/'
+        token, err = auth_mod.login(
+            username, password, ip=self.client_address[0],
+            user_agent=self.headers.get('User-Agent'))
+        if not token:
+            self._send_json(401, json.dumps({'error': err}))
+            return
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Cache-Control', 'no-store')
+        self._set_session_cookie(token)
+        sess = auth_mod.validate_session(token) or {}
+        payload = {'ok': True, 'redirect': nxt,
+                   'username': sess.get('username'),
+                   'must_change': sess.get('must_change', False)}
+        self.send_header('Content-Length', str(len(json.dumps(payload))))
+        self.end_headers()
+        self.wfile.write(json.dumps(payload).encode('utf-8'))
+
+    def _handle_logout(self):
+        auth_mod.destroy_session(self._cookie(auth_mod.SESSION_COOKIE),
+                                 ip=self.client_address[0])
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Cache-Control', 'no-store')
+        self._clear_session_cookie()
+        body = json.dumps({'ok': True, 'redirect': '/login'})
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body.encode('utf-8'))
+
+    def _handle_session(self):
+        """Who am I + how long left. The frontend calls this on boot to decide
+        whether to render normally or bounce to /change-password."""
+        sess = self._session()
+        if sess is None:
+            self._send_json(401, json.dumps({'authenticated': False}))
+            return
+        self._send_json(200, json.dumps({
+            'authenticated': True,
+            'username': sess.get('username'),
+            'must_change': sess.get('must_change', False),
+            'expires_in': sess.get('expires_in', 0),
+            'auth_disabled': AUTH_DISABLED,
+        }))
+
+    def _handle_change_password(self):
+        body = self._read_json_body()
+        sess = self._session()
+        if sess is None:
+            self._send_json(401, json.dumps({'error': 'authentication required'}))
+            return
+        old = str(body.get('old_password') or '')
+        new = str(body.get('new_password') or '')
+        ok, msg = auth_mod.change_password(
+            sess.get('username'), old, new, ip=self.client_address[0])
+        if not ok:
+            self._send_json(400, json.dumps({'error': msg}))
+            return
+        # change_password revokes all sessions, including this one — so mint a
+        # fresh token here or the user is logged out of the page they are on.
+        token, err = auth_mod.login(sess.get('username'), new,
+                                    ip=self.client_address[0],
+                                    user_agent=self.headers.get('User-Agent'))
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Cache-Control', 'no-store')
+        if token:
+            self._set_session_cookie(token)
+        body_out = json.dumps({'ok': True, 'reissued': bool(token), 'error': err})
+        self.send_header('Content-Length', str(len(body_out)))
+        self.end_headers()
+        self.wfile.write(body_out.encode('utf-8'))
+
+    def _serve_auth_page(self, page):
+        """Serve login.html / change-password.html with the same no-cache
+        headers as the dashboard shell, so a stale copy can never strand the
+        user on a form that no longer matches the API."""
+        try:
+            html = (PUBLIC_DIR / page).read_text(encoding='utf-8')
+        except Exception as e:
+            self.send_error(500, f'failed to read {page}: {e}')
+            return
+        data = html.encode('utf-8')
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/html; charset=utf-8')
+        self.send_header('Content-Length', str(len(data)))
+        self.send_header('Cache-Control', 'no-store')
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_DELETE(self):
         if not self._check_client_ip():
+            return
+        if not self._require_auth():
             return
         self.send_error(404, 'Not Found')
 
@@ -3282,10 +3523,45 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         # mtime, so gate it like every other verb before deferring to the parent.
         if not self._check_client_ip():
             return
+        if not self._require_auth():
+            return
         super().do_HEAD()
 
     def do_GET(self):
         if not self._check_client_ip():
+            return
+        # ── auth routes, reachable without a session ──
+        route0 = self.path.split('?')[0]
+        if route0 == '/login':
+            # Already signed in? Don't show a second login form.
+            sess = self._session()
+            if sess is not None and not sess.get('must_change'):
+                self.send_response(302)
+                self.send_header('Location', '/')
+                self.send_header('Content-Length', '0')
+                self.end_headers()
+                return
+            self._serve_auth_page('login.html')
+            return
+        if route0 == '/change-password':
+            if self._session() is None:
+                self._send_login_redirect()
+                return
+            self._serve_auth_page('change-password.html')
+            return
+        if route0 == '/api/session':
+            self._handle_session()
+            return
+        if route0 == '/logout':
+            auth_mod.destroy_session(self._cookie(auth_mod.SESSION_COOKIE),
+                                     ip=self.client_address[0])
+            self.send_response(302)
+            self.send_header('Location', '/login')
+            self._clear_session_cookie()
+            self.send_header('Content-Length', '0')
+            self.end_headers()
+            return
+        if not self._require_auth():
             return
         if self.path.rstrip('/') == '/samudera':
             self._serve_mode_html('samudera')
@@ -3490,6 +3766,19 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         if not self._check_client_ip():
+            return
+        route0 = self.path.split('?')[0]
+        # ── auth routes, reachable without a session ──
+        if route0 == '/api/login':
+            self._handle_login()
+            return
+        if route0 == '/api/logout':
+            self._handle_logout()
+            return
+        if route0 == '/api/change-password':
+            self._handle_change_password()
+            return
+        if not self._require_auth():
             return
         self.ws = self._request_ws()
         if self.ws == 'samudera' and self.path.split('?')[0] not in SAMUDERA_ALLOWED_POST:
@@ -8117,10 +8406,30 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             self._send_json(500, json.dumps({'error': 'Failed to build progress', 'details': str(e)}))
 
+    def _cors_origin(self):
+        """Echo the Origin only when it matches our own Host.
+
+        This used to send `Access-Control-Allow-Origin: *`, which was harmless
+        while the IP allowlist was the only gate but is wrong now that a
+        session cookie exists: `*` tells browsers the response is readable by
+        any site. The dashboard only ever talks to itself (all fetches are
+        relative paths), so same-origin is both sufficient and correct.
+        Returns None for same-origin requests, which send no Origin on GET."""
+        origin = (self.headers.get('Origin') or '').strip()
+        if not origin:
+            return None
+        host = (self.headers.get('Host') or '').strip()
+        if origin.split('://')[-1] == host and '://' in origin:
+            return origin
+        return None
+
     def _send_json(self, status, body):
         self.send_response(status)
         self.send_header('Content-Type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', '*')
+        origin = self._cors_origin()
+        if origin:
+            self.send_header('Access-Control-Allow-Origin', origin)
+            self.send_header('Vary', 'Origin')
         self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate')
         self.end_headers()
         self.wfile.write(body.encode('utf-8'))
@@ -8636,7 +8945,50 @@ def _start_trading_scheduler():
         print(f"  Trading:      scheduler failed to start: {e}")
 
 
+def _bootstrap_auth():
+    """Create the auth DB and make sure the owner account exists.
+
+    The bootstrap password comes from PSB_AUTH_PASSWORD on first boot only. It
+    is never written to the DB in plaintext (only a scrypt hash lands there)
+    and never logged — it is read from the environment exactly once, so it
+    does not linger in a config file or in shell history beyond whatever
+    created it.
+
+    On subsequent boots the password is ignored entirely: changing the
+    owner's chosen password must not be silently reverted by a redeploy.
+    must_change=1 on the first creation is what forces the change-password
+    screen, so the bootstrap value cannot become a permanent credential."""
+    auth_mod.init_db()
+    if AUTH_DISABLED:
+        sys.stderr.write(
+            "[dashboard] ⚠ AUTH_DISABLED=1 — every endpoint is open. "
+            "Unset it before this is reachable from anywhere but localhost.\n")
+        return
+    try:
+        auth_mod.purge_expired()
+    except Exception as e:
+        sys.stderr.write(f"[dashboard] session purge skipped: {e}\n")
+    if not auth_mod.user_exists(AUTH_USER):
+        pw = os.environ.get('PSB_AUTH_PASSWORD')
+        if not pw:
+            sys.stderr.write(
+                f"[dashboard] no auth user '{AUTH_USER}' and PSB_AUTH_PASSWORD is "
+                "unset — nobody can log in. Set it and restart, or create the "
+                "account directly:\n"
+                f"    PSB_AUTH_PASSWORD='...' python3 -c \"import sys;sys.path."
+                "insert(0,'dashboard');import auth;auth.create_user("
+                f"'{AUTH_USER}','<password>')\"\n")
+            return
+        try:
+            auth_mod.create_user(AUTH_USER, pw, must_change=1)
+            print(f"\n  [Auth] created account '{AUTH_USER}' (password change required)")
+            print(f"  [Auth] db: {auth_mod.AUTH_DB}")
+        except ValueError as e:
+            sys.stderr.write(f"[dashboard] PSB_AUTH_PASSWORD rejected: {e}\n")
+
+
 def main():
+    _bootstrap_auth()
     # ThreadingHTTPServer: each request/connection gets its own thread, so one slow or
     # keep-alive browser connection can't freeze the whole dashboard (the old single-threaded
     # HTTPServer hung all tabs when one connection blocked).

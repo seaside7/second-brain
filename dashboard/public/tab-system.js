@@ -74,11 +74,11 @@
         status: fail > 0 ? 'critical' : 'good', href: '#system', tick: true,
       }));
       tiles.push(Comp.statTile({
-        key: 'sys-docs-7d', icon: '📄', label: 'Docs created 7d', value: m.git?.docs_created_7d ?? 0,
+        key: 'sys-docs-7d', icon: 'file', label: 'Docs created 7d', value: m.git?.docs_created_7d ?? 0,
         sub: `${m.git?.docs_revised_7d ?? 0} revised · ${m.git?.commits_7d ?? 0} commits`, tick: true,
       }));
       tiles.push(Comp.statTile({
-        key: 'sys-tickets-done-7d', icon: '🎫', label: 'Tickets done 7d', value: m.tickets?.done_7d ?? 0,
+        key: 'sys-tickets-done-7d', icon: 'ticket', label: 'Tickets done 7d', value: m.tickets?.done_7d ?? 0,
         sub: `${m.tickets?.created_7d ?? 0} created · ${m.tickets?.overdue ?? 0} overdue now`, tick: true,
       }));
     } else {
@@ -102,7 +102,7 @@
       const win = tu && tu.range_start && tu.range_end
         ? `${tu.range_start} → ${tu.range_end}` : `${(tu && tu.window_days) ?? 30}d`;
       tiles.push(Comp.statTile({
-        key: 'sys-ai-cost', icon: '💸',
+        key: 'sys-ai-cost', icon: 'walletOut',
         label: `AI cost ${(tu && tu.window_days) ?? 30}d (API-equiv)`,
         value: fmtUsd((claudeUsd ?? 0) + (agyUsd ?? 0)),
         sub: `Claude ${fmtUsd(claudeUsd)} · agy ${fmtUsd(agyUsd)} · ${win}`,
@@ -123,7 +123,7 @@
       const dim = f.state === 'stale' || f.state === 'dead';
       const age = f.age_h != null ? U.fmtAge(f.age_h) : '—';
       const row = Comp.listRow({
-        key: `fresh:${f.label}`, icon: '📄', title: f.label,
+        key: `fresh:${f.label}`, icon: 'file', title: f.label,
         badges: [Comp.badge(kind, f.state)], right: U.esc(age), dim,
       });
       const ctx = dim ? FRESH_CONTEXT[f.label] : null;
@@ -131,10 +131,10 @@
     });
     const deadCount = fresh.filter(f => f.state === 'dead').length;
     return Comp.card({
-      key: 'freshness', icon: '📡', title: 'Data freshness',
+      key: 'freshness', icon: 'signal', title: 'Data freshness',
       count: `${fresh.length} sources${deadCount ? ` · ${deadCount} dead` : ''}`,
       status: deadCount ? 'serious' : null,
-      body: `<div class="rows">${rows.join('') || Comp.emptyState({ icon: '📡', title: 'No freshness data' })}</div>`,
+      body: `<div class="rows">${rows.join('') || Comp.emptyState({ icon: 'signal', title: 'No freshness data' })}</div>`,
       open: true,
     });
   }
@@ -221,7 +221,7 @@
            uses for its Run now/Ack/AI solve row) — NOT buried inside the
            collapsed expandBody, so it answers "bisa ngapain" without a click. */
         const actionBtns = acked ? '' : [
-          `<button class="prep-link job-ack-btn" data-job="${U.esc(j.job)}">✓ Ack</button>`,
+          `<button class="prep-link job-ack-btn" data-job="${U.esc(j.job)}">${Comp.ic('check')} Ack</button>`,
           Comp.aiButton({ kind: 'fix-job', ref: j.job, label: '🤖 AI solve' }),
         ].join(' ');
         const expand = `<p>${U.esc(j.summary || '(no summary in the heartbeat row)')}</p>` +
@@ -231,7 +231,7 @@
           rank: isReauth ? 1.5 : acked ? 3 : 0,
           isFailing: !isReauth && !acked,
           html: Comp.listRow({
-            key: `hbjob:${j.job}`, icon: '📟', title: j.job,
+            key: `hbjob:${j.job}`, icon: 'megaphone', title: j.job,
             badges: [badge, Comp.badge('muted', 'heartbeat-only')],
             right: Number.isFinite(ageH) ? U.esc(U.fmtAge(ageH)) : '—',
             expandBody: expand,
@@ -264,7 +264,7 @@
           /* "gw bisa ngapain?" applies to reauth too — AI can't refresh a token
              itself but CAN diagnose/point at the fix, same fix-job kind as a
              failing job */
-          subtext = `<div class="row-subtext">⚠ needs reauth` +
+          subtext = `<div class="row-subtext">${Comp.ic('alert')} needs reauth` +
             `${lr.summary ? ` — ${U.esc(lr.summary)}` : ''}. Refresh the token; it clears on the next run.</div>` +
             `<div class="row-subtext">${Comp.aiButton({ kind: 'fix-job', ref: r.job, label: '🤖 AI solve' })}</div>`;
         } else {
@@ -286,7 +286,7 @@
           const canRun = RUNNABLE_JOBS.has(r.job);
           const actionBtns = [
             canRun ? `<button class="prep-link job-run-btn" data-job="${U.esc(r.job)}">▶ Run now</button>` : '',
-            acked ? '' : `<button class="prep-link job-ack-btn" data-job="${U.esc(r.job)}">✓ Ack</button>`,
+            acked ? '' : `<button class="prep-link job-ack-btn" data-job="${U.esc(r.job)}">${Comp.ic('check')} Ack</button>`,
             acked ? '' : Comp.aiButton({ kind: 'fix-job', ref: r.job, label: '🤖 AI solve' }),
           ].filter(Boolean).join(' ');
           if (actionBtns) bits.push(`<div class="row-subtext">${actionBtns}</div>`);
@@ -297,7 +297,7 @@
         rank,
         isFailing: enabled && r.state === 'fail' && !r.acked,
         html: Comp.listRow({
-          key: `routine:${r.job}`, icon: '⏰', title: r.name || r.job, badges: [badge], meta, right,
+          key: `routine:${r.job}`, icon: 'clock', title: r.name || r.job, badges: [badge], meta, right,
           expandBody: JOB_LOG_LOADING,
         }) + subtext,
       };
@@ -308,10 +308,10 @@
     const okCount = routines.filter(r => r.enabled !== false && r.state === 'ok').length;
     const failCount = built.filter(x => x.isFailing).length;
     return Comp.card({
-      key: 'routines', icon: '⏰', title: 'Routines',
+      key: 'routines', icon: 'clock', title: 'Routines',
       count: `${okCount} ok · ${failCount} failing`,
       status: failCount ? 'serious' : null,
-      body: `<div class="rows">${built.map(x => x.html).join('') || Comp.emptyState({ icon: '⏰', title: 'No routines registered' })}</div>`,
+      body: `<div class="rows">${built.map(x => x.html).join('') || Comp.emptyState({ icon: 'clock', title: 'No routines registered' })}</div>`,
       open: true,
     });
   }
@@ -393,7 +393,7 @@
     const html = sevKeys.map(sev =>
       `<div class="section-label">${U.esc(sev)} (${groups[sev].length})</div>` +
       `<div class="rows">${groups[sev].map(harnessFindingRow).join('')}</div>`
-    ).join('') || Comp.emptyState({ icon: '🧠', title: 'No findings' });
+    ).join('') || Comp.emptyState({ icon: 'brain', title: 'No findings' });
     Drawer.openWide('Harness findings', html);
   }
 
@@ -409,23 +409,23 @@
          list in a wide drawer instead of leaving the owner stuck at a bare count */
       const chips = Object.entries(bySev).map(([sev, n]) =>
         `<button class="sev-chip-btn" title="Open findings">${Comp.badge(SEV_KIND[sev] || 'muted', `${sev} ${n}`)}</button>`).join('');
-      rows.push(Comp.listRow({ key: 'harness:findings', icon: '🔎', title: 'Findings by severity', right: chips }));
+      rows.push(Comp.listRow({ key: 'harness:findings', icon: 'search', title: 'Findings by severity', right: chips }));
     } else {
-      rows.push(Comp.emptyState({ icon: '🧠', title: hr.note || 'No health review yet' }));
+      rows.push(Comp.emptyState({ icon: 'brain', title: hr.note || 'No health review yet' }));
     }
     if (hr.last_run != null) {
       const ageH = (Date.now() / 1000 - hr.last_run) / 3600;
-      rows.push(Comp.listRow({ key: 'harness:last-run', icon: '🕒', title: `Last run ${U.fmtAge(ageH)} ago` }));
+      rows.push(Comp.listRow({ key: 'harness:last-run', icon: 'clock', title: `Last run ${U.fmtAge(ageH)} ago` }));
     }
     if (hr.latest_report) {
       rows.push(Comp.listRow({
-        key: 'harness:report', icon: '📄', title: 'Latest health report',
+        key: 'harness:report', icon: 'file', title: 'Latest health report',
         right: `<button class="prep-link" data-drawer-path="${U.esc(hr.latest_report)}" data-drawer-title="Harness health report">open →</button>`,
       }));
     }
     const findingsTotal = hr.findings_total ?? 0;
     return Comp.card({
-      key: 'harness', icon: '🧠', title: 'Harness health',
+      key: 'harness', icon: 'brain', title: 'Harness health',
       count: `${findingsTotal} finding${findingsTotal === 1 ? '' : 's'}`,
       status: bySev.fail ? 'serious' : (bySev.warn ? 'warn' : null),
       body: `<div class="rows">${rows.join('')}</div>`, open: false,
@@ -449,7 +449,7 @@
       `<div class="row-subtext">Indra ngumpulin sinyal → Refleks ngolah mekanis tiap beberapa menit → ` +
       `Otak (Claude) synthesize dan decide → Memori nyimpen state → Tangan eksekusi (selalu approval-gated)</div>`;
     return Comp.card({
-      key: 'harness-map', icon: '🗺', title: 'Harness map', count: `${totalNodes} nodes`, open: true, body,
+      key: 'harness-map', icon: 'map', title: 'Harness map', count: `${totalNodes} nodes`, open: true, body,
     });
   }
 
@@ -457,7 +457,7 @@
     if (ref.kind === 'freshness') {
       const ageTxt = ref.age_h != null ? U.fmtAge(ref.age_h) : '—';
       const badge = Comp.badge(FRESH_KIND[ref.state] || 'muted', ref.state || 'unknown');
-      return `<div class="rows">${Comp.listRow({ key: `map-fresh:${ref.id}`, icon: '📄', title: ref.id, badges: [badge], right: ageTxt })}</div>` +
+      return `<div class="rows">${Comp.listRow({ key: `map-fresh:${ref.id}`, icon: 'file', title: ref.id, badges: [badge], right: ageTxt })}</div>` +
         (ref.context ? `<div class="row-subtext">${U.esc(ref.context)}</div>` : '') +
         `<p>${U.esc(node.desc || '')}</p>`;
     }
@@ -498,8 +498,8 @@
       w: 220, h: 32, label: 'Aktivitas harness — events/hari', showLast: true, showAxis: true,
     });
     return Comp.card({
-      key: 'activity', icon: '📉', title: 'Activity', count,
-      body: spark || Comp.emptyState({ icon: '🌙', title: 'No activity yet' }),
+      key: 'activity', icon: 'chartDown', title: 'Activity', count,
+      body: spark || Comp.emptyState({ icon: 'moon', title: 'No activity yet' }),
       open: false,
     });
   }
@@ -513,7 +513,7 @@
   /* canonical order first, then any OTHER task buckets the ledger grows
      (e.g. 'draft') alphabetically — never silently hide a bucket */
   const TASK_ORDER = ['harvest', 'critic', 'research'];
-  const TASK_ICON = { harvest: '🌾', critic: '🔎', research: '🔬', draft: '✍️' };
+  const TASK_ICON = { harvest: 'wheat', critic: 'search', research: 'flask', draft: 'edit' };
 
   function costSection(cR) {
     if (!cR || cR.status !== 'fulfilled') return errCard('cost', '💸', 'agy-bridge Cost & Savings', cR);
@@ -530,14 +530,14 @@
     const days = Object.entries(c.by_day || {}).sort((a, b) => a[0].localeCompare(b[0])).slice(-14)
       .map(([date, s]) => ({ date, a: s.spent, b: s.saved }));
     const barsHtml = Comp.duoBars(days);
-    const right = `<div class="stack">${legend}${barsHtml || Comp.emptyState({ icon: '📉', title: 'No daily usage yet' })}</div>`;
+    const right = `<div class="stack">${legend}${barsHtml || Comp.emptyState({ icon: 'chartDown', title: 'No daily usage yet' })}</div>`;
 
     const taskKeys = TASK_ORDER.filter(k => (c.by_task || {})[k])
       .concat(Object.keys(c.by_task || {}).filter(k => !TASK_ORDER.includes(k)).sort());
     const taskRows = taskKeys.map(k => {
       const s = c.by_task[k];
       return Comp.listRow({
-        key: `cost:task:${k}`, icon: TASK_ICON[k] || '⚙', title: k,
+        key: `cost:task:${k}`, icon: TASK_ICON[k] || 'cog', title: k,
         right: `<span class="num">${fmtUsd(s.spent)} spent · ${fmtUsd(s.saved)} saved · ` +
           `${s.savings_pct == null ? '—' : s.savings_pct + '%'}</span>`,
       });
@@ -546,17 +546,17 @@
     const byModel = Object.entries(c.by_model || {})
       .sort((a, b) => (b[1].spent ?? 0) - (a[1].spent ?? 0)).slice(0, 5);
     const modelRows = byModel.map(([name, s]) => Comp.listRow({
-      key: `cost:model:${name}`, icon: '🤖', title: name,
+      key: `cost:model:${name}`, icon: 'bot', title: name,
       meta: `${s.answers ?? 0} calls`,
       right: `<span class="num">${fmtUsd(s.spent)} · ${s.savings_pct == null ? '—' : s.savings_pct + '%'} saved</span>`,
     }));
 
     const body = `<div class="two-col">${ring}${right}</div>` +
-      `<div class="section-label">By task</div><div class="rows">${taskRows.join('') || Comp.emptyState({ icon: '💸', title: 'No task usage yet' })}</div>` +
-      `<div class="section-label">By model (top 5)</div><div class="rows">${modelRows.join('') || Comp.emptyState({ icon: '💸', title: 'No model usage yet' })}</div>`;
+      `<div class="section-label">By task</div><div class="rows">${taskRows.join('') || Comp.emptyState({ icon: 'walletOut', title: 'No task usage yet' })}</div>` +
+      `<div class="section-label">By model (top 5)</div><div class="rows">${modelRows.join('') || Comp.emptyState({ icon: 'walletOut', title: 'No model usage yet' })}</div>`;
 
     return Comp.card({
-      key: 'cost', icon: '💸', title: 'agy-bridge Cost & Savings',
+      key: 'cost', icon: 'walletOut', title: 'agy-bridge Cost & Savings',
       count: hasTotals ? `${fmtUsd(t.spent)} spent · ${fmtUsd(t.saved)} saved` : (c.note || 'no usage yet'),
       body, open: true,
     });
@@ -571,8 +571,8 @@
      (fetch rejects), so ANY rejected promise here (network refusal, 404,
      future 5xx) renders the SAME graceful "belum ada data token" EmptyState
      rather than the alarm-red .load-error the other System cards use. */
-  const TU_TASK_ICON = { harvest: '🌾', critic: '🔎', research: '🔬', draft: '✍️',
-    review: '🔍', synthesize: '🧵', strategize: '♟', lookup: '📌' };
+  const TU_TASK_ICON = { harvest: 'wheat', critic: 'search', research: 'flask', draft: 'edit',
+    review: 'search', synthesize: 'thread', strategize: 'target', lookup: 'pin' };
 
   /* rank -> categorical kind: top 6 get their own cat-1..cat-6 (shared between
      the distBar segment and its matching table row's badge dot); everything
@@ -633,8 +633,8 @@
 
   function tokenUsageEmpty(hint) {
     return Comp.card({
-      key: 'token-usage', icon: '🧮', title: 'Token Usage (Claude)',
-      body: tuControls() + Comp.emptyState({ icon: '🧮', title: 'Belum ada data token', hint }),
+      key: 'token-usage', icon: 'calc', title: 'Token Usage (Claude)',
+      body: tuControls() + Comp.emptyState({ icon: 'calc', title: 'Belum ada data token', hint }),
       open: true,
     });
   }
@@ -675,9 +675,9 @@
     const dayLabel = `Est cost — last ${dayPoints.length}d`;
     const barsHtml = Comp.miniBars(dayPoints, { w: 200, h: 36, kind: 'cat-1', label: dayLabel });
     const topStrip = `<div class="two-col">` +
-      `${distHtml || Comp.emptyState({ icon: '📊', title: 'No cost-share data yet' })}` +
+      `${distHtml || Comp.emptyState({ icon: 'chart', title: 'No cost-share data yet' })}` +
       `<div class="stack"><div class="section-label">${dayLabel}</div>` +
-      `${barsHtml || Comp.emptyState({ icon: '📉', title: 'No daily data yet' })}</div></div>`;
+      `${barsHtml || Comp.emptyState({ icon: 'chartDown', title: 'No daily data yet' })}</div></div>`;
 
     /* the main table: per task type, sorted by total cost desc — type badge
        (color-matched to its distBar segment) · runs · avg in/out tokens ·
@@ -688,7 +688,7 @@
       const avgCost = s.avg_cost_usd == null ? '—' : fmtUsd(s.avg_cost_usd);
       const share = s.share_cost_pct == null ? '—' : `${s.share_cost_pct}%`;
       return Comp.listRow({
-        key: `tu:type:${s.type}`, icon: TU_TASK_ICON[s.type] || '⚙', title: s.type || '(unknown)',
+        key: `tu:type:${s.type}`, icon: TU_TASK_ICON[s.type] || 'cog', title: s.type || '(unknown)',
         badges: [Comp.badge(tuKind(i), `${s.runs ?? 0} runs`)],
         meta: `avg ${avgTok} tok/run (${avgInOut})`,
         right: `<span class="num">${fmtCompact(s.total_tokens)} tok · ${avgCost} avg · ${fmtUsd(s.total_cost_usd)} · ${share}</span>`,
@@ -697,14 +697,14 @@
 
     /* nested "Per model" block — collapsed by default */
     const modelRows = byModel.slice().sort((a, b) => (b.est_cost_usd ?? 0) - (a.est_cost_usd ?? 0)).map(m => Comp.listRow({
-      key: `tu:model:${m.model}`, icon: '🤖', title: m.model || '(unknown)',
+      key: `tu:model:${m.model}`, icon: 'bot', title: m.model || '(unknown)',
       meta: `${m.runs ?? 0} runs`,
       right: `<span class="num">${fmtCompact(m.total_tokens)} tok · ${fmtUsd(m.est_cost_usd)}</span>`,
     }));
     const perModelCard = Comp.card({
-      key: 'token-usage-by-model', icon: '🤖', title: 'Per model',
+      key: 'token-usage-by-model', icon: 'bot', title: 'Per model',
       count: `${byModel.length} model${byModel.length === 1 ? '' : 's'}`,
-      body: `<div class="rows">${modelRows.join('') || Comp.emptyState({ icon: '🤖', title: 'No per-model data yet' })}</div>`,
+      body: `<div class="rows">${modelRows.join('') || Comp.emptyState({ icon: 'bot', title: 'No per-model data yet' })}</div>`,
       open: false,
     });
 
@@ -716,10 +716,10 @@
 
     const body = tuControls() + topStrip +
       `<div class="section-label">By task type</div>` +
-      `<div class="rows">${typeRows.join('') || Comp.emptyState({ icon: '🧮', title: 'No task-type data yet' })}</div>` +
+      `<div class="rows">${typeRows.join('') || Comp.emptyState({ icon: 'calc', title: 'No task-type data yet' })}</div>` +
       perModelCard + footer;
 
-    return Comp.card({ key: 'token-usage', icon: '🧮', title: 'Token Usage (Claude)', count, body, open: true });
+    return Comp.card({ key: 'token-usage', icon: 'calc', title: 'Token Usage (Claude)', count, body, open: true });
   }
 
   /* ── 8. 📈 Token Efficiency: /api/token-efficiency — weekly totals +
@@ -731,8 +731,8 @@
      payload never renders as a .load-error. */
   function tokenEfficiencyEmpty(hint) {
     return Comp.card({
-      key: 'token-efficiency', icon: '📈', title: 'Token Efficiency',
-      body: Comp.emptyState({ icon: '📈', title: 'Belum ada data efisiensi', hint }),
+      key: 'token-efficiency', icon: 'chart', title: 'Token Efficiency',
+      body: Comp.emptyState({ icon: 'chart', title: 'Belum ada data efisiensi', hint }),
       open: false,
     });
   }
@@ -788,13 +788,13 @@
       b: Object.values(w.by_task_type || {}).reduce((a, t) => a + (t.offloaded_tokens || 0), 0),
     }));
     const trendLegend = `<div class="stat-sub">${Comp.badge('cat-1', 'total tokens')}${Comp.badge('cat-2', 'offloaded')}</div>`;
-    const trendHtml = `<div class="stack">${trendLegend}${Comp.duoBars(weekBars) || Comp.emptyState({ icon: '📉', title: 'No weekly data yet' })}</div>`;
+    const trendHtml = `<div class="stack">${trendLegend}${Comp.duoBars(weekBars) || Comp.emptyState({ icon: 'chartDown', title: 'No weekly data yet' })}</div>`;
 
     /* top-3 hotspots (server pre-ranks; render verbatim, capped at 3 as a
        belt-and-braces in case the payload ever grows) */
     const hotspots = (eff.hotspots || []).slice(0, 3);
     const hotspotRows = hotspots.map((h, i) => Comp.listRow({
-      key: `te:hotspot:${h.task_type}`, icon: '🔥', title: h.task_type || '(unknown)',
+      key: `te:hotspot:${h.task_type}`, icon: 'fire', title: h.task_type || '(unknown)',
       badges: [Comp.badge(tuKind(i), fmtCompact(h.tokens))],
       expandBody: h.why ? `<p>${U.esc(h.why)}</p>` : '',
     }));
@@ -805,7 +805,7 @@
       const ts = c.ts_wib ? U.esc(c.ts_wib.slice(0, 16).replace('T', ' ')) : '—';
       const files = Comp.linkChips(c.files || []);
       return Comp.listRow({
-        key: `te:change:${c.ts_wib || Math.random()}`, icon: '🛠', title: c.what || '(no description)',
+        key: `te:change:${c.ts_wib || Math.random()}`, icon: 'cog', title: c.what || '(no description)',
         meta: ts,
         expandBody: `${c.expected_effect ? `<p>${U.esc(c.expected_effect)}</p>` : ''}${files}`,
       });
@@ -813,11 +813,11 @@
 
     const body = `<div class="two-col">${chips}${trendHtml}</div>` +
       `<div class="section-label">Top hotspots</div>` +
-      `<div class="rows">${hotspotRows.join('') || Comp.emptyState({ icon: '🔥', title: 'No hotspots flagged' })}</div>` +
+      `<div class="rows">${hotspotRows.join('') || Comp.emptyState({ icon: 'fire', title: 'No hotspots flagged' })}</div>` +
       `<div class="section-label">What changed</div>` +
-      `<div class="rows">${changeRows.join('') || Comp.emptyState({ icon: '🛠', title: 'No optimizations logged yet' })}</div>`;
+      `<div class="rows">${changeRows.join('') || Comp.emptyState({ icon: 'cog', title: 'No optimizations logged yet' })}</div>`;
 
-    return Comp.card({ key: 'token-efficiency', icon: '📈', title: 'Token Efficiency', count, body, open: false });
+    return Comp.card({ key: 'token-efficiency', icon: 'chart', title: 'Token Efficiency', count, body, open: false });
   }
 
   /* ── render + registration ── */

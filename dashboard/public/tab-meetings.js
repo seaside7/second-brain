@@ -106,7 +106,7 @@ window.Tabs = window.Tabs || {};
   function dayGroup(rows, emptyHint) {
     return rows.length
       ? `<div class="rows">${rows.map(meetingRowHtml).join('')}</div>`
-      : Comp.emptyState({ icon: '🌤', title: emptyHint });
+      : Comp.emptyState({ icon: 'sun', title: emptyHint });
   }
 
   /* ISO week key (Mon-start, ISO 8601 week numbering) for a 'YYYY-MM-DD' date
@@ -150,7 +150,7 @@ window.Tabs = window.Tabs || {};
     rows.forEach(r => (r.date === today ? grp.today : r.date === yest ? grp.yesterday : grp.earlier).push(r));
     const earlierCard = grp.earlier.length
       ? Comp.card({
-          key: 'meetings-earlier', icon: '🗂', title: 'Earlier', count: `${grp.earlier.length}`,
+          key: 'meetings-earlier', icon: 'archive', title: 'Earlier', count: `${grp.earlier.length}`,
           open: false, body: dayGroup(grp.earlier),
         })
       : '';
@@ -159,7 +159,7 @@ window.Tabs = window.Tabs || {};
       <div class="section-label">Today</div>${dayGroup(grp.today, 'No meetings today')}
       <div class="section-label">Yesterday</div>${dayGroup(grp.yesterday, 'No meetings yesterday')}
       ${earlierCard}`;
-    return Comp.card({ key: 'meetings', icon: '🎬', title: 'Recent meetings', count: `${rows.length}`, open: true, body });
+    return Comp.card({ key: 'meetings', icon: 'film', title: 'Recent meetings', count: `${rows.length}`, open: true, body });
   }
 
   /* ═══ MOMs & notes — click opens Drawer via declarative data-drawer-path ═══ */
@@ -167,7 +167,7 @@ window.Tabs = window.Tabs || {};
     const ageH = (Date.now() - Date.parse(m.mtime)) / 3600000;
     const versionsBadge = m.versions > 1 ? Comp.badge('muted', `${m.versions} versi`) : '';
     return `<div class="row" data-key="mom:${U.esc(m.relPath)}" data-drawer-path="${U.esc(m.relPath)}" data-drawer-title="${U.esc(m.title)}">
-      <span class="row-icon">📝</span>
+      <span class="row-icon">${Comp.ic('note')}</span>
       <span class="row-title" title="${U.esc(m.title)}">${U.esc(m.title)}</span>
       ${clientBadge(m.client)}${versionsBadge}
       <span class="row-meta">${U.esc(U.fmtAge(ageH))}</span>
@@ -177,8 +177,8 @@ window.Tabs = window.Tabs || {};
   function momsSection(moms) {
     const body = moms.length
       ? `<div class="rows">${moms.map(momRowHtml).join('')}</div>`
-      : Comp.emptyState({ icon: '📭', title: 'No MOMs or notes yet' });
-    return Comp.card({ key: 'moms', icon: '📝', title: 'MOMs & notes', count: `${moms.length}`, open: false, body });
+      : Comp.emptyState({ icon: 'inboxes', title: 'No MOMs or notes yet' });
+    return Comp.card({ key: 'moms', icon: 'note', title: 'MOMs & notes', count: `${moms.length}`, open: false, body });
   }
 
   /* ═══ Bot activity — Vexa sends + local recorder runs, collapsed by default ═══ */
@@ -192,7 +192,7 @@ window.Tabs = window.Tabs || {};
 
   function vexaRowHtml(v) {
     return `<div class="row" data-key="vexa:${U.esc(v.key)}">
-      <span class="row-icon">🤖</span>
+      <span class="row-icon">${Comp.ic('bot')}</span>
       <span class="row-title" title="${U.esc(v.title)}">${U.esc(v.title)}</span>
       ${Comp.badge('muted', v.platform || '—')}
       <span class="row-meta">${U.esc(U.fmtAge((Date.now() - Date.parse(v.sent_at)) / 3600000))}</span>
@@ -202,7 +202,7 @@ window.Tabs = window.Tabs || {};
 
   function localRowHtml(l) {
     return `<div class="row" data-key="local:${U.esc(l.rec_id || l.file)}">
-      <span class="row-icon">🎙️</span>
+      <span class="row-icon">${Comp.ic('mic2')}</span>
       <span class="row-title" title="${U.esc(l.file)}">${U.esc(l.file)}</span>
       <span class="row-meta">${U.esc(U.fmtAge((Date.now() - Date.parse(l.ts)) / 3600000))}</span>
       <span class="row-right">${botStatusBadge(l.status)}</span>
@@ -213,10 +213,10 @@ window.Tabs = window.Tabs || {};
     const vexa = recorder.vexa || [], local = recorder.local || [];
     const body = `
       <div class="section-label">Vexa bot sends (${vexa.length})</div>
-      ${vexa.length ? `<div class="rows">${vexa.slice(0, 20).map(vexaRowHtml).join('')}</div>` : Comp.emptyState({ icon: '🤖', title: 'No bot sends recorded' })}
+      ${vexa.length ? `<div class="rows">${vexa.slice(0, 20).map(vexaRowHtml).join('')}</div>` : Comp.emptyState({ icon: 'bot', title: 'No bot sends recorded' })}
       <div class="section-label">Local recorder runs (${local.length})</div>
-      ${local.length ? `<div class="rows">${local.slice(0, 20).map(localRowHtml).join('')}</div>` : Comp.emptyState({ icon: '🎙', title: 'No local runs recorded' })}`;
-    return Comp.card({ key: 'bots', icon: '🤖', title: 'Bot activity', count: `${vexa.length + local.length}`, open: false, body });
+      ${local.length ? `<div class="rows">${local.slice(0, 20).map(localRowHtml).join('')}</div>` : Comp.emptyState({ icon: 'mic2', title: 'No local runs recorded' })}`;
+    return Comp.card({ key: 'bots', icon: 'bot', title: 'Bot activity', count: `${vexa.length + local.length}`, open: false, body });
   }
 
   /* ═══ Full render + data fetch ═══ */

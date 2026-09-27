@@ -110,7 +110,7 @@ const TradingTab = (() => {
       <div class="trading-chips">${todayBits}${deltaBits}</div>` : '';
 
     return Comp.card({
-      key: 'trading-compare', icon: '⚖️', title: `Month-to-date (${U.esc(st.month || '')})`,
+      key: 'trading-compare', icon: 'gavel', title: `Month-to-date (${U.esc(st.month || '')})`,
       count: num(st.new_records, 0) + ' new',
       open: true,
       body: `
@@ -144,7 +144,7 @@ const TradingTab = (() => {
         <td class="trading-sub">${U.esc(t.exit_reason || '')}</td>
       </tr>`).join('');
     return Comp.card({
-      key: 'trading-recent', icon: '🧾', title: 'Recent trades',
+      key: 'trading-recent', icon: 'receipt', title: 'Recent trades',
       count: num(rows.length, 0), open: false,
       body: `<div class="table-scroll">
         <table class="trading-table">
@@ -161,7 +161,7 @@ const TradingTab = (() => {
     const d = payload.state;
     if (!d) {
       card.innerHTML = Comp.emptyState({
-        icon: '📈', title: 'No Trading Brain learning yet',
+        icon: 'chart', title: 'No Trading Brain learning yet',
         hint: 'Nothing has been read from the journal sheet yet. Hit "Learn now" to run the first diff + summary.',
       }) + `<p style="text-align:center"><button class="btn" id="trading-learn-btn">⟳ Learn now</button></p>`;
       const b = $id('trading-learn-btn');
@@ -177,7 +177,7 @@ const TradingTab = (() => {
     const header = `
       <div class="trading-head">
         <div class="trading-head-title">
-          <h2 class="trading-title">📈 Trading Brain</h2>
+          <h2 class="trading-title">${Comp.ic('chart')} Trading Brain</h2>
           <div class="trading-meta">
             <span>Journal: <b>Daily Trade Journal</b> · ${U.esc(d.month || '')}</span>
             <span>Learned ${when(d.learned_at)}</span>

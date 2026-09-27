@@ -105,10 +105,21 @@ function applyRoute() {
   const { tab, filter } = parseHash();
   App.activeTab = tab;
   App.filter = filter;
-  document.querySelectorAll('.tab-btn').forEach(b =>
-    b.classList.toggle('is-active', b.dataset.tab === tab));
-  document.querySelectorAll('.tab-panel').forEach(p =>
-    p.classList.toggle('is-active', p.id === `tab-${tab}`));
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    const on = b.dataset.tab === tab;
+    b.classList.toggle('is-active', on);
+    /* role="tab" semantics: exactly one tab is selected. Without this the
+       SR announces all 11 tabs as selected at once.
+       Roving tabindex: only the active tab is reachable with Tab; arrows
+       move between them (WAI-ARIA authoring practices). */
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+    b.tabIndex = on ? 0 : -1;
+  });
+  /* Panels are shown/hidden with .is-active, which is `display: block` /
+     `display: none` — and display:none already removes a node from the
+     accessibility tree, so no extra [hidden] attribute is needed. */
+  document.querySelectorAll('.tab-panel')
+    .forEach(p => p.classList.toggle('is-active', p.id === `tab-${tab}`));
   loadActiveTab();
 }
 
@@ -127,7 +138,7 @@ function loadActiveTab() {
     }
   } else {
     panel.innerHTML = Comp.emptyState({
-      icon: '🚧',
+      icon: 'construction',
       title: `${App.activeTab[0].toUpperCase()}${App.activeTab.slice(1)} tab is under construction`,
       hint: 'Its module has not shipped yet — everything else keeps working.',
     });
@@ -260,7 +271,7 @@ function topTicketsCard(h) {
 
   return Comp.card({
     key: 'home-top-tickets',
-    icon: '🎟️', title: 'Top Tickets',
+    icon: 'ticket', title: 'Top Tickets',
     count: String((h.reminders.length + h.deadlines.length + h.working_on.length)),
     open: true,
     body:
@@ -281,7 +292,7 @@ function topNewsCard(h) {
   if (!rows) return '';
   return Comp.card({
     key: 'home-top-news',
-    icon: '📰', title: 'Current news',
+    icon: 'news', title: 'Current news',
     open: true,
     body: rows + `<p class="row-note"><a href="#news" class="prep-link">Buka News tab untuk full briefing →</a></p>`,
   });
@@ -322,6 +333,25 @@ function boot() {
   $id('tab-nav').addEventListener('click', e => {
     const btn = e.target.closest('.tab-btn');
     if (btn) location.hash = `#${btn.dataset.tab}`;
+  });
+
+  /* role="tablist" implies arrow-key navigation (WAI-ARIA tabs pattern).
+     Only visible tabs take part, so the hidden personal-harness tabs that
+     applySamuderaMode/applyCombinedMode remove are skipped. */
+  $id('tab-nav').addEventListener('keydown', e => {
+    const keys = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 };
+    if (!(e.key in keys) && e.key !== 'Home' && e.key !== 'End') return;
+    const tabs = [...document.querySelectorAll('.tab-btn')]
+      .filter(b => b.offsetParent !== null);
+    if (!tabs.length) return;
+    const cur = tabs.indexOf(document.activeElement.closest('.tab-btn'));
+    e.preventDefault();
+    let next;
+    if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = tabs.length - 1;
+    else next = (cur + keys[e.key] + tabs.length) % tabs.length;
+    tabs[next].focus();
+    location.hash = `#${tabs[next].dataset.tab}`;
   });
 
   $id('btn-refresh').addEventListener('click', () => refreshOverview(true));

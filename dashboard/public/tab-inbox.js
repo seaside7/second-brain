@@ -105,7 +105,7 @@ window.Tabs = window.Tabs || {};
         .sort((a, b) => (b.priority_hi ? 1 : 0) - (a.priority_hi ? 1 : 0) || (b.ts || 0) - (a.ts || 0));
       const fyi = visible.filter(it => it.triage !== 'reply');
       rows =
-        (reply.length ? `<div class="section-label">🔴 Perlu dibales (${reply.length})</div>
+        (reply.length ? `<div class="section-label">${Comp.ic('dot')} Perlu dibales (${reply.length})</div>
            <div class="rows">${reply.map(itemRow).join('')}</div>` : '') +
         (fyi.length ? `<div class="section-label">📎 FYI — nggak nunggu jawaban lo (${fyi.length})</div>
            <div class="rows">${fyi.map(itemRow).join('')}</div>` : '');
@@ -115,7 +115,7 @@ window.Tabs = window.Tabs || {};
 
     panel.innerHTML = `
       <div class="row" data-key="ibx-toolbar">
-        <span class="row-icon">📥</span>
+        <span class="row-icon">${Comp.ic('download')}</span>
         <span class="row-title"><b>Inbox</b> — semua inquiry masuk, satu antrian follow-up</span>
         <span class="row-meta" title="sweep terakhir">sweep ${U.esc(sweepAge)}</span>
         <span class="row-right">
@@ -146,12 +146,12 @@ window.Tabs = window.Tabs || {};
     const ticket = it.linked_ticket ? Comp.ticketChip(it.linked_ticket) : '';
     const runPill = it.last_run ? Comp.aiResultPill({ run: { kind: 'inbox', ref: it.id, ...it.last_run } }) : '';
     const replyChip = it.draft_reply
-      ? `<button class="prep-link ibx-open-detail" data-id="${U.esc(it.id)}" title="Draft balasan siap — review di drawer">✍ draft siap</button>` : '';
+      ? `<button class="prep-link ibx-open-detail" data-id="${U.esc(it.id)}" title="Draft balasan siap — review di drawer">${Comp.ic('edit')} draft siap</button>` : '';
     const draftChip = (!it.last_run && it.ai_draft)
       ? `<button class="prep-link" data-drawer-path="${U.esc(it.ai_draft)}"
-           data-drawer-title="AI draft — ${U.esc(it.id)}">📝 draft</button>` : '';
+           data-drawer-title="AI draft — ${U.esc(it.id)}">${Comp.ic('note')} draft</button>` : '';
     const actions = it.status === 'open'
-      ? `<button class="prep-link ibx-done" data-id="${U.esc(it.id)}" title="Tandai beres">✓ Beres</button>
+      ? `<button class="prep-link ibx-done" data-id="${U.esc(it.id)}" title="Tandai beres">${Comp.ic('check')} Beres</button>
          <button class="prep-link ibx-ignore" data-id="${U.esc(it.id)}" title="Abaikan (bukan buat gw)">🙈</button>`
       : `<button class="prep-link ibx-reopen" data-id="${U.esc(it.id)}" title="Buka lagi (undo)">↩ Buka lagi</button>`;
     return `<div class="row ibx-row${it.status !== 'open' ? ' is-dim' : ''}" data-key="ibx:${U.esc(it.id)}">
@@ -161,7 +161,7 @@ window.Tabs = window.Tabs || {};
       <span class="row-badges">${Comp.badge('muted', it.channel || it.source)}</span>
       <span class="row-meta">${U.esc(age)}${age ? ' ago' : ''}</span>
       <span class="row-right">${ticket}${replyChip}${runPill}${draftChip}${actions}
-        <button class="prep-link ibx-open-detail" data-id="${U.esc(it.id)}">🔍</button></span>
+        <button class="prep-link ibx-open-detail" data-id="${U.esc(it.id)}" title="Open detail" aria-label="Open detail">${Comp.ic('search')}</button></span>
     </div>`;
   }
 
@@ -197,15 +197,15 @@ window.Tabs = window.Tabs || {};
       : it.draft_source === 'claude' ? 'AI (riset konteks)'
       : it.draft_source === 'glm' ? 'GLM (placeholder cepat)' : 'AI';
     const draftBlock = it.draft_reply ? `
-      <div class="section-label">✍ Draft balasan — ${U.esc(srcTag)}. Edit dulu kalau perlu; Approve = kirim AS OWNER.</div>
+      <div class="section-label">${Comp.ic('edit')} Draft balasan — ${U.esc(srcTag)}. Edit dulu kalau perlu; Approve = kirim AS OWNER.</div>
       <textarea class="draft-area ibx-draft-area" rows="5">${U.esc(resolveMentions(it.draft_reply))}</textarea>
       <div class="action-bar">
         ${canSend ? `<button class="prep-link ibx-approve-send" data-id="${U.esc(it.id)}"
             data-channel="${U.esc(it.channel || '')}">✅ Approve & kirim</button>` : ''}
-        <button class="prep-link ibx-copy-draft">📋 Copy draft</button>
+        <button class="prep-link ibx-copy-draft">${Comp.ic('list')} Copy draft</button>
         ${!canSend && it.source === 'gmail' ? `<span class="row-note">gmail: copy lalu balas dari Gmail (send API belum support thread-reply)</span>` : ''}
       </div>` : (it.triage === 'reply'
-        ? `<p class="row-note">⏳ Draft belum digenerate — nunggu siklus digest berikutnya, atau pakai 🤖 Kerjain di bawah.</p>` : '');
+        ? `<p class="row-note">⏳ Draft belum digenerate — nunggu siklus digest berikutnya, atau pakai ${Comp.ic('bot')} Kerjain di bawah.</p>` : '');
     const sentNote = it.sent_permalink
       ? `<p class="row-note">📨 Terkirim: <a href="${U.esc(it.sent_permalink)}" target="_blank" rel="noopener">lihat di Slack ↗</a></p>` : '';
     const body = `<div class="stack" data-ibx-id="${U.esc(it.id)}">
@@ -224,7 +224,7 @@ window.Tabs = window.Tabs || {};
              <button class="prep-link ibx-ignore" data-id="${U.esc(it.id)}">🙈 Abaikan</button>`
           : `<button class="prep-link ibx-reopen" data-id="${U.esc(it.id)}">↩ Buka lagi</button>`}
       </div>
-      <div class="section-label">🤖 AI copilot (opus — riset konteks, iket ke ticket, siapin draft; tidak pernah kirim apa pun)</div>
+      <div class="section-label">${Comp.ic('bot')} AI copilot (opus — riset konteks, iket ke ticket, siapin draft; tidak pernah kirim apa pun)</div>
       <textarea class="draft-area ibx-instruction" rows="3"
         placeholder="${it.draft_reply ? 'Revisi: kasih instruksi buat perbaiki draft di atas (mis. \'lebih singkat\', \'tambahin minta timeline\', \'tolak opsi B\'). Hasilnya nimpa draft + siap di-Approve.' : 'Opsional: instruksi spesifik (mis. \'balas setuju tapi minta timeline\', \'putuskan opsi A/B pakai data PRD\'). Kosongkan untuk riset+rekomendasi standar.'}"></textarea>
       <div class="ibx-ai-slot">

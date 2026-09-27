@@ -67,13 +67,13 @@
        the value changed since the last render (motion = signal).
 
    Comp builders (each RETURNS AN HTML STRING unless noted)
-     Comp.statTile({key:'overdue', icon:'⏰', label:'Overdue', value:14,
+     Comp.statTile({key:'overdue', icon:'clock', label:'Overdue', value:14,
                     sub:'oldest 12d', status:'serious', href:'#work/overdue',
                     tick:true})
        status: 'good'|'warn'|'serious'|'critical'|null. href -> renders <a>.
        tick:true (numeric value only) -> hero number counts up on change.
        status:'critical' auto-gets the .border-sweep alarm border.
-     Comp.card({key:'tracker', icon:'🎯', title:'Tracker',
+     Comp.card({key:'tracker', icon:'target', title:'Tracker',
                 count:'14 open · 3 overdue', status:'warn', body:rowsHtml, open:true})
        -> <details class="card" data-key>. Expansion is preserved across
        re-renders via data-key (UI.openKeys); `open` is only the default.
@@ -81,7 +81,7 @@
        activity, freshness (blue) · meetings, meetings-today, moms, routines,
        health (aqua) · commitments, cost (yellow) · portfolio (green) ·
        decisions, harness (violet) · people (magenta) · bots (orange).
-     Comp.listRow({key:'t:T-123', icon:'🎫', title:'Fix the thing',
+     Comp.listRow({key:'t:T-123', icon:'ticket', title:'Fix the thing',
                    badges:[Comp.badge('p0','P0')], meta:'Teammate · 2d',
                    right:Comp.slaCountdown({remainingHours:-3}), dim:false,
                    expandBody:noteHtml + Comp.actionBar(t)})
@@ -100,7 +100,7 @@
                       counts:{commitments:2, waiting:1, decisions:0},
                       relPath:'Clients/Work/People/Teammate.md'})
        click opens the Drawer on relPath (wired automatically).
-     Comp.emptyState({icon:'🌤', title:'No meetings today', hint:'Enjoy the focus time'})
+     Comp.emptyState({icon:'sun', title:'No meetings today', hint:'Enjoy the focus time'})
      Comp.staleWrap({state:'stale'|'dead'|'fresh', ageH:37, inner:cardHtml})
        'stale'/'dead' -> stale badge + dims content (.is-dim, opacity .55,
        never hidden); any other state returns inner unchanged. Use the
@@ -274,7 +274,7 @@
          <button class="map-node …" data-node-id="<node.id>">
        — tab-system's existing `#tab-system .map-node` delegated
        listener keeps working untouched; harnessMap wires NO clicks.
-     Comp.trendCard({title:'Docs dibuat', icon:'📄', points:[…daily
+     Comp.trendCard({title:'Docs dibuat', icon:'file', points:[…daily
        numbers or {label, value}…], total:38, unit:'docs · 14d',
        kind:'cat-1', good:'up'})
        -> the "momentum" chart card for Today: big count-up total +
@@ -444,8 +444,13 @@ const U = {
   },
 };
 
-const STATUS_ICONS = { good: '✓', warn: '⚠', serious: '⏳', critical: '⛔' };
 const STATUS_WORDS = { good: 'ok', warn: 'warn', serious: 'at risk', critical: 'failing' };
+
+/* Status glyphs are now icon NAMES, resolved to inline SVG by ic() below.
+   Kept as names (not emoji) so the validated "icon + label always
+   accompany colour" mitigation keeps working with real vector marks. */
+const STATUS_ICONS = { good: 'checkCircle', warn: 'alert', serious: 'hourglass', critical: 'ban' };
+const STATUS_GLYPH = { good: '✓', warn: '⚠', serious: '⏳', critical: '⛔' };
 
 /* fixed project -> categorical color map (same order as the badge docs) */
 const PROJECT_CAT = {
@@ -462,15 +467,26 @@ const Comp = {
     return (window.UI && typeof UI.isOpen === 'function') ? UI.isOpen(key, def) : !!def;
   },
 
+  /* Icon resolver. Every icon slot in the app funnels through this, so
+     the emoji→SVG migration is one edit rather than ~400 call sites.
+     Accepts an emoji ('🤖'), an icon name ('bot') or markup already
+     produced by Icons.icon(); anything unrecognised passes through
+     escaped as text so a typo degrades to a visible glyph, never blank. */
+  ic(v, opts) {
+    if (!v) return '';
+    if (typeof v === 'string' && v.trim().charAt(0) === '<') return v;  // pre-rendered
+    if (window.Icons && window.Icons.has(v)) return window.Icons.icon(v, opts);
+    return U.esc(String(v));
+  },
+
   statTile({ key, icon, label, value, sub, status, href, tick }) {
     const cls = status ? ` stat--${status}` : '';
-    const ic = status ? STATUS_ICONS[status] : '';
     const num = Number(value);
     const tickAttr = (tick && Number.isFinite(num)) ? ` data-tick="${num}"` : '';
     const inner = `
-      <div class="stat-label"><span>${U.esc(icon || '')}</span><span>${U.esc(label)}</span></div>
+      <div class="stat-label">${Comp.ic(icon)}<span>${U.esc(label)}</span></div>
       <div class="stat-value"${tickAttr}>${U.esc(String(value))}</div>
-      <div class="stat-sub">${ic ? `<span>${ic}</span>` : ''}<span title="${U.esc(sub || '')}">${U.esc(sub || '')}</span></div>`;
+      <div class="stat-sub">${status ? `<span>${Comp.ic(STATUS_ICONS[status])}</span>` : ''}<span title="${U.esc(sub || '')}">${U.esc(sub || '')}</span></div>`;
     return href
       ? `<a class="stat-tile${cls}" data-key="${U.esc(key)}" href="${U.esc(href)}">${inner}</a>`
       : `<div class="stat-tile${cls}" data-key="${U.esc(key)}">${inner}</div>`;
@@ -480,12 +496,12 @@ const Comp = {
     const isOpen = Comp._open(key, open);
     return `<details class="card" data-key="${U.esc(key)}"${isOpen ? ' open' : ''}>
       <summary>
-        <span class="card-icon">${U.esc(icon || '')}</span>
+        <span class="card-icon">${Comp.ic(icon)}</span>
         <span class="card-title" title="${U.esc(title)}">${U.esc(title)}</span>
         ${count ? `<span class="card-count num">${U.esc(count)}</span>` : ''}
         <span class="card-spacer"></span>
         ${status ? Comp.badge(status, STATUS_WORDS[status] || status) : ''}
-        <span class="card-chevron">▸</span>
+        <span class="card-chevron"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 5.5 15.5 12 9 18.5"/></svg></span>
       </summary>
       <div class="card-body">${body || ''}</div>
     </details>`;
@@ -493,7 +509,7 @@ const Comp = {
 
   listRow({ key, icon, title, badges = [], meta, right, dim, expandBody }) {
     const inner = `
-      ${icon ? `<span class="row-icon">${U.esc(icon)}</span>` : ''}
+      ${icon ? `<span class="row-icon">${Comp.ic(icon)}</span>` : ''}
       <span class="row-title" title="${U.esc(title)}">${U.esc(title)}</span>
       ${badges.length ? `<span class="row-badges">${badges.join('')}</span>` : ''}
       ${meta ? `<span class="row-meta" title="${U.esc(meta)}">${U.esc(meta)}</span>` : ''}
@@ -511,7 +527,7 @@ const Comp = {
 
   badge(kind, text) {
     if (STATUS_ICONS[kind]) {
-      return `<span class="badge badge--${kind}">${STATUS_ICONS[kind]} ${U.esc(text)}</span>`;
+      return `<span class="badge badge--${kind}">${Comp.ic(STATUS_ICONS[kind])}<span>${U.esc(text)}</span></span>`;
     }
     if (/^cat-[1-8]$/.test(kind || '')) {
       return `<span class="badge badge--cat badge--${kind}"><span class="badge-dot"></span>${U.esc(text)}</span>`;
@@ -549,16 +565,16 @@ const Comp = {
         <div class="person-role" title="${U.esc(role || '')}">${U.esc(role || '')}</div>
       </span>
       <span class="person-counts">
-        ${c.commitments ? `<span title="open commitments to them">📤 ${U.esc(c.commitments)}</span>` : ''}
+        ${c.commitments ? `<span class="ov-count" title="open commitments to them">${Comp.ic('send')}${U.esc(c.commitments)}</span>` : ''}
         ${c.waiting ? `<span title="waiting on them">⏳ ${U.esc(c.waiting)}</span>` : ''}
-        ${c.decisions ? `<span title="open decisions">⚖ ${U.esc(c.decisions)}</span>` : ''}
+        ${c.decisions ? `<span class="ov-count" title="open decisions">${Comp.ic('gavel')}${U.esc(c.decisions)}</span>` : ''}
       </span>
     </button>`;
   },
 
   emptyState({ icon, title, hint }) {
     return `<div class="empty-state">
-      <div class="empty-icon">${U.esc(icon || '·')}</div>
+      <div class="empty-icon">${Comp.ic(icon || 'info')}</div>
       <div class="empty-title">${U.esc(title || 'Nothing here')}</div>
       ${hint ? `<div class="empty-hint">${U.esc(hint)}</div>` : ''}
     </div>`;
@@ -568,7 +584,7 @@ const Comp = {
     if (state !== 'stale' && state !== 'dead') return inner || '';
     const dead = state === 'dead';
     return `<div class="stale-wrap">
-      <span class="stale-note${dead ? ' stale-note--dead' : ''}">⚠ ${dead ? 'dead data' : 'stale'} · ${U.esc(U.fmtAge(ageH))} old</span>
+      <span class="stale-note${dead ? ' stale-note--dead' : ''}">${Comp.ic('alert')} ${dead ? 'dead data' : 'stale'} · ${U.esc(U.fmtAge(ageH))} old</span>
       <div class="is-dim">${inner || ''}</div>
     </div>`;
   },
@@ -637,7 +653,7 @@ const Comp = {
     }
     const el = document.createElement('div');
     el.className = `toast ${ok ? 'toast--ok' : 'toast--err'}${action ? ' has-action' : ''}`;
-    el.textContent = `${ok ? '✓' : '⛔'} ${msg}`;
+    el.textContent = msg;   /* status mark comes from .toast--ok/--err ::before */
     if (action && action.label && typeof action.onClick === 'function') {
       const btn = document.createElement('button');
       btn.className = 'toast-action';
@@ -778,7 +794,7 @@ const Comp = {
     const link = permalink
       ? `<a class="prep-link" href="${U.esc(permalink)}" target="_blank" rel="noopener">source ↗</a>` : '';
     return `<div class="row action-item-row" data-key="ai:${U.esc(id ?? txt.slice(0, 40))}" data-commitment-id="${U.esc(id ?? '')}">
-      <span class="row-icon">☑️</span>
+      <span class="row-icon">${Comp.ic('checkCircle')}</span>
       <span class="row-title" title="${U.esc(txt)}">${U.esc(txt)}</span>
       ${source_type ? `<span class="row-badges">${Comp.badge('muted', source_type)}</span>` : ''}
       <span class="row-right">${link}<button class="make-ticket-btn"
@@ -838,17 +854,17 @@ const Comp = {
       let host = '';
       try { host = new URL(u).hostname.replace(/^www\./, ''); } catch { /* keep '' */ }
       const h = host.toLowerCase();
-      if (h.endsWith('slack.com')) return { icon: '💬', label: 'Slack', kind: 'http' };
-      if (h === 'docs.google.com') return { icon: '📄', label: 'GDoc', kind: 'http' };
-      if (h === 'drive.google.com') return { icon: '📄', label: 'Drive', kind: 'http' };
-      if (h.endsWith('atlassian.net')) return { icon: '🎫', label: 'Jira', kind: 'http' };
-      if (h.endsWith('fathom.video')) return { icon: '🎥', label: 'Fathom', kind: 'http' };
-      if (h.endsWith('figma.com')) return { icon: '🎨', label: 'Figma', kind: 'http' };
-      if (h.endsWith('miro.com')) return { icon: '🗺', label: 'Miro', kind: 'http' };
-      return { icon: '🔗', label: host || 'link', kind: 'http' };
+      if (h.endsWith('slack.com')) return { icon: 'chat', label: 'Slack', kind: 'http' };
+      if (h === 'docs.google.com') return { icon: 'file', label: 'GDoc', kind: 'http' };
+      if (h === 'drive.google.com') return { icon: 'file', label: 'Drive', kind: 'http' };
+      if (h.endsWith('atlassian.net')) return { icon: 'ticket', label: 'Jira', kind: 'http' };
+      if (h.endsWith('fathom.video')) return { icon: 'video', label: 'Fathom', kind: 'http' };
+      if (h.endsWith('figma.com')) return { icon: 'sparkle', label: 'Figma', kind: 'http' };
+      if (h.endsWith('miro.com')) return { icon: 'map', label: 'Miro', kind: 'http' };
+      return { icon: 'link', label: host || 'link', kind: 'http' };
     }
-    if (u.startsWith('#')) return { icon: '🔗', label: 'view', kind: 'hash' };
-    return { icon: '📁', label: 'file', kind: 'file' };
+    if (u.startsWith('#')) return { icon: 'route', label: 'view', kind: 'hash' };
+    return { icon: 'folder', label: 'file', kind: 'file' };
   },
 
   linkChips(links, opts = {}) {
@@ -1001,11 +1017,11 @@ const Comp = {
     return d;
   },
 
-  /* 🤖 kick off an AI run — POST /api/ai-task {kind, ref}; delegated
+  /* ${Comp.ic('bot')} kick off an AI run — POST /api/ai-task {kind, ref}; delegated
      wiring + the shared poller live in components.js (see AI below).
      Re-render safe: if this {kind, ref} already has a tracked run,
      render its CURRENT pill instead of a fresh button. */
-  aiButton({ kind, ref, label = '🤖 AI kerjain' } = {}) {
+  aiButton({ kind, ref, label = 'AI kerjain' } = {}) {
     const existing = AI.activeFor(kind, ref);
     if (existing) return AI.pillHtml(existing);
     return `<button class="ai-btn" data-ai-kind="${U.esc(kind ?? '')}"` +
@@ -1030,12 +1046,12 @@ const Comp = {
     return AI.pillHtml(AI.runs.get(String(id)));
   },
 
-  /* 🎫 internal ticket chip — Work tab can highlight via data-ticket-id */
+  /* ${Comp.ic('ticket')} internal ticket chip — Work tab can highlight via data-ticket-id */
   ticketChip(ticketId) {
     const id = String(ticketId ?? '').trim();
     if (!id) return '';
     return `<a class="ticket-chip" href="#work" data-ticket-id="${U.esc(id)}"` +
-      ` title="Ticket ${U.esc(id)} — buka di Work tab">🎫 ${U.esc(id)}</a>`;
+      ` title="Ticket ${U.esc(id)} — buka di Work tab">${Comp.ic('ticket')}${U.esc(id)}</a>`;
   },
 
   /* one RGB bezier connector lane between two harness-map columns */
@@ -1062,18 +1078,18 @@ const Comp = {
     </div>`;
   },
 
-  /* 🗺 Harness Map v2 — SVG-connected node-card columns. Feed
+  /* ${Comp.ic('map')} Harness Map v2 — SVG-connected node-card columns. Feed
      /api/harness-map's {groups} payload (bare array accepted). Node
      click contract is UNCHANGED: class="map-node" + data-node-id, so
      tab-system's existing delegated listener keeps working. */
   harnessMap(mapData) {
     const groups = Array.isArray(mapData) ? mapData : ((mapData && mapData.groups) || []);
-    if (!groups.length) return Comp.emptyState({ icon: '🗺', title: 'No harness map data' });
+    if (!groups.length) return Comp.emptyState({ icon: 'map', title: 'No harness map data' });
     const KNOWN_ST = ['ok', 'warn', 'fail', 'idle', 'gated'];
     const cols = groups.map((g, i) => {
       const nodes = (g.nodes || []).map(n => {
         const st = KNOWN_ST.includes(n.status) ? n.status : 'idle';
-        const stLabel = st === 'gated' ? '🔒 gated' : st;
+        const stLabel = st === 'gated' ? 'gated' : st;
         return `<button class="map-node hmap-node hmap-node--${st}" data-node-id="${U.esc(n.id)}"` +
           ` title="${U.esc(n.desc || n.label || '')}">
           <span class="hmap-dot" aria-hidden="true"></span>
@@ -1096,7 +1112,7 @@ const Comp = {
     return `<div class="hmap">${cols}</div>`;
   },
 
-  /* 📈 momentum chart card — big total + 7d-vs-previous-7d delta +
+  /* ${Comp.ic('chart')} momentum chart card — big total + 7d-vs-previous-7d delta +
      gradient area chart. kind: categorical/priority only (dataviz rule);
      good:'down' secondarys delta coloring for bad-when-rising metrics. */
   trendCard({ title, icon, points, total, unit, kind = 'cat-1', good = 'up' } = {}) {
@@ -1147,7 +1163,7 @@ const Comp = {
     const num = Number(totalVal);
     const tickAttr = Number.isFinite(num) ? ` data-tick="${num}"` : '';
     return `<div class="trend-card" data-key="trend:${U.esc(title || '')}" style="--tc:${Comp._kindVar(kind)}">
-      <div class="trend-head">${icon ? `<span>${U.esc(icon)}</span>` : ''}<span>${U.esc(title || '')}</span></div>
+      <div class="trend-head">${icon ? `<span>${Comp.ic(icon)}</span>` : ''}<span>${U.esc(title || '')}</span></div>
       <div class="trend-total"><span class="trend-num num"${tickAttr}>${U.esc(String(totalVal))}</span>${unit ? `<span class="trend-unit">${U.esc(unit)}</span>` : ''}</div>
       ${deltaHtml}
       ${chart}
@@ -1159,7 +1175,7 @@ const Comp = {
       <aside class="drawer" role="dialog" aria-modal="true">
         <div class="drawer-head">
           <div class="drawer-title"></div>
-          <button class="drawer-close" aria-label="Close">✕</button>
+          <button class="drawer-close" aria-label="Close">${Comp.ic('close')}</button>
         </div>
         <div class="drawer-body"></div>
       </aside>`;
@@ -1210,19 +1226,19 @@ const Drawer = {
   },
 
   /* paint arbitrary trusted HTML (build it from Comp.* calls) into the same
-     shell — identical overlay/✕/ESC close wiring, no fetch */
+     shell — identical overlay/${Comp.ic('close')}/ESC close wiring, no fetch */
   openHtml(title, html) {
     this._paint(title || '', html || '');
   },
 
   /* same shell at ~72% width — the initiative slide-over. Trusted HTML,
-     same overlay/✕/ESC close wiring. */
+     same overlay/${Comp.ic('close')}/ESC close wiring. */
   openWide(title, html) {
     this._paint(title || '', html || '', true);
   },
 
   /* centered near-fullscreen modal — the Agent detail/editor popup. Trusted
-     HTML, same overlay/✕/ESC close wiring. */
+     HTML, same overlay/${Comp.ic('close')}/ESC close wiring. */
   openFull(title, html) {
     this._paint(title || '', html || '', false, true);
   },
@@ -1344,10 +1360,10 @@ const AI = {
     const meta = ` data-ai-id="${U.esc(rec.id)}" data-ai-kind="${U.esc(rec.kind ?? '')}"` +
       ` data-ai-ref="${U.esc(rec.ref ?? '')}"`;
     if (rec.state === 'done') {
-      return `<button class="ai-pill ai-pill--done"${meta} title="Buka hasil run ${U.esc(rec.id)}">✅ Selesai · lihat hasil</button>`;
+      return `<button class="ai-pill ai-pill--done"${meta} title="Buka hasil run ${U.esc(rec.id)}">${Comp.ic('checkCircle')} Selesai · lihat hasil</button>`;
     }
     if (rec.state === 'error') {
-      return `<button class="ai-pill ai-pill--err"${meta} title="Buka log run ${U.esc(rec.id)}">⛔ Gagal · lihat log</button>`;
+      return `<button class="ai-pill ai-pill--err"${meta} title="Buka log run ${U.esc(rec.id)}">${Comp.ic('ban')} Gagal · lihat log</button>`;
     }
     if (rec.state === 'timeout') {
       return `<button class="ai-pill ai-pill--err"${meta} title="Polling stop setelah 8 menit — run mungkin masih jalan">⏱ Timeout · lihat log</button>`;
@@ -1387,7 +1403,7 @@ const AI = {
       st === 'timeout' ? Comp.badge('warn', 'poll timeout') : Comp.badge('warn', 'running');
     const resPath = String(run.result_path || run.resultPath || run.result_file || '');
     const head = `<div class="row" data-key="airun:${U.esc(rid)}">
-        <span class="row-icon">🤖</span>
+        <span class="row-icon">${Comp.ic('bot')}</span>
         <span class="row-title" title="${U.esc(rid)}">${U.esc(rid)}</span>
         <span class="row-badges">${stBadge}${rec.kind ? Comp.badge('muted', rec.kind) : ''}</span>
         ${rec.ref ? `<span class="row-meta" title="${U.esc(rec.ref)}">${U.esc(rec.ref)}</span>` : ''}
@@ -1453,7 +1469,7 @@ document.addEventListener('click', async e => {
         body: JSON.stringify(payload),
       });
       Comp.toast(`Masuk watchdog: ${(res && res.id) || payload.owner || 'ok'}`, true);
-      chase.textContent = '✓ Chasing';
+      chase.textContent = 'Chasing...';
       window.dispatchEvent(new CustomEvent('psb:waiting-added',
         { detail: { id: res && res.id, owner: payload.owner, what: payload.what } }));
     } catch (err) {
@@ -1490,7 +1506,7 @@ document.addEventListener('click', async e => {
       });
       const id = (res && res.ticket && res.ticket.id) || (res && res.id) || '';
       Comp.toast(`Ticket dibuat${id ? `: ${id}` : ''}`, true);
-      mk.textContent = '✓ Ticket';
+      mk.textContent = 'Ticket dibuat ✓';
       window.dispatchEvent(new CustomEvent('psb:ticket-saved',
         { detail: { id, ticket: res && res.ticket, commitment_id: commitmentId } }));
     } catch (err) {
@@ -1500,7 +1516,7 @@ document.addEventListener('click', async e => {
     return;
   }
 
-  /* 🤖 AI kerjain -> POST /api/ai-task, swap to status pill, track in AI */
+  /* ${Comp.ic('bot')} AI kerjain -> POST /api/ai-task, swap to status pill, track in AI */
   const aiBtn = e.target.closest('.ai-btn');
   if (aiBtn) {
     e.preventDefault();               /* may sit inside a <summary> */

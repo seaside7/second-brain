@@ -280,11 +280,11 @@ window.Tabs = window.Tabs || {};
           const kids = byParent[t.id];
           return kids && kids.length ? hierarchyTicketRow(t, kids, today) : ticketRow(t, today);
         }).join('')}</div>`
-      : Comp.emptyState({ icon: '✨', title: 'Nothing here', hint: 'No tickets match this filter.' });
+      : Comp.emptyState({ icon: 'sparkle', title: 'Nothing here', hint: 'No tickets match this filter.' });
 
     const status = (counts.overdue || 0) > 0 ? 'serious' : ((counts.blocked || 0) > 0 ? 'warn' : null);
     return Comp.card({
-      key: 'tracker', icon: '🎫', title: 'Tracker',
+      key: 'tracker', icon: 'ticket', title: 'Tracker',
       count: `${counts.open ?? 0} open · ${counts.overdue ?? 0} overdue · ${counts.blocked ?? 0} blocked`,
       status,
       body: `${trackerChartStrip(allTickets)}<div class="chips">${chips}</div>${state.creatingTicket ? newTicketForm() : ''}${rowsHtml}`,
@@ -309,7 +309,7 @@ window.Tabs = window.Tabs || {};
     const title = it.name || it.id;
     /* compact glyph form (same convention as card counts) — the long
        "N blockers · o/t tickets" phrasing ellipsized inside 300px team cards */
-    const meta = `${it.blocker_count || 0} ⛔ · ${tc.open || 0}/${tc.total || 0} open`;
+    const meta = `${it.blocker_count || 0} ${Comp.ic('ban')} · ${tc.open || 0}/${tc.total || 0} open`;
     return `<button type="button" class="row" data-key="init:${U.esc(it.id)}"
         data-init-id="${U.esc(it.id)}" data-init-name="${U.esc(title)}">
       <span class="row-icon">${U.esc(it.status === 'planning' ? '🗓' : '▸')}</span>
@@ -338,7 +338,7 @@ window.Tabs = window.Tabs || {};
       <p>${Comp.progress({ pct, label: `${done}/${totalTickets} tickets done` })}</p>
       <div class="rows">${rows.join('') || ''}</div>`;
     return Comp.card({
-      key: `team:${team.id}`, icon: '🧩', title: team.name || team.id,
+      key: `team:${team.id}`, icon: 'puzzle', title: team.name || team.id,
       count: `${sc.active ?? 0}/${sc.total ?? 0} active`, body, open: false,
     });
   }
@@ -349,11 +349,11 @@ window.Tabs = window.Tabs || {};
     const atRisk = teams.filter(t => t.health === 'at_risk' || t.health === 'blocked').length;
     const body = teams.length
       ? `<div class="grid-cards">${teams.map(teamCard).join('')}</div>`
-      : Comp.emptyState({ icon: '🗂', title: 'No portfolio data yet', hint: (state.portfolio && state.portfolio.note) || '' });
+      : Comp.emptyState({ icon: 'archive', title: 'No portfolio data yet', hint: (state.portfolio && state.portfolio.note) || '' });
     const status = teams.some(t => t.health === 'blocked') ? 'serious'
       : teams.some(t => t.health === 'at_risk') ? 'warn' : (teams.length ? 'good' : null);
     return Comp.card({
-      key: 'portfolio', icon: '🗂', title: 'Portfolio',
+      key: 'portfolio', icon: 'archive', title: 'Portfolio',
       count: `${teams.length} teams · ${atRisk} at risk`, status, body, open: false,
     });
   }
@@ -533,8 +533,8 @@ window.Tabs = window.Tabs || {};
     const roots = (state.workTree && state.workTree.roots) || [];
     if (!roots.length) {
       return Comp.card({
-        key: 'work-tree', icon: '🌳', title: 'Work Tree',
-        body: Comp.emptyState({ icon: '🌳', title: 'No work tree yet', hint: (state.workTree && state.workTree.note) || 'Expected journal/state/work_tree.json' }),
+        key: 'work-tree', icon: 'tree', title: 'Work Tree',
+        body: Comp.emptyState({ icon: 'tree', title: 'No work tree yet', hint: (state.workTree && state.workTree.note) || 'Expected journal/state/work_tree.json' }),
         open: false,
       });
     }
@@ -559,7 +559,7 @@ window.Tabs = window.Tabs || {};
       </div>`;
 
     return Comp.card({
-      key: 'work-tree', icon: '🌳', title: 'Work Tree',
+      key: 'work-tree', icon: 'tree', title: 'Work Tree',
       count: `${totals.threads} threads · ${totals.attn} need attention`,
       status: totals.attn ? 'warn' : 'good',
       body, open: true,
@@ -625,7 +625,7 @@ window.Tabs = window.Tabs || {};
 
   function decisionRow(it, today) {
     return Comp.listRow({
-      key: `dec:${it.id}`, icon: '🧭', title: it.title,
+      key: `dec:${it.id}`, icon: 'compass', title: it.title,
       meta: it.decider || '', right: dueBadgeFor(it.deadline, today),
       expandBody: contextFields(it),
     });
@@ -650,17 +650,17 @@ window.Tabs = window.Tabs || {};
     const other = items.filter(it => it.status !== 'open');
     const openRows = open.length
       ? `<div class="rows">${open.map(it => decisionRow(it, today)).join('')}</div>`
-      : Comp.emptyState({ icon: '🧭', title: 'No open decisions' });
+      : Comp.emptyState({ icon: 'compass', title: 'No open decisions' });
     const nested = Comp.card({
-      key: 'decisions-recent', icon: '✓', title: 'Recently decided', count: `${other.length}`,
+      key: 'decisions-recent', icon: 'check', title: 'Recently decided', count: `${other.length}`,
       body: other.length
         ? `<div class="rows">${other.slice(0, 10).map(decidedRow).join('')}</div>`
-        : Comp.emptyState({ icon: '✓', title: 'Nothing decided yet' }),
+        : Comp.emptyState({ icon: 'check', title: 'Nothing decided yet' }),
       open: false,
     });
     const status = (counts.overdue || 0) > 0 ? 'serious' : ((counts.open || 0) > 0 ? 'warn' : 'good');
     return Comp.card({
-      key: 'decisions', icon: '🧭', title: 'Decisions',
+      key: 'decisions', icon: 'compass', title: 'Decisions',
       count: `${counts.open ?? 0} open · ${counts.overdue ?? 0} overdue`,
       status, body: openRows + nested, open: state.filter === 'decisions',
     });
@@ -673,8 +673,8 @@ window.Tabs = window.Tabs || {};
      AI kerjain is just Comp.aiButton (wiring lives in components.js) */
   function commitmentActionBar(it) {
     return `<div class="action-bar" data-commitment-id="${U.esc(it.id)}">
-      <button class="prep-link" data-action="commitment-close" data-id="${U.esc(it.id)}">✓ Beres</button>
-      <button class="prep-link" data-action="commitment-drop" data-id="${U.esc(it.id)}">✕ Bukan commitment</button>
+      <button class="prep-link" data-action="commitment-close" data-id="${U.esc(it.id)}">${Comp.ic('check')} Beres</button>
+      <button class="prep-link" data-action="commitment-drop" data-id="${U.esc(it.id)}">${Comp.ic('close')} Bukan commitment</button>
       ${Comp.aiButton({ kind: 'commitment', ref: it.id, label: '🤖 AI kerjain' })}
     </div>`;
   }
@@ -700,7 +700,7 @@ window.Tabs = window.Tabs || {};
     const meta = [toTxt, ageTxt].filter(Boolean).join(' · ');
     const right = `${it.ticket_id ? Comp.ticketChip(it.ticket_id) : ''}${dueBadgeFor(it.due, today)}`;
     return Comp.listRow({
-      key: `com:${it.id}`, icon: '🤝', title: it.text || it.id,
+      key: `com:${it.id}`, icon: 'handshake', title: it.text || it.id,
       badges, meta, right,
       expandBody: commitmentExpandBody(it),
     });
@@ -711,7 +711,7 @@ window.Tabs = window.Tabs || {};
     const badges = [Comp.badge('good', 'done')];
     if (it.ticket_id) badges.push(Comp.ticketChip(it.ticket_id));
     return Comp.listRow({
-      key: `com:${it.id}`, icon: '✓', title: it.text || it.id,
+      key: `com:${it.id}`, icon: 'check', title: it.text || it.id,
       badges, meta: when,
     });
   }
@@ -724,7 +724,7 @@ window.Tabs = window.Tabs || {};
   function commitmentGroupsHtml(openItems, today) {
     const overdue = openItems.filter(it => isOverdueCommitment(it, today));
     const rest = openItems.filter(it => !isOverdueCommitment(it, today));
-    if (!overdue.length && !rest.length) return Comp.emptyState({ icon: '🤝', title: 'No open commitments' });
+    if (!overdue.length && !rest.length) return Comp.emptyState({ icon: 'handshake', title: 'No open commitments' });
     const overdueHtml = overdue.length
       ? `<div class="section-label">⏰ Overdue (${overdue.length})</div><div class="rows">${overdue.map(it => commitmentRow(it, today)).join('')}</div>`
       : '';
@@ -758,15 +758,15 @@ window.Tabs = window.Tabs || {};
     const headerControls = `<p>${Comp.aiButton({ kind: 'verify-commitments', ref: 'all', label: '🔍 AI verifikasi semua' })}</p>
       <p class="row-subtext">${verifyRunLine()}</p>`;
     const nested = Comp.card({
-      key: 'commitments-recent', icon: '✓', title: 'Recently closed', count: `${closed.length}`,
+      key: 'commitments-recent', icon: 'check', title: 'Recently closed', count: `${closed.length}`,
       body: closed.length
         ? `<div class="rows">${closed.slice(0, 10).map(closedCommitmentRow).join('')}</div>`
-        : Comp.emptyState({ icon: '✓', title: 'None closed yet' }),
+        : Comp.emptyState({ icon: 'check', title: 'None closed yet' }),
       open: false,
     });
     const status = (counts.overdue || 0) > 0 ? 'serious' : ((counts.open || 0) > 0 ? 'warn' : 'good');
     const card = Comp.card({
-      key: 'commitments', icon: '🤝', title: 'Commitments',
+      key: 'commitments', icon: 'handshake', title: 'Commitments',
       count: `${counts.open ?? 0} open · ${counts.overdue ?? 0} overdue`,
       status, body: headerControls + commitmentGroupsHtml(open, today) + nested, open: state.filter === 'commitments',
     });
@@ -835,9 +835,9 @@ window.Tabs = window.Tabs || {};
           counts: { commitments: p.open_commitments, waiting: p.waiting_on, decisions: p.open_decisions },
           relPath: p.relPath,
         })).join('')}</div>`
-      : Comp.emptyState({ icon: '👥', title: 'No stakeholders yet', hint: (state.stakeholders && state.stakeholders.note) || '' });
+      : Comp.emptyState({ icon: 'users', title: 'No stakeholders yet', hint: (state.stakeholders && state.stakeholders.note) || '' });
     return Comp.card({
-      key: 'people', icon: '👥', title: 'People',
+      key: 'people', icon: 'users', title: 'People',
       count: top3.join(' · '), body, open: state.filter === 'people',
     });
   }
@@ -848,7 +848,7 @@ window.Tabs = window.Tabs || {};
     const ageTxt = (ageH !== null && Number.isFinite(ageH)) ? `${U.fmtAge(ageH)} old` : '';
     return Comp.listRow({
       key: `blocker:${b.owner || ''}:${(b.what || '').slice(0, 40)}`,
-      icon: '⛔',
+      icon: 'ban',
       title: b.what || '(no description)',
       meta: [b.owner, ageTxt].filter(Boolean).join(' · '),
       right: Comp.chaseButton({ owner: b.owner, what: b.what, sourceUrl: '' }),
@@ -880,9 +880,9 @@ window.Tabs = window.Tabs || {};
     const blockers = init.blockers || [];
     const blockersBody = blockers.length
       ? `<div class="rows">${blockers.map(blockerRow).join('')}</div>`
-      : Comp.emptyState({ icon: '✓', title: 'No open blockers' });
+      : Comp.emptyState({ icon: 'check', title: 'No open blockers' });
     const blockersCard = Comp.card({
-      key: 'drill-blockers', icon: '⛔', title: 'Blockers',
+      key: 'drill-blockers', icon: 'ban', title: 'Blockers',
       count: `${blockers.length}`, status: blockers.length ? 'serious' : 'good',
       body: blockersBody, open: true,
     });
@@ -890,9 +890,9 @@ window.Tabs = window.Tabs || {};
     const tasksBody = tickets.length
       ? `<div class="rows">${tickets.map(t =>
           hierarchyTicketRow(t, Array.isArray(t.children) ? t.children : [], today)).join('')}</div>`
-      : Comp.emptyState({ icon: '🗒', title: 'No tickets linked to this initiative yet' });
+      : Comp.emptyState({ icon: 'notepad', title: 'No tickets linked to this initiative yet' });
     const tasksCard = Comp.card({
-      key: 'drill-tasks', icon: '🎫', title: 'Tasks',
+      key: 'drill-tasks', icon: 'ticket', title: 'Tasks',
       count: `${counts.open ?? 0} open · ${tickets.length} top-level`,
       body: tasksBody, open: true,
     });
@@ -921,7 +921,7 @@ window.Tabs = window.Tabs || {};
         ${Comp.breadcrumb([{ label: 'Portfolio', href: '#work' }, { label: is404 ? 'Not found' : 'Error' }])}
         ${is404
           ? Comp.emptyState({
-              icon: '🔍',
+              icon: 'search',
               title: `Initiative "${state.initiativeId || ''}" not found`,
               hint: 'It may have been renamed or removed from portfolio.json. Use the breadcrumb above to go back.',
             })
@@ -974,7 +974,7 @@ window.Tabs = window.Tabs || {};
     const seq = ++slideOverSeq;
     const skeleton = `<div class="skeleton"><div class="skeleton-line"></div><div class="skeleton-line w-80"></div><div class="skeleton-line w-60"></div></div>`;
     Drawer.openWide(name || id, skeleton);
-    const fullPageLink = `<p><a class="prep-link" data-drawer-nav href="#work/init/${encodeURIComponent(id)}">⛶ Buka halaman penuh</a></p>`;
+    const fullPageLink = `<p><a class="prep-link" data-drawer-nav href="#work/init/${encodeURIComponent(id)}">${Comp.ic('expand')} Buka halaman penuh</a></p>`;
     try {
       const d = await U.fetchJSON(`/api/initiative/${encodeURIComponent(id)}`);
       if (seq !== slideOverSeq) return;   // superseded by a newer click

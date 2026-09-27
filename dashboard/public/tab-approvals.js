@@ -76,7 +76,7 @@ window.Tabs = window.Tabs || {};
     let rows;
     if (!visible.length) {
       rows = Comp.emptyState({
-        icon: '🛡',
+        icon: 'shield',
         title: state.status === 'pending' ? 'Tidak ada aksi menunggu keputusan' : 'Kosong',
         hint: state.status === 'pending'
           ? 'Belum ada proposal aksi eksternal yang butuh approval.'
@@ -103,7 +103,7 @@ window.Tabs = window.Tabs || {};
 
     panel.innerHTML = `
       <div class="row" data-key="apv-toolbar">
-        <span class="row-icon">🛡</span>
+        <span class="row-icon">${Comp.ic('shield')}</span>
         <span class="row-title"><b>Approvals</b> — aksi eksternal yang nunggu keputusan lo</span>
         <span class="row-meta">${U.esc(items.length)} item · audit append-only</span>
       </div>
@@ -124,8 +124,8 @@ window.Tabs = window.Tabs || {};
     const when = fmtWib(it.proposed_wib);
     const canExecute = EXECUTION_ENABLED && !window.PSB_SAMUDERA && it.status === 'approved';
     const actions = it.status === 'pending'
-      ? `<button class="prep-link apv-approve" data-id="${U.esc(it.id)}" title="Setujui — catat ke audit log (tidak langsung mengeksekusi)">✅ Approve</button>
-         <button class="prep-link apv-reject" data-id="${U.esc(it.id)}" title="Tolak">✋ Reject</button>`
+      ? `<button class="prep-link apv-approve" data-id="${U.esc(it.id)}" title="Setujui — catat ke audit log (tidak langsung mengeksekusi)">${Comp.ic('checkCircle')} Approve</button>
+         <button class="prep-link apv-reject" data-id="${U.esc(it.id)}" title="Tolak">${Comp.ic('hand')} Reject</button>`
       : (canExecute
           ? `<button class="prep-link apv-execute" data-id="${U.esc(it.id)}" title="Eksekusi aksi yang sudah disetujui">▶ Execute</button>`
           : '');
@@ -136,7 +136,7 @@ window.Tabs = window.Tabs || {};
       <span class="row-badges">${wsBadge}${it.project ? Comp.badge('cat', it.project) : ''}</span>
       <span class="row-meta">${U.esc(when)}</span>
       <span class="row-right">${statusPill}${actions}
-        <button class="prep-link apv-open-detail" data-id="${U.esc(it.id)}">🔍</button></span>
+        <button class="prep-link apv-open-detail" data-id="${U.esc(it.id)}" title="Open detail" aria-label="Open detail">${Comp.ic('search')}</button></span>
     </div>`;
   }
 

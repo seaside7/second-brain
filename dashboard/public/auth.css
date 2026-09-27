@@ -1,0 +1,111 @@
+/* ═══════════════════════════════════════════
+   AUTH PAGES — self-contained stylesheet
+
+   WHY THIS FILE EXISTS
+   The login screen is the one page a visitor can reach *without* a session,
+   so it cannot depend on style.css: that file sits behind the auth gate, and
+   linking it produced a redirect loop that rendered the form unstyled.
+
+   This is a deliberate extract of the design tokens from style.css (:root,
+   reset, body/aurora) plus nothing else — small enough that serving it
+   pre-auth is cheap, and it does not expose the dashboard's component CSS.
+   Keep the two token blocks in sync if the palette changes.
+
+   The per-page <style> blocks in login.html / change-password.html hold the
+   form-specific rules.
+   ═══════════════════════════════════════════ */
+
+:root {
+  --h-indigo: 235;
+  --h-violet: 265;
+  --h-emerald: 160;
+  --h-amber: 40;
+  --h-rose: 350;
+
+  --accent: hsl(var(--h-indigo), 72%, 62%);
+  --bg-primary: #020617;
+  --bg-soft: #0F172A;
+  --bg-card: hsla(15, 23, 47, 0.62);
+  --bg-glass: rgba(255, 255, 255, 0.05);
+  --bg-input: rgba(255, 255, 255, 0.04);
+
+  --text-primary: #F8FAFC;
+  --text-secondary: #B6C2D4;
+  --text-muted: #8494AC;
+  --text-accent: #A5B4FC;
+
+  --border: rgba(148, 163, 184, 0.14);
+  --border-active: rgba(148, 163, 184, 0.28);
+
+  --shadow-raised: 0 2px 4px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.44);
+
+  --st-good: #22C55E;
+  --st-warn: #FAB219;
+  --st-serious: #FB923C;
+  --st-crit: #F87171;
+  --st-good-bg: rgba(34, 197, 94, 0.13);
+  --st-warn-bg: rgba(250, 178, 25, 0.13);
+  --st-crit-bg: rgba(248, 113, 113, 0.13);
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-xs: 6px;
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+
+  --fs-xxs: 10.5px;
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-base: 13px;
+  --fs-md: 15px;
+
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --dur-fast: 120ms;
+  --dur: 180ms;
+  --ease: cubic-bezier(.2, .7, .3, 1);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  font-family: var(--font);
+  font-size: var(--fs-base);
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Same aurora mesh as the dashboard, so signing in feels like arriving
+   rather than being sent somewhere else. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -12%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(1100px 520px at 80% -10%, hsla(var(--h-violet), 75%, 52%, 0.17), transparent 62%),
+    radial-gradient(900px 520px at 0% 0%, hsla(210, 85%, 48%, 0.15), transparent 58%),
+    radial-gradient(760px 480px at 55% 112%, hsla(var(--h-emerald), 70%, 45%, 0.12), transparent 62%),
+    radial-gradient(620px 440px at 22% 78%, hsla(var(--h-rose), 80%, 55%, 0.09), transparent 60%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  body::before {
+    will-change: transform, filter;
+    animation: aurora-drift 45s ease-in-out infinite alternate;
+  }
+  @keyframes aurora-drift {
+    from { transform: translate3d(-1.5%, -1%, 0) rotate(-0.5deg); filter: hue-rotate(0deg); }
+    to   { transform: translate3d(1.5%, 1.5%, 0) rotate(0.75deg); filter: hue-rotate(55deg); }
+  }
+}

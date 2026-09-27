@@ -10,10 +10,10 @@ window.Tabs = window.Tabs || {};
 
 (function () {
   const CATS = [
-    { key: 'stock', icon: '\uD83D\uDCC8', label: 'Stock' },
-    { key: 'global_economy', icon: '\uD83C\uDF0E', label: 'Global Economy' },
-    { key: 'ai_tech', icon: '\uD83E\uDD16', label: 'AI & Tech' },
-    { key: 'crypto', icon: '\u20BF', label: 'Crypto' },
+    { key: 'stock', icon: 'chart', label: 'Stock' },
+    { key: 'global_economy', icon: 'globe', label: 'Global Economy' },
+    { key: 'ai_tech', icon: 'bot', label: 'AI & Tech' },
+    { key: 'crypto', icon: 'bitcoin', label: 'Crypto' },
   ];
 
   const state = {

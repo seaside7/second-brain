@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════
-   tab-settings.js — ⚙️ Model routing tab. Owns #tab-settings only.
+   tab-settings.js — ⚙ Model routing tab. Owns #tab-settings only.
    Dense rows grouped by capability; click a row to expand its editor.
    Each row shows the effective route (provider → model) with a source
    dot; the editor previews exactly what Save will write. Bulk switch
@@ -335,7 +335,7 @@ window.Tabs.settings = (() => {
         const res = await postJSON('/api/models/test', { workspace: state.ws, module_id: mid });
         if (res.error !== undefined) throw new Error(res.error);
         await setResult(mid, res.ok
-          ? `<span class="settings-result-ok">✓ ${esc(res.provider)}/${esc(res.model)} responded - ${esc(res.reply)}</span>`
+          ? `<span class="settings-result-ok">${Comp.ic('check')} ${esc(res.provider)}/${esc(res.model)} responded - ${esc(res.reply)}</span>`
           : `<span class="settings-result-bad">✗ ${esc(res.provider || '')}/${esc(res.model || '')} - ${esc(res.detail || res.error || 'failed')}</span>`);
         updateTestButton(mid, false);
       }
