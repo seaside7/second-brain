@@ -282,7 +282,7 @@ const rpSigned = n => {
   /* ── render shell ───────────────────────────────────────────────── */
   function render(panel) {
     const chips = VIEWS.map(v =>
-      `<button class="tx-chip ${v.id === _activeView ? 'is-active' : ''}" data-view="${v.id}">${v.icon} ${v.label}</button>`
+      `<button class="tx-chip ${v.id === _activeView ? 'is-active' : ''}" data-view="${v.id}">${Comp.ic(v.icon)} ${v.label}</button>`
     ).join('');
 
     panel.innerHTML = `

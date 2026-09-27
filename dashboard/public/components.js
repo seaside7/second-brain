@@ -25,33 +25,16 @@
    the FULL string; Comp.* put it in title= for you, never pre-truncate.
    Keep card `count` strings compact glyph style, e.g. "2 ⛔ · 8 ◷".
 
-   MOTION (CSS-only; ALL of it disabled under prefers-reduced-motion):
-   motion = signal — urgent glows/moves, healthy stays calm. Never put a
-   motion class on a healthy row.
-     .border-sweep   rotating red/orange alarm border. Add ONLY to
-                     critical/breached cards & tiles. .stat--critical and an
+   MOTION (CSS-only; ALL of it disabled under prefers-reduced-motion). Since
+   the 2026-09-27 Linear-style revamp this is deliberately minimal — motion =
+   signal, healthy stays calm, and there is no more always-on ambient chrome
+   (the old aurora background, RGB header hairline, active-tab glow and
+   per-card hover ring are gone). Never put a motion class on a healthy row.
+     .border-sweep   static red alarm border+glow. Add ONLY to critical/
+                     breached cards & tiles. .stat--critical and an
                      escalation strip containing a ⛔ badge get it free.
      .pulse-dot      soft 2s pulse for live/health dots (standalone 8px dot,
                      colors via currentColor). The tab alert dot pulses free.
-     Free, nothing to do: aurora background drift, card/tile hover sheen,
-     active-tab glow, count-up hero numbers (see tick below).
-
-   RGB AMBIENT (v3 — always-on spectrum chrome, "gaming rig meets command
-   center"; decoration ONLY, never encodes data; static-rainbow fallback
-   under prefers-reduced-motion):
-     Free, nothing to do — already on the shell: header spectrum hairline
-     (+ blurred glow halo), 🧠+title hue-cycling brand glow, RGB gradient
-     underline on the active tab, brightened aurora, a soft always-on RGB
-     shimmer border on every idle .stat-tile (serious/critical tiles keep
-     their status treatment instead), and a 1px conic RGB border on EVERY
-     .card at hover.
-     .rgb-ring       opt-in PERMANENT 1px conic RGB border on any element
-                     (e.g. frame the savings ring). Needs a border-radius to
-                     look right (border-radius: inherit). NEVER combine with
-                     .border-sweep — the alarm stays red and wins; RGB
-                     selectors all exclude .border-sweep on purpose.
-     The red .border-sweep alarm is UNCHANGED and stays reserved for
-     critical/breach. RGB never repaints an alarm.
 
    U helpers
      U.esc(s)                        -> HTML-escaped string
@@ -332,8 +315,7 @@
    .load-error, .escalation-strip + .escalation-title, .row-subtext
    (muted xs context line that wraps — place directly after its row inside
    .rows, or inside a .row-expand), the motion classes .border-sweep /
-   .pulse-dot documented above, and the v3 chrome: .rgb-ring (permanent RGB
-   border), .back-btn, .link-chips/.link-chip, .chart-legend + .legend-item
+   .pulse-dot documented above, .back-btn, .link-chips/.link-chip, .chart-legend + .legend-item
    /.legend-dot/.legend-n, and the .k-cat-1..8/.k-p0..2 swatch utilities
    (background-color only — data marks + legend dots, never text).
    ═══════════════════════════════════════════════════════════════════ */
@@ -914,7 +896,7 @@ const Comp = {
 
     let rings;
     if (!total) {
-      rings = `<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="${sw}"/>`;
+      rings = `<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="${sw}"/>`;
     } else {
       const gap = segs.length > 1 ? 2 : 0;      /* 2px surface gap */
       let offset = 0;
