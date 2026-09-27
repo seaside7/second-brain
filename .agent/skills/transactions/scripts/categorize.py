@@ -90,6 +90,12 @@ _CAT = {
     'friend_loan':    ('Loans', 'Friend Loan'),
     'friend_repay':   ('Loans', 'Friend Repayment'),
     'refund':         ('Income', 'Refund'),
+    # Adeeva (owner's daughter): a real, counted personal expense, but
+    # never auto-assigned. The payments come off our own cards/accounts and
+    # are indistinguishable from our own spending at parse time, so the owner
+    # files them by hand. Kept out of the auto-fire path on purpose - a name
+    # match would sweep in unrelated merchants.
+    'adeeva':         ('Family', 'Adeeva'),
     'uncategorized':  ('Uncategorized', 'Uncategorized'),
 }
 

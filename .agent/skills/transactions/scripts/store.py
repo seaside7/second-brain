@@ -495,6 +495,14 @@ def nature_for_category(conn: sqlite3.Connection, current_nature: str,
     if name == 'Friend Repayment':
         return 'expense'
 
+    # Adeeva (owner's daughter) is a counted personal expense, whatever the
+    # parser guessed. Without this, a row the parser filed as a transfer,
+    # top-up or internal move would keep that nature and silently drop out of
+    # the spend total, which is the opposite of what filing it under Adeeva
+    # means. Forced, so "how much did I spend on Adeeva" is always right.
+    if name == 'Adeeva':
+        return 'expense'
+
     # Transfers-group categories and Uncategorized never count as spend.
     if (cat.get('group') or '') == 'Transfers' or name == 'Uncategorized':
         return current_nature

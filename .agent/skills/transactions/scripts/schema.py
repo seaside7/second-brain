@@ -338,8 +338,29 @@ def ensure_tables(conn: sqlite3.Connection) -> None:
     """Create all tables if they do not already exist (idempotent)."""
     conn.executescript(_DDL)
     _migrate(conn)
+    _seed_manual_categories(conn)
     conn.execute(
         "INSERT OR REPLACE INTO _meta(key, value) VALUES (?, ?)",
         ('schema_version', str(SCHEMA_VERSION)),
     )
     conn.commit()
+
+
+# Categories that are assigned ONLY by hand, so they can never be created by
+# the normal get_or_create-on-first-use path: the categorizer must not
+# auto-fire them, which means nothing ever references them until the owner
+# picks one. Seeding here makes them available in the review picker on first
+# start instead of requiring a manual insert.
+_MANUAL_ONLY_CATEGORIES = [
+    # (name, group)
+    ('Adeeva', 'Family'),
+]
+
+
+def _seed_manual_categories(conn: sqlite3.Connection) -> None:
+    """Insert manual-only categories if absent. Idempotent."""
+    for name, group in _MANUAL_ONLY_CATEGORIES:
+        conn.execute(
+            'INSERT OR IGNORE INTO categories(name, "group", builtin) VALUES (?, ?, 1)',
+            (name, group),
+        )

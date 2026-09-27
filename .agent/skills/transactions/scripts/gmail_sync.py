@@ -26,6 +26,7 @@ _VERIFIED_SENDERS = [
     {'domain': 'klikbca.com', 'provider': 'bca'},
     {'domain': 'bca.co.id', 'provider': 'bca'},
     {'domain': 'bni.co.id', 'provider': 'bni'},
+    {'domain': 'bankmandiri.co.id', 'provider': 'mandiri'},
     {'domain': 'go-pay.co.id', 'provider': 'gopay'},
     {'domain': 'gopay.co.id', 'provider': 'gopay'},
 ]
@@ -35,6 +36,8 @@ _JUNK_SUBJECT_MARKERS = [
     'belum berhasil', 'tidak berhasil', 'gagal', 'failed',
     'unsuccessful', 'chat', 'verifikasi email', 'e-statement',
     'estatement', 'statement', 'promo', 'update', 'pemberitahuan',
+    # Livin' marketing / reward notices carry no transaction.
+    "livin'poin", 'berhadiah', 'penawaran', 'undian',
 ]
 _JUNK_BODY_MARKERS = [
     'belum berhasil', 'tidak berhasil', 'gagal', 'failed', 'unsuccessful',
@@ -283,7 +286,7 @@ def _extract_body(payload: dict) -> str:
     return text
 
 
-PARSER_VERSION = '3.0'
+PARSER_VERSION = '3.1'
 
 
 def _parse_email(body: str, provider: str, subject: str,
@@ -309,6 +312,8 @@ def _parse_email(body: str, provider: str, subject: str,
         rows = _parse_bca(body, subject, occurred_at)
     elif provider == 'bni':
         rows = _parse_bni(body, subject, occurred_at)
+    elif provider == 'mandiri':
+        rows = _parse_mandiri(body, subject, occurred_at)
     elif provider == 'gopay':
         rows = _parse_gopay(body, subject, occurred_at)
     else:
@@ -623,6 +628,296 @@ def _parse_bni(body: str, subject: str, occurred_at: str) -> list[dict]:
 def _bni_snippet(body: str) -> str:
     """Raw BNI body kept for the audit trail (trimmed to avoid bloat)."""
     return re.sub(r'\s+', ' ', body).strip()[:2000]
+
+
+# ── Mandiri / Livin' ───────────────────────────────────────────────────────
+#
+# Livin' emails all share one body template:
+#   "Berikut adalah detail transaksi Anda: <label> <value> <label> <value> ..."
+# so parsing is label-driven, not sentence-driven. The trap is that the SAME
+# subject ("Pembayaran Berhasil!") covers two different transaction types:
+# a VA/biller payment (has "Biaya Transaksi") and a QRIS payment (has
+# "No. Ref. QRIS" + "Terminal ID", never a fee). Branch on those markers.
+
+# Own wallet providers that appear as a Livin' "Penyedia Jasa". e-money is our
+# own toll card; everything else is a third party and must not become internal.
+_MANDIRI_OWN_WALLET = ('e-money', 'emoney', 'e money')
+
+# Third-party wallet/acquirer names seen as a Livin' "Penyedia Jasa". These are
+# money OUT to someone else's wallet, never an own-wallet top-up.
+_MANDIRI_THIRD_PARTY_WALLET = (
+    'shopeepay', 'shopee pay', 'airpay', 'ovo', 'dana', 'linkaja', 'gopay',
+    'gojek', 'grabpay', 'doku', 'qris',
+)
+
+# Own names: a Livin' transfer addressed to one of these is an internal move.
+_MANDIRI_OWN_NAMES = ('said iskandar',)
+
+
+def _mandiri_snippet(body: str) -> str:
+    """Raw Livin' body for the audit trail (trimmed to avoid bloat)."""
+    return re.sub(r'\s+', ' ', body).strip()[:2000]
+
+
+def _mandiri_penerima(body: str) -> str:
+    """Extract the 'Penerima' (recipient/merchant) name from a Livin' email.
+
+    The person name ends where the counterparty bank begins. Reading it as a
+    plain label value glues the bank on ("SAID ISKANDAR Bank Central Asia")
+    and, at 40 chars, truncates real names mid-word ("...Bank Syariah Ind"),
+    which then breaks merchant matching downstream.
+    """
+    # Person/merchant name, stopping at the bank token. Livin' always writes
+    # the counterparty bank as "Bank <name> - <number>"; requiring that dash
+    # is what stops "Pengakuisisi Bank Mandiri Terminal ID" (in a QRIS body)
+    # from being read as a bank and swallowing the rest of the email. The
+    # optional "KB" prefix is consumed so "SAID ISKANDAR KB Bank" yields
+    # just the name.
+    m = re.search(
+        r'penerima\s*:?\s+(.+?)\s+(?:kb\s+)?bank\s*'
+        r'(?:[A-Za-z][\w\s.]{1,30}?\s*)?[-–]\s*[\*\d]',
+        body, re.IGNORECASE | re.DOTALL)
+    if m:
+        raw = m.group(1)
+    else:
+        raw = _label_value(body, 'Penerima')
+    # Drop a trailing account number: some layouts put it before the bank
+    # ("Penerima SAID ISKANDAR 90011068361 Bank SMBC Indonesia").
+    raw = re.sub(r'\s*\b\d{8,}\b.*$', '', raw)
+    raw = re.sub(r'\s+', ' ', raw).strip()
+    # QRIS: "STARBUCKS CITYWALK LIPPO Bekasi (Kab) - ID" -> merchant only.
+    raw = re.sub(r'\s*\((?:Kab|Kota|Kab\.|Kec)\)?\s*[-–]?\s*\w{0,3}\s*$', '', raw).strip()
+    raw = re.sub(r'\s*[-–]\s*[A-Z]{2,3}$', '', raw).strip()
+    return _clean_counterparty(raw)
+
+
+def _mandiri_penyedia(body: str) -> str:
+    """Extract the 'Penyedia Jasa' (service provider) name for Livin' top-ups."""
+    raw = _label_value(body, 'Penyedia Jasa')
+    if not raw:
+        return ''
+    return _clean_counterparty(re.sub(r'\s*\*{4}\d{2,}\s*$', '', raw).strip())
+
+
+def _mandiri_bank(body: str) -> str:
+    """Extract the counterparty bank from a Livin' transfer.
+
+    Shape: "Penerima <NAME> <account> Bank SMBC Indonesia - ****8361", or
+    "Bank Central Asia - 2311636385". Return the bank name only.
+    """
+    m = re.search(r'\bBank\s+([A-Za-z][A-Za-z\s.]{2,40}?)\s*[-–]\s*[\*\d]',
+                  body, re.IGNORECASE)
+    if m:
+        return _display_case(m.group(1).strip())
+    return ''
+
+
+def _mandiri_amount(body: str, *labels: str) -> int:
+    """First Rp amount after any of the given labels (principal-first)."""
+    for label in labels:
+        v = _amount_after(body, [label])
+        if v > 0:
+            return v
+    return 0
+
+
+def _mandiri_note(body: str) -> str:
+    """The transfer 'Keterangan' (purpose), or '' when there is none.
+
+    Livin' writes "Keterangan -" for an empty note. The label regex then eats
+    the dash, so the captured value starts at the NEXT footer field and used
+    to yield descriptions like 'Rekening Sumber Said Iskandar ****4657'.
+    """
+    note = _label_value(body, 'Keterangan').strip(' .,:;|•\u2022|-')
+    if not note or re.match(
+            r'^(?:rekening sumber|penyedia jasa|simpan email|terima kasih'
+            r'|no\.?\s*referensi|sumber dana)\b', note, re.IGNORECASE):
+        return ''
+    return note
+
+
+def _mandiri_fee(body: str) -> int:
+    """'Biaya Transaksi' / 'Biaya Transfer' fee, 0 when absent."""
+    for label in ('Biaya Transaksi', 'Biaya Transfer', 'Biaya Admin'):
+        m = re.search(re.escape(label) + r'\s*:?\s*(?:Rp|IDR)\s*([\d.,]+)',
+                      body, re.IGNORECASE)
+        if m:
+            v = _extract_amount(f'Rp{m.group(1)}')
+            if v > 0:
+                return v
+    return 0
+
+
+def _mandiri_ref(body: str) -> str:
+    """Livin' reference, captured as a single token.
+
+    This is the dedup key (source_key is built from it), so it must be the
+    reference and nothing else. A label-value cut is not safe here: the value
+    runs into the next field, and the ref would then differ per email and
+    defeat deduplication.
+    """
+    m = re.search(
+        r'(?:no\.?\s*referensi\s*bi\s*fast|no\.?\s*referensi|nomor\s*referensi)'
+        r'\s*:?\s*([A-Za-z0-9]+)', body, re.IGNORECASE)
+    return m.group(1) if m else ''
+
+
+def _mandiri_direction_is_internal(recipient: str) -> bool:
+    """True when a transfer is addressed to one of our own names."""
+    low = (recipient or '').lower()
+    return any(name in low for name in _MANDIRI_OWN_NAMES)
+
+
+def _parse_mandiri(body: str, subject: str, occurred_at: str) -> list[dict]:
+    """Parse a Livin' by Mandiri notification.
+
+    Returns a list of row dicts (principal + optional split fee row), or an
+    empty list for a shape we do not model. Never raises on a partial email.
+    """
+    if not body:
+        return []
+    body_l = body.lower()
+    subject_l = (subject or '').lower()
+
+    # Reject failures and promos defensively (the shared junk filter already
+    # catches most, but Livin' phrasings vary).
+    if any(k in subject_l for k in ('tidak berhasil', 'gagal', 'berhasil dibatalkan',
+                                    'dibatalkan', 'livin\'poin', 'promo', 'hadiah')):
+        return []
+    if any(k in body_l for k in ('tidak berhasil', 'transaksi gagal',
+                                 'dibatalkan oleh')):
+        return []
+
+    # ── 0) PROTEKSI JIWA (AXA Mandiri micro-premium). Not a biller payment:
+    #    the amount sits after 'Proteksi Jiwa', with no fee.
+    #    Subject-scoped on purpose: the e-money top-up email mentions
+    #    "proteksi jiwa AXA Mandiri" in its FOOTER, so a body match would
+    #    swallow the top-up and book it as a 50.000 insurance premium.
+    if 'proteksi jiwa' in subject_l and 'pembelian' in subject_l:
+        amount = _mandiri_amount(body, 'Proteksi Jiwa', 'Nominal')
+        if amount <= 0:
+            return []
+        insurer = _mandiri_penyedia(body) or 'AXA Mandiri'
+        return [_build_row('mandiri', f'Proteksi Jiwa - {_display_case(insurer)}',
+                           'out', amount, _mandiri_ref(body), occurred_at,
+                           raw_description=_mandiri_snippet(body),
+                           transaction_type='insurance', recipient=insurer)]
+
+    fee = _mandiri_fee(body)
+
+    # ── 1) PEMBAYARAN: one subject, two transaction types ──────────────────
+    # QRIS carries 'No. Ref. QRIS' + 'Terminal ID' and never a fee; the VA /
+    # biller flavour carries 'Biaya Transaksi'. Branch before reading money.
+    if 'pembayaran berhasil' in subject_l or 'pembayaran berhasil' in body_l:
+        is_qris = ('qris' in body_l) and (
+            'no. ref. qris' in body_l or 'terminal id' in body_l
+            or 'merchant pan' in body_l)
+        amount = _mandiri_amount(body, 'Nominal Transaksi', 'Nominal', 'Jumlah')
+        if amount <= 0:
+            return []
+        merchant = _mandiri_penerima(body)
+        if is_qris:
+            clean = f'QRIS - {_display_case(merchant)}' if merchant else 'QRIS Payment'
+            return [_build_row('mandiri', clean, 'out', amount,
+                               _mandiri_ref(body), occurred_at,
+                               raw_description=_mandiri_snippet(body),
+                               transaction_type='qris', merchant=merchant)]
+        # VA / biller payment (Traveloka, AXA, ...). No marker distinguishes
+        # them, so the recipient line is the best available descriptor.
+        clean = f'Pembayaran - {_display_case(merchant)}' if merchant else 'Pembayaran'
+        return _mandiri_with_fee('mandiri', clean, amount, fee, body,
+                                 occurred_at, transaction_type='va_payment',
+                                 recipient=merchant)
+
+    # ── 2) TOP-UP e-money: our own toll card, no fee ──────────────────────
+    if 'top-up e-money' in subject_l or 'top-up e-money' in body_l:
+        amount = _mandiri_amount(body, 'Nominal Top-up', 'Nominal')
+        if amount <= 0:
+            return []
+        return [_build_row('mandiri', 'Top Up e-Money', 'out', amount,
+                           _mandiri_ref(body), occurred_at,
+                           raw_description=_mandiri_snippet(body),
+                           transaction_type='top_up', merchant='e-Money')]
+
+    # ── 3) TOP-UP (wallet). Provider decides own vs third party. ──────────
+    if 'top-up berhasil' in subject_l or 'top up berhasil' in body_l:
+        amount = _mandiri_amount(body, 'Nominal Top-up', 'Nominal')
+        if amount <= 0:
+            return []
+        provider = _mandiri_penyedia(body) or 'e-Wallet'
+        clean = f'{_display_case(provider)} Top Up'
+        return _mandiri_with_fee('mandiri', clean, amount, fee, body,
+                                 occurred_at, transaction_type='top_up',
+                                 recipient=provider)
+
+    # ── 4) TRANSFERS: BI-Fast / online / on-us ────────────────────────────
+    # Direction is decided by the recipient, not the wording: Livin' BI-Fast
+    # emails for inbound transfers read identically to outbound ones.
+    if ('transfer dengan bi fast' in subject_l or 'transfer online' in subject_l
+            or 'transfer berhasil' in subject_l or 'bi fast' in body_l):
+        amount = _mandiri_amount(body, 'Nominal Transfer', 'Jumlah Transfer',
+                                 'Nominal')
+        if amount <= 0:
+            return []
+        recipient = _mandiri_penerima(body)
+        bank = _mandiri_bank(body)
+        internal = _mandiri_direction_is_internal(recipient)
+        # An inbound transfer to one of our own accounts is a credit; every
+        # other BI-Fast send is a debit. Livin' only emails sends, so the
+        # default is 'out'.
+        direction = 'out'
+        if internal:
+            direction = 'in'
+        note = _mandiri_note(body)
+        if internal:
+            clean = f'Transfer Masuk - {_display_case(bank)}' if bank else 'Transfer Masuk'
+        elif note:
+            clean = _display_case(note)
+        elif bank:
+            clean = f'Transfer ke {_display_case(bank)}'
+        else:
+            clean = 'Transfer'
+        rows = [_build_row('mandiri', clean, direction, amount,
+                           _mandiri_ref(body), occurred_at,
+                           raw_description=_mandiri_snippet(body),
+                           transaction_type='transfer', recipient=recipient,
+                           merchant=bank)]
+        # An internal move still pays the fee, but the fee is part of the
+        # same internal event, not a separate expense.
+        if fee > 0:
+            rows = _mandiri_split_fee(rows[0], fee, occurred_at,
+                                      raw=_mandiri_snippet(body))
+        return rows
+
+    return []
+
+
+def _mandiri_with_fee(provider: str, clean: str, amount: int, fee: int,
+                      body: str, occurred_at: str, *,
+                      transaction_type: str, recipient: str = '') -> list[dict]:
+    """Build a principal row plus its split fee row."""
+    row = _build_row(provider, clean, 'out', amount, _mandiri_ref(body),
+                     occurred_at, raw_description=_mandiri_snippet(body),
+                     transaction_type=transaction_type, recipient=recipient)
+    rows = [row]
+    if fee > 0:
+        rows = _mandiri_split_fee(row, fee, occurred_at,
+                                  raw=_mandiri_snippet(body))
+    return rows
+
+
+def _mandiri_split_fee(principal_row: dict, fee: int, occurred_at: str,
+                       *, raw: str) -> list[dict]:
+    """Attach a fee to a principal row and return [principal, fee_row]."""
+    principal_row['fee_amount'] = fee
+    principal_row['total_amount'] = principal_row['principal_amount'] + fee
+    fee_row = _build_row(
+        principal_row['provider'],
+        f"{principal_row['description']} - Biaya Transaksi", 'out', fee,
+        f"{principal_row['src_txn_id']}-fee", occurred_at,
+        raw_description=raw, transaction_type='fee',
+        principal_amount=0, fee_amount=fee)
+    return [principal_row, fee_row]
 
 
 def _bni_recipient(body: str) -> str:
@@ -969,12 +1264,19 @@ def _label_value(text: str, label: str) -> str:
     if not m:
         return ''
     rest = text[m.end():]
+    rest_l = rest.lower()
     cut = len(rest)
     for stop in ('Rp', 'IDR', 'Total', 'Nominal', 'Amount', 'Amt', 'Status',
                  'Tanggal', 'Bank Tujuan', 'Reference', 'Ref', 'Rekening', 'Penerima',
                  'Sumber dana', 'Biaya', 'Detail', 'Pesan', 'Keterangan', 'Berita',
-                 'No.', 'Waktu', 'Parkir'):
-        i = rest.find(stop, 1)
+                 'No.', 'Waktu', 'Parkir',
+                 # Livin' footer fields that otherwise swallow the value.
+                 'Rekening Sumber', 'Nomor Referensi', 'Simpan email',
+                 'Simpan email ini', 'Terima kasih', 'Penyedia Jasa'):
+        # Case-insensitive: Livin' writes 'Sumber Dana', BNI writes
+        # 'Sumber Dana' too, and a case-sensitive cut silently ran on and
+        # swallowed the rest of the body into the value.
+        i = rest_l.find(stop.lower(), 1)
         if 0 < i < cut:
             cut = i
     return rest[:cut].strip(' .,:;|•\u2022').strip()[:120]
@@ -993,39 +1295,40 @@ def _amount_after(text: str, labels: list[str]) -> int:
     """First Rp amount following any of the given labels."""
     for label in labels:
         m = re.search(
-            re.escape(label) + r'.{0,80}?Rp\.?\s*([\d.,]+)', text, re.IGNORECASE | re.DOTALL)
+            re.escape(label) + r'.{0,80}?(?:Rp|IDR)\.?\s*([\d.,]+)', text,
+            re.IGNORECASE | re.DOTALL)
         if m:
-            num_str = m.group(1).replace('.', '').replace(',', '')
-            try:
-                return int(num_str)
-            except ValueError:
-                pass
+            val = _parse_idr(m.group(1))
+            if val > 0:
+                return val
     return _extract_amount(text)
 
 
-def _extract_amount(text: str) -> int:
-    """Extract IDR amount from text. Handles both 'Rp 20.000' and 'IDR 20,000.00'."""
-    m = re.search(r'(?:Rp|IDR)\s*([\d.,]+)', text, re.IGNORECASE)
-    if not m:
-        return 0
-    raw = m.group(1)
-    # Resolve the decimal separator by looking at the last separator position.
+def _parse_idr(raw: str) -> int:
+    """Resolve a captured numeric string to an integer IDR amount.
+
+    The decimal separator is decided by the LAST separator seen, so both
+    Indonesian ('1.000,50' and '20.000') and English ('20,000.50') forms
+    work. Stripping separators blindly is wrong: it turns the Livin' format
+    'Rp 1.000.000,00' into 100000000 instead of 1000000.
+    """
+    raw = raw.strip()
     has_dot   = '.' in raw
     has_comma = ',' in raw
     if has_dot and has_comma:
         if raw.rindex(',') > raw.rindex('.'):
-            # "1.000,50" — Indonesian: comma is decimal
+            # "1.000,50" - Indonesian: comma is decimal
             raw = raw.replace('.', '').replace(',', '.')
         else:
-            # "20,000.50" — English: dot is decimal
+            # "20,000.50" - English: dot is decimal
             raw = raw.replace(',', '')
     elif has_dot:
         parts = raw.rsplit('.', 1)
         if len(parts) == 2 and len(parts[1]) == 2:
-            # "20,000.00" split already handled above; "20.50" → decimal
+            # "20.50" - decimal
             raw = parts[0].replace('.', '') + '.' + parts[1]
         else:
-            # "20.000" — thousands, no decimal
+            # "20.000" - thousands, no decimal
             raw = raw.replace('.', '')
     elif has_comma:
         parts = raw.rsplit(',', 1)
@@ -1037,6 +1340,14 @@ def _extract_amount(text: str) -> int:
         return int(float(raw))
     except (ValueError, OverflowError):
         return 0
+
+
+def _extract_amount(text: str) -> int:
+    """Extract IDR amount from text. Handles both 'Rp 20.000' and 'IDR 20,000.00'."""
+    m = re.search(r'(?:Rp|IDR)\s*([\d.,]+)', text, re.IGNORECASE)
+    if not m:
+        return 0
+    return _parse_idr(m.group(1))
 
 
 def _extract_txn_id(text: str) -> str:

@@ -2,7 +2,8 @@
   "verified_senders": [
     {"domain": "klikbca.com", "provider": "bca"},
     {"domain": "bca.co.id", "provider": "bca"},
-    {"domain": "bni.co.id", "provider": "bni"}
+    {"domain": "bni.co.id", "provider": "bni"},
+    {"domain": "bankmandiri.co.id", "provider": "mandiri"}
   ],
   "accounts": [
     {
@@ -17,6 +18,13 @@
       "provider": "bni",
       "alias": "BNI Personal",
       "masked": "",
+      "owner_name": "Said Iskandar"
+    },
+    {
+      "type": "bank",
+      "provider": "mandiri",
+      "alias": "Mandiri Livin'",
+      "masked": "****4657",
       "owner_name": "Said Iskandar"
     },
     {

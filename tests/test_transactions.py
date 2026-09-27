@@ -422,6 +422,259 @@ class TestRules(unittest.TestCase):
             self.assertEqual(len(rules), 0)
 
 
+class TestParseMandiri(unittest.TestCase):
+    """Livin' by Mandiri parsing.
+
+    Bodies below are the real notification text (whitespace collapsed), so a
+    template change upstream fails loudly here rather than silently producing
+    wrong rows in the ledger.
+    """
+
+    @staticmethod
+    def _rows(body: str, subject: str) -> list:
+        from gmail_sync import _parse_mandiri
+        return _parse_mandiri(body, subject, '2026-09-24T17:12:46')
+
+    # 1) VA / biller payment - the Traveloka case.
+    VA_PAYMENT = (
+        "Livin' by Mandiri Pembayaran Berhasil Halo SAID ISKANDAR , Berikut "
+        "adalah detail transaksi Anda: Penerima Traveloka Indonesia "
+        "22222772265238 Tanggal 24 Sep 2026 Jam 17:12:46 WIB Nominal Transaksi "
+        "IDR 2.754.500,00 Biaya Transaksi IDR 1.500,00 Total Transaksi "
+        "IDR 2.756.000,00 No. Referensi 702609241712461793 Sumber Dana "
+        "SAID ISKANDAR ****4657 Simpan email ini sebagai referensi transaksi Anda."
+    )
+
+    # 2) QRIS - same subject as (1), different transaction type.
+    QRIS_PAYMENT = (
+        "Livin' by Mandiri Pembayaran Berhasil Halo SAID ISKINDAR , Berikut "
+        "adalah detail transaksi Anda dengan QR: Penerima STARBUCKS CITYWALK "
+        "LIPPO Bekasi (Kab) - ID Tanggal 25 Sep 2026 Jam 12:49:12 WIB Nominal "
+        "Transaksi Rp 64.000,00 No. Referensi 2609251122578634834 No. Ref. "
+        "QRIS 609257950420 Merchant PAN 9360000802182280899 Pengakuisisi Bank "
+        "Mandiri Terminal ID 85842060 Sumber Dana SAID ISKANDAR ****4657"
+    )
+
+    # 3) Transfer to ourselves via BI-Fast - must NOT become spending.
+    BIFAST_SELF = (
+        "Livin' by Mandiri Transfer dengan BI Fast Berhasil Halo SAID ISKANDAR , "
+        "Berikut adalah detail transaksi Anda: Penerima SAID ISKANDAR "
+        "90011068361 Bank SMBC Indonesia - ****8361 Tanggal 24 Sep 2026 Jam "
+        "15:47:53 WIB Nominal Transfer Rp 1.000.000,00 Biaya Transfer "
+        "Rp 2.500,00 Total Transaksi Rp 1.002.500,00 No. Referensi BI Fast "
+        "20260924BMRIIDJA010O0224346446 Rekening Sumber SAID ISKINDAR ****4657"
+    )
+
+    # 4) Transfer out to a third party.
+    TRANSFER_OUT = (
+        "Livin' by Mandiri Transfer Online Berhasil Halo SAID ISKANDAR , "
+        "Berikut adalah detail transaksi Anda: Penerima RIFKI KARIM RAMADHAN "
+        "Bank Central Asia - 2311636385 Tanggal 25 Sep 2026 Jam 11:23:57 WIB "
+        "Nominal Transfer Rp 150.000,00 Biaya Transfer Rp 6.500,00 Total "
+        "Transaksi Rp 156.500,00 No. Referensi 2609251121055379366 Keterangan - "
+        "Rekening Sumber SAID ISKANDAR ****4657"
+    )
+
+    # 5) Third-party wallet top-up (ShopeePay).
+    TOPUP_THIRD_PARTY = (
+        "Livin' by Mandiri Top-up Berhasil Halo SAID ISKANDAR , Berikut adalah "
+        "detail transaksi Anda: Penyedia Jasa ShopeePay ****4707 Tanggal 25 Sep "
+        "2026 Jam 06:56:25 WIB Nominal Top-up Rp 42.000,00 Biaya Transaksi "
+        "Rp 1.000,00 Total Transaksi Rp 43.000,00 No. Referensi 702609250656211780 "
+        "Rekening Sumber SAID ISKANDAR ****4657"
+    )
+
+    # 6) Own e-money (toll) top-up.
+    TOPUP_EMONEY = (
+        "Livin' by Mandiri Transaksi e-money & Pembelian Proteksi Berhasil Halo "
+        "SAID ISKANDAR , Berikut adalah detail transaksi Anda: Penyedia Jasa "
+        "e-money ****1034 Tanggal 25 Sep 2026 Jam 17:06:31 WIB Nominal Top-up "
+        "Rp 50.000,00 Nomor Referensi 702609251706271674 Rekening Sumber "
+        "SAID ISKANDAR ****4657 Segera update saldo di kartu bertambah."
+    )
+
+    def test_va_payment_principal_plus_fee(self):
+        rows = self._rows(self.VA_PAYMENT, 'Pembayaran Berhasil!')
+        self.assertEqual(len(rows), 2, 'principal + split fee row')
+        principal, fee = rows
+        self.assertEqual(principal['principal_amount'], 2754500)
+        self.assertEqual(principal['direction'], 'out')
+        self.assertEqual(principal['transaction_type'], 'va_payment')
+        self.assertEqual(principal['src_txn_id'], '702609241712461793')
+        self.assertEqual(fee['principal_amount'], 0)
+        self.assertEqual(fee['fee_amount'], 1500)
+        self.assertEqual(principal['total_amount'], 2756000)
+
+    def test_qris_branch_is_distinct_from_va(self):
+        """Same subject, different type: QRIS has no fee and is not a VA."""
+        rows = self._rows(self.QRIS_PAYMENT, 'Pembayaran Berhasil!')
+        self.assertEqual(len(rows), 1, 'QRIS never splits a fee')
+        row = rows[0]
+        self.assertEqual(row['transaction_type'], 'qris')
+        self.assertEqual(row['principal_amount'], 64000)
+        self.assertIn('Starbucks', row['description'])
+
+    def test_qris_merchant_name_is_cleaned(self):
+        """The '(Area) - ID' suffix is not part of the merchant name."""
+        rows = self._rows(self.QRIS_PAYMENT, 'Pembayaran Berhasil!')
+        merchant = rows[0]['merchant']
+        self.assertNotIn('-', merchant)
+        self.assertFalse(merchant.endswith('ID'))
+
+    def test_transfer_to_self_is_not_spending(self):
+        """BI-Fast to our own account must be inbound, never an expense."""
+        rows = self._rows(self.BIFAST_SELF, 'Transfer dengan BI Fast Berhasil')
+        self.assertEqual(rows[0]['direction'], 'in')
+        self.assertEqual(rows[0]['principal_amount'], 1000000)
+
+    def test_transfer_to_third_party_is_outbound(self):
+        rows = self._rows(self.TRANSFER_OUT, 'Transfer Online Berhasil')
+        self.assertEqual(rows[0]['direction'], 'out')
+        self.assertEqual(rows[0]['principal_amount'], 150000)
+        self.assertEqual(rows[0]['fee_amount'], 6500)
+
+    def test_third_party_wallet_topup_is_not_internal(self):
+        """ShopeePay is someone else's wallet - money out, not a self-move."""
+        rows = self._rows(self.TOPUP_THIRD_PARTY, 'Top-up Berhasil')
+        self.assertEqual(rows[0]['principal_amount'], 42000)
+        self.assertEqual(rows[0]['direction'], 'out')
+        self.assertIn('shopeepay', rows[0]['description'].lower())
+
+    def test_emoney_topup_has_no_fee_row(self):
+        rows = self._rows(self.TOPUP_EMONEY, "Top-up e-money Berhasil")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['principal_amount'], 50000)
+
+    def test_promo_email_is_rejected(self):
+        rows = self._rows(
+            "Livin' by Mandiri Yeay! Transaksi Anda Berhadiah Livin'poin "
+            "Halo SAID ISKANDAR , Below is your detail", "Yeay!")
+        self.assertEqual(rows, [])
+
+    def test_failed_transfer_is_rejected(self):
+        rows = self._rows(
+            "Livin' by Mandiri Transfer dengan BI Fast Tidak Berhasil "
+            "Nominal Transfer Rp 1.000.000,00",
+            'Transfer dengan BI Fast Tidak Berhasil')
+        self.assertEqual(rows, [])
+
+    def test_account_numbers_are_masked(self):
+        """Full account numbers must never reach the DB or the UI.
+
+        Goes through _parse_email, which is the layer that applies masking
+        (the per-provider parsers return raw text for the audit trail, same
+        as the BNI parser does).
+        """
+        from gmail_sync import _parse_email
+        rows = _parse_email(self.TRANSFER_OUT, 'mandiri', 'Transfer Online Berhasil')
+        self.assertTrue(rows)
+        blob = ' '.join(str(v) for row in rows for v in row.values())
+        self.assertNotIn('2311636385', blob, 'raw account number leaked')
+        self.assertNotIn('90011068361', _parse_email(
+            self.BIFAST_SELF, 'mandiri',
+            'Transfer dengan BI Fast Berhasil')[0]['raw_description'])
+
+    def test_recipient_name_excludes_bank(self):
+        """The person name must not absorb the counterparty bank name.
+
+        Reading it as a plain label value produced
+        'YAY BANTUAN HUKUM YUSUF Bank Syariah Ind' - truncated mid-word at
+        the 40-char cap, which then breaks merchant matching.
+        """
+        body = ('Penerima YAY BANTUAN HUKUM YUSUF Bank Syariah Indonesia - '
+                '7799707807 Tanggal 19 Sep 2026 Nominal Transfer Rp 1.000.000,00')
+        from gmail_sync import _mandiri_penerima
+        self.assertEqual(_mandiri_penerima(body), 'YAY BANTUAN HUKUM YUSUF')
+
+    def test_recipient_name_excludes_bank_when_number_precedes_it(self):
+        body = ('Penerima SAID ISKANDAR 90011068361 Bank SMBC Indonesia - '
+                '****8361 Tanggal 24 Sep 2026 Nominal Transfer Rp 1.000.000,00')
+        from gmail_sync import _mandiri_penerima
+        self.assertEqual(_mandiri_penerima(body), 'SAID ISKANDAR')
+
+    def test_recipient_name_handles_kb_bank(self):
+        body = ('Penerima SAID ISKANDAR KB Bank - 20000023846 Tanggal '
+                '19 Sep 2026 Nominal Transfer Rp 20.000.000,00')
+        from gmail_sync import _mandiri_penerima
+        self.assertEqual(_mandiri_penerima(body), 'SAID ISKANDAR')
+
+    def test_empty_note_is_not_used_as_description(self):
+        """'Keterangan -' means no note; the footer must not become the label."""
+        rows = self._rows(self.TRANSFER_OUT, 'Transfer Online Berhasil')
+        desc = rows[0]['description']
+        self.assertNotIn('Rekening Sumber', desc)
+        self.assertNotIn('Simpan', desc)
+        self.assertNotEqual(desc.strip('- '), '')
+        self.assertIn('Central Asia', desc)
+
+    def test_axa_insurance_is_parsed(self):
+        body = ("Livin' by Mandiri Pembelian Proteksi Jiwa AXA Mandiri Berhasil "
+                "Halo SAID ISKINDAR , Berikut adalah detail transaksi Anda: "
+                "Penyedia Jasa AXA Mandiri Tanggal 25 Sep 2026 Jam 17:06:32 WIB "
+                "Proteksi Jiwa Rp 1.000,00 Nomor Referensi 250926112970480 "
+                "Rekening Sumber SAID ISKANDAR ****4657")
+        rows = self._rows(body, 'Pembelian Proteksi Jiwa AXA Mandiri Berhasil')
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['principal_amount'], 1000)
+        self.assertEqual(rows[0]['transaction_type'], 'insurance')
+        self.assertEqual(rows[0]['src_txn_id'], '250926112970480')
+
+    def test_fee_is_captured_on_va_payment(self):
+        """The fee is the whole point of splitting it out."""
+        rows = self._rows(self.VA_PAYMENT, 'Pembayaran Berhasil!')
+        fee_rows = [r for r in rows if r['transaction_type'] == 'fee']
+        self.assertEqual(len(fee_rows), 1)
+        self.assertEqual(fee_rows[0]['fee_amount'], 1500)
+
+    def test_verified_sender_registered(self):
+        from gmail_sync import _VERIFIED_SENDERS
+        domains = {s['domain']: s['provider'] for s in _VERIFIED_SENDERS}
+        self.assertEqual(domains.get('bankmandiri.co.id'), 'mandiri')
+
+
+class TestAdeevaCategory(unittest.TestCase):
+    """Adeeva is a counted expense, but never auto-assigned."""
+
+    def test_nature_forced_to_expense(self):
+        """Whatever the parser guessed, filing under Adeeva counts as spend."""
+        for prior in ('transfer_to_person', 'needs_review', 'internal_transfer',
+                      'top_up', 'uncategorized'):
+            with _InMemoryDB() as conn:
+                cat_id = store.get_or_create_category(conn, 'Adeeva', 'Family')
+                nature = store.nature_for_category(conn, prior, cat_id,
+                                                   direction='out')
+                self.assertEqual(nature, 'expense',
+                                 f'{prior} should resolve to expense')
+
+    def test_offered_on_money_out_rows(self):
+        with _InMemoryDB() as conn:
+            store.get_or_create_category(conn, 'Adeeva', 'Family')
+            cats = {c['name']: c for c in store.list_categories(conn)}
+            self.assertIn('Adeeva', cats)
+            self.assertEqual(cats['Adeeva']['flow'], 'out')
+
+    def test_seeded_on_schema_bootstrap(self):
+        """Nothing auto-assigns Adeeva, so ensure_tables must create it,
+        otherwise the category never appears in the review picker."""
+        with _InMemoryDB() as conn:
+            cats = {c['name']: c for c in store.list_categories(conn)}
+            self.assertIn('Adeeva', cats)
+            self.assertEqual(cats['Adeeva']['group'], 'Family')
+
+    def test_not_auto_assigned(self):
+        """No keyword rule may fire Adeeva - the owner files these by hand."""
+        from categorize import _CAT
+        with _InMemoryDB() as conn:
+            row = {'description': 'Pembayaran - Adeeva', 'merchant': 'Adeeva',
+                   'recipient': 'Adeeva', 'direction': 'out',
+                   'amount': 500000, 'provider': 'mandiri',
+                   'transaction_type': 'va_payment', 'description_raw': ''}
+            result = _categorize_single(conn, row)
+            self.assertNotEqual(result.get('category_name'), 'Adeeva')
+        # The taxonomy key exists, but nothing maps to it automatically.
+        self.assertIn('adeeva', _CAT)
+
+
 class TestImportLifecycle(unittest.TestCase):
     def test_confirm_and_delete(self):
         from import_engine import confirm_import, delete_import
