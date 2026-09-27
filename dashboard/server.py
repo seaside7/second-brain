@@ -68,6 +68,9 @@ import workspace_resolver as ws_resolver  # noqa: E402
 import coding_agent  # noqa: E402
 import transactions_api  # noqa: E402
 import trading_api  # noqa: E402
+# Tasks: Trello "assigned to you" cards harvested from Gmail (no direct Trello
+# API connection yet). Manual refresh only. All /api/tasks* traffic delegated here.
+import tasks_agent  # noqa: E402
 
 # Model registry (Settings → AI Models): single resolution service for every
 # module. resolve_module/list_modules/execute power /api/models*; provider
@@ -3717,6 +3720,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 self.path.startswith('/api/coding/jobs/') or \
                 self.path.startswith('/api/coding/preview/'):
             coding_agent.route_get(self)
+        elif self.path.split('?')[0] == '/api/tasks':
+            tasks_agent.route_get(self)
         else:
             super().do_GET()
 
@@ -3880,6 +3885,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 coding_agent.route_post(self)
             except Exception as e:
                 self._send_json(500, json.dumps({'error': f'coding route failed: {e}'}))
+        elif self.path.startswith('/api/tasks'):
+            try:
+                tasks_agent.route_post(self)
+            except Exception as e:
+                self._send_json(500, json.dumps({'error': f'tasks route failed: {e}'}))
         else:
             self.send_error(404, 'Not Found')
 

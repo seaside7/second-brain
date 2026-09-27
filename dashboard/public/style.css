@@ -3982,3 +3982,37 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
 }
 .trading-pos { color: var(--st-good); font-weight: 600; }
 .trading-neg { color: var(--st-serious); font-weight: 600; }
+
+/* ═══════════════════════════════════════════
+   TASKS TAB (🎫) — Trello cards assigned to you, harvested from Gmail
+   ═══════════════════════════════════════════ */
+.task-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--sp-3); margin-bottom: var(--sp-2); flex-wrap: wrap;
+}
+.task-refreshed { font-size: var(--fs-xs); color: var(--text-muted); }
+
+.task-actions { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+.task-repo-select {
+  font: inherit; font-size: var(--fs-xs);
+  color: var(--text-primary); background: var(--bg-input);
+  border: 1px solid var(--border); border-radius: var(--radius-xs);
+  padding: 3px 6px; max-width: 160px; cursor: pointer;
+}
+.task-repo-select option { background: var(--surface-opaque); color: var(--text-primary); }
+
+.task-submit-btn, .task-dismiss-btn, .task-reopen-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: var(--fs-xs); font-weight: 600;
+  border-radius: var(--radius-xs); padding: 4px 9px;
+  border: 1px solid transparent; cursor: pointer;
+  transition: border-color .12s, background .12s, opacity .12s;
+}
+.task-submit-btn { color: #fff; background: var(--accent); border-color: var(--accent); }
+.task-submit-btn:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.task-submit-btn:disabled { opacity: .45; cursor: default; }
+.task-dismiss-btn, .task-reopen-btn {
+  color: var(--text-muted); background: var(--bg-glass); border-color: var(--border); padding: 4px 7px;
+}
+.task-dismiss-btn:hover, .task-reopen-btn:hover { color: var(--text-primary); border-color: var(--border-active); }

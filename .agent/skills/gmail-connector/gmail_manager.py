@@ -9,6 +9,7 @@ import os
 import sys
 import argparse
 import base64
+import json
 import signal
 from email.mime.text import MIMEText
 from google.auth.transport.requests import Request
@@ -117,7 +118,7 @@ def authenticate():
 
 # ---------- actions ----------
 
-def list_emails(query=None, max_results=10):
+def list_emails(query=None, max_results=10, json_out=False):
     creds = authenticate()
     if not creds:
         return
@@ -128,10 +129,16 @@ def list_emails(query=None, max_results=10):
         messages = results.get('messages', [])
 
         if not messages:
-            print(f"[{_current_workspace}] No messages found.")
+            if json_out:
+                print(json.dumps({'workspace': _current_workspace, 'messages': []}))
+            else:
+                print(f"[{_current_workspace}] No messages found.")
             return
 
-        print(f"[{_current_workspace}] Found {len(messages)} messages:")
+        if not json_out:
+            print(f"[{_current_workspace}] Found {len(messages)} messages:")
+
+        rows = []
         for msg in messages:
             msg_id = msg['id']
             full_msg = service.users().messages().get(userId='me', id=msg_id, format='metadata', metadataHeaders=['Subject', 'From', 'Date']).execute()
@@ -141,13 +148,22 @@ def list_emails(query=None, max_results=10):
             sender = next((h['value'] for h in headers if h['name'] == 'From'), '(Unknown Sender)')
             date = next((h['value'] for h in headers if h['name'] == 'Date'), '(No Date)')
 
-            print(f"- [{msg_id}] From: {sender} | Subject: {subject} | Date: {date}")
+            if json_out:
+                rows.append({'id': msg_id, 'from': sender, 'subject': subject, 'date': date})
+            else:
+                print(f"- [{msg_id}] From: {sender} | Subject: {subject} | Date: {date}")
+
+        if json_out:
+            print(json.dumps({'workspace': _current_workspace, 'messages': rows}, ensure_ascii=False))
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        if json_out:
+            print(json.dumps({'error': str(e)}))
+        else:
+            print(f"An error occurred: {e}")
 
 
-def get_email(msg_id):
+def get_email(msg_id, json_out=False):
     creds = authenticate()
     if not creds:
         return
@@ -162,12 +178,6 @@ def get_email(msg_id):
         sender = next((h['value'] for h in headers if h['name'] == 'From'), '(Unknown Sender)')
         date = next((h['value'] for h in headers if h['name'] == 'Date'), '(No Date)')
 
-        print(f"ID: {msg_id}")
-        print(f"From: {sender}")
-        print(f"Date: {date}")
-        print(f"Subject: {subject}")
-        print("-" * 40)
-
         body = ""
         if 'parts' in payload:
             for part in payload['parts']:
@@ -180,10 +190,23 @@ def get_email(msg_id):
             if data:
                 body = base64.urlsafe_b64decode(data).decode()
 
+        if json_out:
+            print(json.dumps({'id': msg_id, 'from': sender, 'date': date, 'subject': subject,
+                               'body': body}, ensure_ascii=False))
+            return
+
+        print(f"ID: {msg_id}")
+        print(f"From: {sender}")
+        print(f"Date: {date}")
+        print(f"Subject: {subject}")
+        print("-" * 40)
         print(body if body else "(Empty body or HTML-only email)")
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        if json_out:
+            print(json.dumps({'error': str(e)}))
+        else:
+            print(f"An error occurred: {e}")
 
 
 def archive_email(msg_id):
@@ -278,6 +301,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Gmail Manager')
     parser.add_argument('--workspace', default=None,
                         help='Workspace name (default: active workspace)')
+    parser.add_argument('--json', action='store_true', dest='json_out',
+                        help='Print machine-readable JSON instead of formatted text '
+                             '(list, get) — for scripts/backends, not interactive use')
     subparsers = parser.add_subparsers(dest='command')
 
     # Profile
@@ -318,9 +344,9 @@ if __name__ == '__main__':
     if args.command == 'profile':
         get_profile()
     elif args.command == 'list':
-        list_emails(query=args.query, max_results=args.limit)
+        list_emails(query=args.query, max_results=args.limit, json_out=args.json_out)
     elif args.command == 'get':
-        get_email(args.id)
+        get_email(args.id, json_out=args.json_out)
     elif args.command == 'archive':
         archive_email(args.id)
     elif args.command == 'send':

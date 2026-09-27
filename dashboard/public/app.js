@@ -90,7 +90,7 @@ function canRender(container) {
 }
 
 /* ── Router: #today (default) | #chat | #reminders | #news | #finance | #memory | #invoices ── */
-const TAB_NAMES = ['today', 'chat', 'reminders', 'news', 'finance', 'transactions', 'trading', 'memory', 'invoices', 'coding', 'settings'];
+const TAB_NAMES = ['today', 'chat', 'reminders', 'news', 'finance', 'transactions', 'trading', 'memory', 'invoices', 'coding', 'tasks', 'settings'];
 
 function parseHash() {
   const h = (location.hash || '#today').replace(/^#/, '');

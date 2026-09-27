@@ -31,12 +31,44 @@ const CodingTab = (() => {
   const $ = id => document.getElementById(id);
   const esc = U.esc;
 
-  async function load() {
+  async function openRepo(repo) {
+    T.active = repo;
+    T.session = null;
+    T.lastMsgCount = 0;
+    T.pending = true;
+    renderBody();
+    startPoll();
+    await refreshSession(true);
+  }
+
+  /* One-time handoff from the Tasks tab: it stashes a ready-made prompt in
+     sessionStorage right before setting location.hash = '#coding/<repo>',
+     rather than stuffing it in the hash itself (task text can be long /
+     multi-line). This only ever fills the textarea — the owner still has
+     to click Send themselves, same as typing it in by hand. */
+  function consumePrefill() {
+    let text;
+    try { text = sessionStorage.getItem('psb:coding-prefill'); } catch (e) { return; }
+    if (!text) return;
+    try { sessionStorage.removeItem('psb:coding-prefill'); } catch (e) { /* ignore */ }
+    const ta = $('coding-input');
+    if (ta) { ta.value = text; ta.focus(); }
+  }
+
+  /* filter: hash sub-path from app.js (e.g. '#coding/my-repo' -> 'my-repo').
+     Deep-links straight into that repo's terminal when it's a known repo
+     and isn't already open. */
+  async function load(filter) {
     const panel = $('tab-coding');
     if (!panel) return;
     if (!T.repos.length) await refreshRepos();
     renderShell(panel);
     bindEvents(panel);
+    if (filter && filter !== T.active && T.repos.some(r => r.name === filter)) {
+      await openRepo(filter);
+      consumePrefill();
+      return;
+    }
     renderBody();
     startPoll();
   }
@@ -328,13 +360,7 @@ const CodingTab = (() => {
       btn.disabled = true;
       try {
         if (action === 'open') {
-          T.active = repo;
-          T.session = null;
-          T.lastMsgCount = 0;
-          T.pending = true;
-          renderBody();
-          startPoll();
-          await refreshSession(true);
+          await openRepo(repo);
         }
         else if (action === 'back') {
           T.active = null;
