@@ -354,6 +354,7 @@ def ensure_tables(conn: sqlite3.Connection) -> None:
 _MANUAL_ONLY_CATEGORIES = [
     # (name, group)
     ('Adeeva', 'Family'),
+    ('Dinda', 'Family'),
 ]
 
 
