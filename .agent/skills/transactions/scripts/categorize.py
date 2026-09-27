@@ -84,6 +84,7 @@ _CAT = {
     'fee':            ('Fees', 'Bank Fee'),
     'loan_payment':   ('Loans', 'Loan Payment'),
     'online_credit':  ('Loans', 'Online Credit'),
+    'car_loan':       ('Loans', 'Car Loan'),
     # Manual-only categories (owner assigns by hand; the categorizer never
     # auto-fires them): money received from a friend (income) and money paid
     # back to a friend (expense).
@@ -96,6 +97,7 @@ _CAT = {
     # files them by hand. Kept out of the auto-fire path on purpose - a name
     # match would sweep in unrelated merchants.
     'adeeva':         ('Family', 'Adeeva'),
+    'dinda':          ('Family', 'Dinda'),
     'uncategorized':  ('Uncategorized', 'Uncategorized'),
 }
 

@@ -87,7 +87,13 @@ def authenticate():
     """Authenticate and return credentials."""
     creds = None
     if os.path.exists(TOKEN_FILE):
-        creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
+        # Scopes come from the token file itself, NOT the module-level
+        # SCOPES default: a workspace's token may have been granted a
+        # narrower scope (e.g. gmail.readonly for the personal account,
+        # which never wants send/modify access). Forcing the broader
+        # default here made refresh() ask Google for a scope the
+        # refresh_token was never consented for -> invalid_scope.
+        creds = Credentials.from_authorized_user_file(TOKEN_FILE)
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())

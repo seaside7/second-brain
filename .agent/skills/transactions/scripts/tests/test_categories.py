@@ -441,6 +441,31 @@ class BcaJournalParserTestCase(unittest.TestCase):
         rows = self._parse(body)
         self.assertEqual(rows[0]['description'], 'Internet Transaction Journal')
 
+    def test_credit_card_bill_payment_uses_total_payment_and_is_outflow(self):
+        # Real production bug: a Credit Card & Paylater bill PAYMENT has
+        # both a Total Bill (what's owed) and a Total Payment (what was
+        # actually paid) in the same email - the amount must be the
+        # latter, never the former. And the transaction TYPE containing
+        # the word "Credit" (a product name, "Credit Card") must not be
+        # mistaken for an inbound-money signal: paying a bill is an
+        # outflow from the account.
+        body = (
+            'You just made a transaction through myBCA. Here are the '
+            'details of your transaction : Status : Successful '
+            'Transaction Date : 26 Sep 2026 15:52:41 Transaction Type : '
+            'Credit Card & Paylater - BCA Source of Fund : 7310****26 '
+            'Card No. / Customer No. : 0000000014****88 Name : ISKANDAR '
+            'Total Bill : IDR 10,212,259.00 '
+            'Total Payment : IDR 100,000.00 '
+            'Remaining Bill : IDR 10,112,259.00 '
+            'Reference No. : 9527120260926155241801TPP5543258200'
+        )
+        rows = self._parse(body)
+        self.assertEqual(len(rows), 1)
+        r = rows[0]
+        self.assertEqual(r['total_amount'], 100000)
+        self.assertEqual(r['direction'], 'out')
+
 
 class ReprocessTestCase(unittest.TestCase):
     """reprocess._reprocess_doc: idempotency + manual-correction preservation."""

@@ -332,6 +332,18 @@ def _parse_email(body: str, provider: str, subject: str,
     return rows
 
 
+def _has_inflow_signal(body_l: str, extra: tuple[str, ...] = ()) -> bool:
+    """True when the body signals money actually coming IN - not just the
+    bare word 'credit'/'kredit' appearing as part of a PRODUCT name
+    ('Credit Card', 'Kartu Kredit'). A "Credit Card & Paylater" journal
+    entry is the owner PAYING their card bill - an outflow - but a bare
+    `'credit' in body_l` check used to true it into 'in' just because the
+    transaction type happens to be named "Credit Card"."""
+    stripped = body_l.replace('credit card', ' ').replace('kartu kredit', ' ')
+    signals = ('credit', 'received', 'dana masuk', 'kredit') + tuple(extra)
+    return any(k in stripped for k in signals)
+
+
 def _parse_bca(body: str, subject: str, occurred_at: str) -> list[dict]:
     body_l = body.lower()
 
@@ -344,7 +356,7 @@ def _parse_bca(body: str, subject: str, occurred_at: str) -> list[dict]:
             return []
         method = _label_value(body, 'Transaction Type') or _label_value(body, 'Tipe') or txn_type or ''
         # Direction from the journal's own wording.
-        direction = 'in' if any(k in body_l for k in ['credit', 'received', 'dana masuk', 'kredit']) else 'out'
+        direction = 'in' if _has_inflow_signal(body_l) else 'out'
 
         # Preferred over the subject: the journal's own payee detail (the
         # subject is just the generic "Internet Transaction Journal").
@@ -363,7 +375,7 @@ def _parse_bca(body: str, subject: str, occurred_at: str) -> list[dict]:
         return []
     if not any(k in body_l for k in ['balance', 'saldo', 'transfer', 'trx', 'transaction', 'mutasi', 'qris']):
         return []
-    direction = 'in' if any(k in body_l for k in ['credit', 'received', 'diterima', 'masuk', 'kredit']) else 'out'
+    direction = 'in' if _has_inflow_signal(body_l, extra=('diterima', 'masuk')) else 'out'
     tx_type, clean = _bca_clean('', subject, body)
     detail, recipient, detail_type = _bca_journal_payee(body, body_l)
     if detail:
