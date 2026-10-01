@@ -97,3 +97,7 @@
 ## Notes
 
 <!-- Preferences, routines, anything else -->
+
+### Trading daily recaps
+
+When asked for a trading summary ("check my trading", "recap", "how did trading go"), answer in chat AND write/append `journal/trading/recaps/YYYY-MM-DD.md` (second-brain owns the analysis). One file per day; same-day asks append. Full rule: CLAUDE.md -> Trading Daily Recap checklist. Data lives in trading-brain; this journal is the analysis record.

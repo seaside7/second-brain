@@ -55,7 +55,9 @@ dashboard-data/
 journal/activity_log.jsonl
 journal/state/
 journal/fathom_registry.json
-journal/trading/
+journal/trading/*
+!journal/trading/recaps/
+!journal/trading/recaps/**
 journal/news_briefings/
 meeting-recorder/config.json
 meeting-recorder/state.json

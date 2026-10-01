@@ -297,6 +297,17 @@ For each recurring task, define the exact steps. The AI follows these in order.
 5. Show draft for approval
 6. Create Google Doc after approval
 
+### Trading Daily Recap
+1. Trigger words: "check my trading", "give me a summary", "recap"/"daily recap", "how did trading go today" - or any trading status/insight request
+2. Answer in chat with the insight, then write the recap
+3. Journal lives in second-brain at `journal/trading/recaps/` (analysis belongs to second-brain even though data lives in trading-brain)
+4. One file per day `YYYY-MM-DD.md`. Multiple asks same day = append an `Update @ HH:MM WIB` section to the same file, never a new file
+5. If a past day was missed, backfill it and mark `_Backfilled <date>_` at the top
+6. Entry sections: Trigger · Status snapshot (per leg: capital, change, position) · today's trades (entries/exits/PnL) · observations & insights · decisions & pending · notes
+7. Reference trading-brain STRATEGY.md / BACKTEST_LOG.md instead of duplicating their content; strategy details stay in trading-brain
+8. Commit + push second-brain `main`, then pull on the VPS (`/home/ubuntu/projects/second-brain`) - stage only the recap + related doc edits
+9. If a strategy change was agreed during the recap, also record it in trading-brain's BACKTEST_LOG.md
+
 ### [Add your own recurring task types here]
 
 ---
