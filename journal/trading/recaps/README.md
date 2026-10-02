@@ -23,3 +23,4 @@ Whenever the user asks for a trading summary/check (e.g. "check my trading", "gi
 | 2026-09-25.md | Fri | SUI removal, $2017.89 ASTER fold, $120/$600 caps, docs update rule |
 | 2026-09-30.md | Wed | Breakout day - swing-gate gap finding, SL-cooldown vs CURRENT re-entry |
 | 2026-10-01.md | Thu | Variant study + ATR-E paper leg deployed (bb 0.015, TP 2.5, gate both, 04:00-10:00) |
+| 2026-10-02.md | Fri | ATR legs removed, focus on CURRENT; improvement backtest |
