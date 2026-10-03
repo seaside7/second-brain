@@ -837,7 +837,7 @@ class InternalTransferRuleTestCase(unittest.TestCase):
         self.assertEqual(r['nature'], 'internal_transfer')
         self.assertEqual(r['confidence'], 'high')
         self.assertEqual(r['group'], 'Transfers')
-        self.assertEqual(r['name'], 'Internal Transfer')
+        self.assertEqual(r['name'], 'Transfer internal')
 
     def test_transfer_in_from_own_name_internal(self):
         r = self._cat(description='Transfer Masuk', transaction_type='transfer',
@@ -851,7 +851,7 @@ class InternalTransferRuleTestCase(unittest.TestCase):
                       recipient='BUDI SANTOSO', direction='out',
                       total_amount=50000)
         self.assertEqual(r['nature'], 'transfer_to_person')
-        self.assertNotEqual(r['name'], 'Internal Transfer')
+        self.assertEqual(r['name'], 'Transfer')
 
     def test_transfer_note_does_not_override_own_name(self):
         r = self._cat(description='Belanja Sayur', transaction_type='transfer',
