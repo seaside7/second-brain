@@ -299,6 +299,36 @@ class CategorizerTestCase(unittest.TestCase):
         self.assertEqual(r['nature'], 'needs_review')
         self.assertNotEqual(r['group'], 'Transfers')
 
+    def test_19b_airpay_shopeepay_own_name_is_topup(self):
+        # Own ShopeePay top-up ('Kirim ke Said Iskandar'): a top-up move,
+        # excluded from spend - not a third-party review.
+        r = self._cat(
+            description='VA - PT AirPay International Indone / ShopeePay '
+                        '(Name sXXXXXXX1 | Kirim ke Said Iskandar)',
+            raw_description='Transfer Type : Transfer to BCA Virtual Account '
+                            'Name : sXXXXXXX1 Company/Product Name : '
+                            'PT AIRPAY INTERNATIONAL INDONE / SHOPEEPAY '
+                            'Description : Kirim ke Said Iskandar',
+            transaction_type='va_payment', provider='bca')
+        self.assertEqual(r['nature'], 'top_up')
+        self.assertEqual(r['group'], 'Transfers')
+        self.assertEqual(r['name'], 'Top-up ShopeePay')
+
+    def test_19c_airpay_shopee_bill_is_spend(self):
+        # SHOPEE Bill (an invoice for goods) is not a wallet top-up - it stays
+        # in the spend flow (Shopee -> Online Shopping).
+        r = self._cat(
+            description='VA - PT AirPay International Indone / Shopee Bill '
+                        '(Name sXXXXXXX1 | Kirim ke Said Iskandar)',
+            raw_description='Transfer Type : Transfer to BCA Virtual Account '
+                            'Name : sXXXXXXX1 Company/Product Name : '
+                            'PT AIRPAY INTERNATIONAL INDONE / SHOPEE Bill '
+                            'Description : Kirim ke Said Iskandar',
+            transaction_type='va_payment', provider='bca')
+        self.assertEqual(r['nature'], 'expense')
+        self.assertEqual(r['group'], 'Shopping')
+        self.assertEqual(r['name'], 'Online Shopping')
+
     def test_20_bni_gopay_topup_to_owner_stays_internal(self):
         r = self._cat(
             description='GoPay Top Up',
@@ -465,7 +495,8 @@ class BcaJournalParserTestCase(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         r = rows[0]
         self.assertEqual(r['description'],
-                         'VA - PT AirPay International Indone / ShopeePay')
+                         'VA - PT AirPay International Indone / ShopeePay '
+                         '(Name DINX LUTXXXXX)')
         self.assertEqual(r['recipient'],
                          'PT AIRPAY INTERNATIONAL INDONE / SHOPEEPAY')
         self.assertEqual(r['transaction_type'], 'va_payment')

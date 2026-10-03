@@ -65,6 +65,7 @@ _CAT = {
     'internal':       ('Transfers', 'Transfer internal'),
     'family':         ('Transfers', 'Transfer keluarga'),
     'topup_3rd':      ('Transfers', 'Top Up (3rd party)'),
+    'topup_shopeepay': ('Transfers', 'Top-up ShopeePay'),
     'bills_elec':     ('Utilities', 'Electricity (PLN)'),
     'bills_internet': ('Utilities', 'Internet'),
     'bills_phone':    ('Utilities', 'Mobile & Data'),
@@ -258,6 +259,19 @@ def _is_third_party_topup(row: dict) -> bool:
     return any(a in text for a in _THIRD_PARTY_ACQUIRERS)
 
 
+def _own_airpay_topup(row: dict) -> bool:
+    """True when an AirPay ShopeePay VA debit funds OUR OWN ShopeePay wallet.
+
+    The enriched description carries the holder detail ('Name sXXXXXXX1') and
+    the email's 'Kirim ke Said Iskandar' line. Only that line proves the
+    account is ours: the masked VA holder alone ('DINX LUTXXXXX' - someone
+    else) is by definition unresolvable, so those rows stay in Review.
+    """
+    text = _text(row)
+    return ('airpay' in text and 'shopeepay' in text
+            and 'kirim ke said iskandar' in text)
+
+
 def _own_person_transfer(conn: sqlite3.Connection, row: dict) -> bool:
     """True when a transfer's counterparty is one of OUR registered accounts.
 
@@ -361,9 +375,17 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
         set_cat('fee', 'fee', 'high', 'Fee keyword')
         return hit
 
-    # 0.7 Bank debit into a third-party acquirer VA (ShopeePay via AirPay
-    #     for someone else's account, ...) is NOT our wallet - Review it.
-    if _is_third_party_topup(row):
+    # 0.7 Bank debit into a third-party acquirer VA (ShopeePay via AirPay).
+    #     'SHOPEE Bill' = paying a Shopee invoice for goods - keep in the spend
+    #     flow. 'SHOPEEPAY' = e-wallet top-up: one addressed to our OWN wallet
+    #     ('Kirim ke Said Iskandar') is a top-up, excluded from spend; any
+    #     other holder (masked, e.g. 'DINX LUTXXXXX') goes to Review - never
+    #     internal, never spend, until the wallet owner is verified.
+    if _is_third_party_topup(row) and 'shopeepay' in _text(row):
+        if _own_airpay_topup(row):
+            set_cat('topup_shopeepay', 'top_up', 'medium',
+                    'Top-up to own ShopeePay wallet')
+            return hit
         set_fallback('Top-up to unverified recipient - verify')
         return hit
 

@@ -474,7 +474,30 @@ def _bca_journal_payee(body: str, body_l: str) -> tuple[str, str, str]:
         if not payee:
             payee = _label_field(body, 'Name')
         if payee:
-            return f'VA - {_display_case(payee)}', payee, 'va_payment'
+            desc = f'VA - {_display_case(payee)}'
+            # Carry the VA holder detail that names the receiving account
+            # (masked) and the 'Kirim ke ...' line, so the owner can tell an
+            # own-account top-up from a third party's. 'Name' is skipped when
+            # it only echoes Company/Product Name; labels are deduped.
+            parts = []
+            va_no = _label_field(body, 'Virtual Account No.')
+            holder = _label_field(body, 'Name')
+            sent = _label_field(body, 'Description')
+            if va_no:
+                parts.append(f'VA no {va_no}')
+            if holder and holder.lower() != payee.lower():
+                parts.append(f'Name {holder}')
+            if sent:
+                s = sent.strip()
+                sl = s.lower()
+                if sl.startswith('kirim ke'):
+                    parts.append('Kirim ke ' +
+                                 _display_case(s[len('kirim ke'):].strip()))
+                elif sl not in (payee.lower(), (holder or '').lower()):
+                    parts.append(s)
+            if parts:
+                desc += ' (' + ' | '.join(parts) + ')'
+            return desc, payee, 'va_payment'
     return '', '', ''
 
 
