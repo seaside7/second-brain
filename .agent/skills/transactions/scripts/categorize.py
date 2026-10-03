@@ -47,10 +47,16 @@ _VA_ONLINE_CREDIT = ('spaylater', 'spinjam', 'gopay later', 'golater', 'paylater
 _WALLET_KEYWORDS = ('gopay', 'go-pay', 'ovo', 'shopeepay', 'shopee pay',
                     'e-wallet', 'ewallet', 'dompet')
 
-# VA acquirers that are never our own wallet (ShopeePay via AirPay, ...). A
-# bank debit into one of these VAs is money out to a third party - it goes
-# to Review, never internal, even when the description says "Top Up".
-_THIRD_PARTY_ACQUIRERS = ('airpay',)
+# VA acquirers that are never our own wallet by acquirer name alone (ShopeePay
+# via AirPay, OVO via Visionet, ...). A bank debit into one of these VAs is
+# money out to a wallet account - it goes to Review (or to our own wallet
+# top-up, see 0.7), never internal, even when the description says "Top Up".
+_THIRD_PARTY_ACQUIRERS = ('airpay', 'visionet')
+
+# Wallet-acquirer VA products: acquirer -> wallet token(s) present in the row.
+# Matching one of these marks the debit as a WALLET top-up, not a purchase.
+_WALLET_ACQUIRERS = {'airpay': ('shopeepay',), 'visionet': ('ovo',)}
+_WALLET_TOPUP_CATS = {'shopeepay': 'topup_shopeepay', 'ovo': 'topup_ovo'}
 
 # Our own wallet companies (GoPay's PT): a VA debit naming one of these is
 # still ours, never third-party.
@@ -66,6 +72,7 @@ _CAT = {
     'family':         ('Transfers', 'Transfer keluarga'),
     'topup_3rd':      ('Transfers', 'Top Up (3rd party)'),
     'topup_shopeepay': ('Transfers', 'Top-up ShopeePay'),
+    'topup_ovo':      ('Transfers', 'Top-up OVO'),
     'bills_elec':     ('Utilities', 'Electricity (PLN)'),
     'bills_internet': ('Utilities', 'Internet'),
     'bills_phone':    ('Utilities', 'Mobile & Data'),
@@ -259,17 +266,36 @@ def _is_third_party_topup(row: dict) -> bool:
     return any(a in text for a in _THIRD_PARTY_ACQUIRERS)
 
 
-def _own_airpay_topup(row: dict) -> bool:
-    """True when an AirPay ShopeePay VA debit funds OUR OWN ShopeePay wallet.
+def _wallet_acquirer(row) -> Optional[str]:
+    """Wallet name when a bank-debit VA is a wallet top-up, else None.
 
-    The enriched description carries the holder detail ('Name sXXXXXXX1') and
-    the email's 'Kirim ke Said Iskandar' line. Only that line proves the
-    account is ours: the masked VA holder alone ('DINX LUTXXXXX' - someone
-    else) is by definition unresolvable, so those rows stay in Review.
+    Only matches when the row names a third-party acquirer VA (AirPay =
+    ShopeePay, Visionet = OVO) AND carries the wallet token. 'SHOPEE Bill' (an
+    invoice for goods) has no wallet token, so it falls through to the spend
+    flow.
+    """
+    if not _is_third_party_topup(row):
+        return None
+    text = _text(row)
+    for wallets in _WALLET_ACQUIRERS.values():
+        for w in wallets:
+            if _has(text, w):
+                return w
+    return None
+
+
+def _own_wallet_va(row: dict) -> bool:
+    """True when a wallet-acquirer VA funds OUR OWN wallet.
+
+    The enriched description carries the holder detail ('Name SAID ISKANDAR',
+    unmasked for OVO) and the email's 'Kirim ke Said Iskandar' line. A masked
+    holder that is not ours ('DINX LUTXXXXX') proves nothing - such rows stay
+    in Review until the wallet owner is verified.
     """
     text = _text(row)
-    return ('airpay' in text and 'shopeepay' in text
-            and 'kirim ke said iskandar' in text)
+    if 'kirim ke said iskandar' in text:
+        return True
+    return re.search(r'\bname\s+said iskandar\b', text) is not None
 
 
 def _own_person_transfer(conn: sqlite3.Connection, row: dict) -> bool:
@@ -375,16 +401,18 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
         set_cat('fee', 'fee', 'high', 'Fee keyword')
         return hit
 
-    # 0.7 Bank debit into a third-party acquirer VA (ShopeePay via AirPay).
-    #     'SHOPEE Bill' = paying a Shopee invoice for goods - keep in the spend
-    #     flow. 'SHOPEEPAY' = e-wallet top-up: one addressed to our OWN wallet
-    #     ('Kirim ke Said Iskandar') is a top-up, excluded from spend; any
-    #     other holder (masked, e.g. 'DINX LUTXXXXX') goes to Review - never
-    #     internal, never spend, until the wallet owner is verified.
-    if _is_third_party_topup(row) and 'shopeepay' in _text(row):
-        if _own_airpay_topup(row):
-            set_cat('topup_shopeepay', 'top_up', 'medium',
-                    'Top-up to own ShopeePay wallet')
+    # 0.7 Bank debit into a wallet-acquirer VA (ShopeePay via AirPay, OVO via
+    #     Visionet). Product 'SHOPEE Bill' (an invoice for goods) keeps its
+    #     place in the spend flow. A wallet top-up addressed to OUR OWN wallet
+    #     ('Name SAID ISKANDAR' / 'Kirim ke Said Iskandar') is excluded from
+    #     spend; any other holder (masked, e.g. 'DINX LUTXXXXX') goes to
+    #     Review - never internal, never spend, until the wallet owner is
+    #     verified.
+    wallet = _wallet_acquirer(row)
+    if wallet is not None:
+        if _own_wallet_va(row):
+            set_cat(_WALLET_TOPUP_CATS[wallet], 'top_up', 'medium',
+                    'Top-up to own wallet')
             return hit
         set_fallback('Top-up to unverified recipient - verify')
         return hit

@@ -329,6 +329,33 @@ class CategorizerTestCase(unittest.TestCase):
         self.assertEqual(r['group'], 'Shopping')
         self.assertEqual(r['name'], 'Online Shopping')
 
+    def test_19d_visionet_ovo_own_name_is_topup(self):
+        # OVO top-up via Visionet VA, holder unmasked as our own name: a
+        # top-up move, excluded from spend.
+        r = self._cat(
+            description='VA - PT Visionet Internasional / OVO '
+                        '(VA no 39358081998986707 | Name SAID ISKANDAR)',
+            raw_description='Transfer Type : Transfer to BCA Virtual Account '
+                            'BCA Virtual Account No. : 39358081998986707 '
+                            'Name : SAID ISKANDAR Company/Product Name : '
+                            'PT VISIONET INTERNASIONAL / OVO',
+            transaction_type='va_payment', provider='bca')
+        self.assertEqual(r['nature'], 'top_up')
+        self.assertEqual(r['group'], 'Transfers')
+        self.assertEqual(r['name'], 'Top-up OVO')
+
+    def test_19e_visionet_ovo_other_holder_is_review(self):
+        # An OVO top-up whose holder is someone else - review, never spend.
+        r = self._cat(
+            description='VA - PT Visionet Internasional / OVO '
+                        '(VA no 39358081998986707 | Name DINX LUTXXXXX)',
+            raw_description='Transfer Type : Transfer to BCA Virtual Account '
+                            'Name : DINX LUTXXXXX Company/Product Name : '
+                            'PT VISIONET INTERNASIONAL / OVO',
+            transaction_type='va_payment', provider='bca')
+        self.assertEqual(r['nature'], 'needs_review')
+        self.assertNotEqual(r['group'], 'Transfers')
+
     def test_20_bni_gopay_topup_to_owner_stays_internal(self):
         r = self._cat(
             description='GoPay Top Up',
