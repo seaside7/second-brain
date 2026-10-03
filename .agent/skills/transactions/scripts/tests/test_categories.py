@@ -410,6 +410,30 @@ class BcaJournalParserTestCase(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]['direction'], 'in')
 
+    def test_gopay_monthly_summary_is_not_a_transaction(self):
+        # Real production bug: GoPay's monthly summary newsletter ("Here's what
+        # you spent in September") contains 'Top Up' in its body, so the gate
+        # accepted it and the parser turned the month's Expense total
+        # (Rp35.781.118) into a fabricated single 'top_up' row. A summary is
+        # an aggregate, never a transaction.
+        body = (
+            "Your Monthly GoPay Summary is Here Here's a quick look at your "
+            "money activity this September Hi, said iskandar! Here's a quick "
+            "look at your money activity this September : Expense "
+            "-Rp35.781.118 Income +Rp39.721.000 View full report on GoPay app "
+            "Expense -Rp35.781.118 90% Transfer 4% Bills 2% Food & drink 3% "
+            "+7 Others A quick look from Dira Your expenses this month are "
+            "110% higher than last month. Manage budget with GoPay Income "
+            "+Rp39.721.000 100% Top Up 868 total cashback GoPay Coins "
+            "cashback from 23 transactions"
+        )
+        subject = "Here's what you spent in September"
+        rows = gmail_sync._parse_gopay(body, subject, '2026-10-03T04:13:00Z')
+        self.assertEqual(rows, [])
+        rows = gmail_sync._parse_email(body, 'gopay', subject,
+                                       'Sat, 03 Oct 2026 04:13:05 +0000')
+        self.assertIn(rows, (None, []))
+
     def test_transfer_uses_beneficiary_and_remarks(self):
         body = (
             'Transfer Type : Transfer to BCA Account\n'

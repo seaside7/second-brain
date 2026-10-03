@@ -1079,6 +1079,15 @@ def _parse_gopay(body: str, subject: str, occurred_at: str) -> list[dict]:
     body_l = body.lower()
     subject_l = (subject or '').lower()
 
+    # Monthly GoPay Summary newsletter ("Here's what you spent in September")
+    # is an AGGREGATE of the month - Expense/Income totals, cashback, top-up
+    # share - not a transaction. Importing it fabricates one giant fake row.
+    if ('monthly gopay summary' in body_l
+            or 'a quick look at your money activity' in body_l
+            or 'view full report on gopay' in body_l
+            or 'what you spent in' in subject_l):
+        return []
+
     # GoPay emails we care about are receipts / transaction history forwards.
     if 'receipt' not in subject_l and 'riwayat transaksi' not in body_l \
             and 'struk' not in body_l and 'transaction history' not in body_l \
