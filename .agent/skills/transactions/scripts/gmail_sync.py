@@ -489,12 +489,9 @@ def _bca_journal_payee(body: str, body_l: str) -> tuple[str, str, str]:
                 parts.append(f'Name {holder}')
             if sent:
                 s = sent.strip()
-                sl = s.lower()
-                if sl.startswith('kirim ke'):
+                if s.lower().startswith('kirim ke'):
                     parts.append('Kirim ke ' +
                                  _display_case(s[len('kirim ke'):].strip()))
-                elif sl not in (payee.lower(), (holder or '').lower()):
-                    parts.append(s)
             if parts:
                 desc += ' (' + ' | '.join(parts) + ')'
             return desc, payee, 'va_payment'
