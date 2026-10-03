@@ -38,6 +38,10 @@ try:
                            suggest_transfer, reject_transfer, unlink_transfer)
     import reports
     from reports import overview, spending_breakdown, fees_total, analytics
+    from trips import (create_trip, update_trip, list_trips, get_trip,
+                       find_trip_candidates, assign as trip_assign,
+                       unassign as trip_unassign)
+    from splits import set_splits, unsplit
     from gmail_sync import sync_gmail
     from scheduler import TransactionScheduler
     from reprocess import reprocess as reprocess_engine
@@ -111,7 +115,11 @@ def route_get(handler) -> None:
     qs = _parse_qs(handler)
 
     try:
-        if path == '/api/transactions/overview':
+        if path == '/api/transactions/trips':
+            _handle_trips_list(handler)
+        elif path.startswith('/api/transactions/trips/'):
+            _handle_trip_path(handler, qs, path)
+        elif path == '/api/transactions/overview':
             _handle_overview(handler, qs)
         elif path == '/api/transactions/list':
             _handle_list(handler, qs)
@@ -144,6 +152,73 @@ def route_get(handler) -> None:
     except Exception as e:
         traceback.print_exc()
         _err(handler, 500, f'Server error: {e}')
+
+
+# ── trips (GET) ─────────────────────────────────────────────────────────
+
+def _handle_trips_list(handler) -> None:
+    conn = _get_db(handler)
+    if not conn:
+        _err(handler, 403, 'Not available in samudera mode')
+        return
+    try:
+        trips = store.list_trips(conn)
+        for t in trips:
+            br = reports.trip_breakdown(conn, trip_id=t['id'])
+            if br.get('ok'):
+                t['spend_total'] = br['spend_total']
+                t['member_count'] = br['member_count']
+        _ok(handler, {'trips': trips, 'count': len(trips)})
+    finally:
+        conn.close()
+
+
+def _handle_trip_path(handler, qs: dict, path: str) -> None:
+    rest = path[len('/api/transactions/trips/'):]
+    if rest.endswith('/candidates'):
+        tid = rest[: -len('/candidates')]
+        if not tid.isdigit():
+            _err(handler, 404, 'Not found')
+            return
+        _handle_trip_candidates(handler, int(tid), qs)
+    elif rest.isdigit():
+        _handle_trip_detail(handler, int(rest))
+    elif rest.endswith('/update'):
+        _err(handler, 404, 'Use POST to update a trip')
+    else:
+        _err(handler, 404, 'Not found')
+
+
+def _handle_trip_detail(handler, trip_id: int) -> None:
+    conn = _get_db(handler)
+    if not conn:
+        _err(handler, 403, 'Not available in samudera mode')
+        return
+    try:
+        br = reports.trip_breakdown(conn, trip_id=trip_id)
+        if not br.get('ok'):
+            _err(handler, 404, br.get('error', 'Trip not found'))
+            return
+        _ok(handler, br)
+    finally:
+        conn.close()
+
+
+def _handle_trip_candidates(handler, trip_id: int, qs: dict) -> None:
+    conn = _get_db(handler)
+    if not conn:
+        _err(handler, 403, 'Not available in samudera mode')
+        return
+    try:
+        result = find_trip_candidates(
+            conn, trip_id=trip_id,
+            from_date=qs.get('from', [None])[0] or '',
+            to_date=qs.get('to', [None])[0] or '',
+            keyword=qs.get('q', [None])[0] or '',
+            include_assigned=qs.get('include_assigned', ['0'])[0] == '1')
+        _ok(handler, result)
+    finally:
+        conn.close()
 
 
 def _range_from_qs(qs: dict) -> tuple[Optional[str], Optional[str]]:
@@ -184,18 +259,22 @@ def _handle_list(handler, qs: dict) -> None:
         offset = int(qs.get('offset', ['0'])[0])
         from_date, to_date = _range_from_qs(qs)
         cat = qs.get('category', [None])[0]
+        trip = qs.get('trip', [None])[0]
+        trip_id = int(trip) if trip and trip.isdigit() else None
         rows = list_ledger(conn,
             nature=qs.get('nature', [None])[0],
             review_status=qs.get('review', [None])[0],
             txn_status=qs.get('status', [None])[0],
             account_id=int(qs['account'][0]) if 'account' in qs else None,
             category_id=int(cat) if cat else None,
+            trip_id=trip_id,
             from_date=from_date,
             to_date=to_date,
             search=qs.get('q', [None])[0],
             limit=min(limit, 500),
             offset=offset)
         total = count_ledger(conn, category_id=int(cat) if cat else None,
+                             trip_id=trip_id,
                              from_date=from_date, to_date=to_date)
         _ok(handler, {'rows': rows, 'total': total, 'limit': limit, 'offset': offset})
     finally:
@@ -417,7 +496,20 @@ def route_post(handler) -> None:
     body = _read_body(handler)
 
     try:
-        if path == '/api/transactions/upload':
+        if path == '/api/transactions/trips/create':
+            _handle_trip_create(handler, body)
+        elif path == '/api/transactions/trips/assign':
+            _handle_trip_assign(handler, body)
+        elif path == '/api/transactions/trips/unassign':
+            _handle_trip_unassign(handler, body)
+        elif path.startswith('/api/transactions/trips/') and path.endswith('/update'):
+            tid = int(path.split('/')[-2])
+            _handle_trip_update(handler, tid, body)
+        elif path == '/api/transactions/splits/set':
+            _handle_splits_set(handler, body)
+        elif path.startswith('/api/transactions/splits/') and path.endswith('/unsplit'):
+            _handle_splits_unsplit(handler, int(path.split('/')[-2]))
+        elif path == '/api/transactions/upload':
             _handle_upload(handler, body)
         elif path == '/api/transactions/upload/screenshot':
             _handle_upload_screenshot(handler, body)
@@ -464,6 +556,113 @@ def route_post(handler) -> None:
     except Exception as e:
         traceback.print_exc()
         _err(handler, 500, f'Server error: {e}')
+
+
+def _handle_trip_create(handler, body: dict) -> None:
+    conn = _get_db(handler)
+    if not conn:
+        _err(handler, 403, 'Not available in samudera mode')
+        return
+    try:
+        result = create_trip(
+            conn,
+            name=body.get('name', ''),
+            destination=body.get('destination', ''),
+            start_date=(body.get('start_date') or '')[:10],
+            end_date=(body.get('end_date') or '')[:10],
+            notes=body.get('notes', ''))
+        if result.get('ok'):
+            _ok(handler, result)
+        else:
+            _err(handler, 400, result.get('error', 'Create failed'))
+    finally:
+        conn.close()
+
+
+def _handle_trip_update(handler, trip_id: int, body: dict) -> None:
+    conn = _get_db(handler)
+    if not conn:
+        _err(handler, 403, 'Not available in samudera mode')
+        return
+    try:
+        result = update_trip(
+            conn, trip_id=trip_id,
+            name=body.get('name'),
+            destination=body.get('destination'),
+            start_date=(body.get('start_date') or '')[:10] if 'start_date' in body else None,
+            end_date=(body.get('end_date') or '')[:10] if 'end_date' in body else None,
+            notes=body.get('notes'))
+        if result.get('ok'):
+            _ok(handler, result)
+        else:
+            _err(handler, 400, result.get('error', 'Update failed'))
+    finally:
+        conn.close()
+
+
+def _handle_trip_assign(handler, body: dict) -> None:
+    conn = _get_db(handler)
+    if not conn:
+        _err(handler, 403, 'Not available in samudera mode')
+        return
+    try:
+        result = trip_assign(
+            conn, trip_id=body.get('trip_id'),
+            ledger_ids=body.get('ledger_ids') or [],
+            actor=body.get('actor', 'user'))
+        if result.get('ok'):
+            _ok(handler, result)
+        else:
+            _err(handler, 400, result.get('error', 'Assign failed'))
+    finally:
+        conn.close()
+
+
+def _handle_trip_unassign(handler, body: dict) -> None:
+    conn = _get_db(handler)
+    if not conn:
+        _err(handler, 403, 'Not available in samudera mode')
+        return
+    try:
+        result = trip_unassign(
+            conn, ledger_ids=body.get('ledger_ids') or [],
+            actor=body.get('actor', 'user'))
+        if result.get('ok'):
+            _ok(handler, result)
+        else:
+            _err(handler, 400, result.get('error', 'Unassign failed'))
+    finally:
+        conn.close()
+
+
+def _handle_splits_set(handler, body: dict) -> None:
+    conn = _get_db(handler)
+    if not conn:
+        _err(handler, 403, 'Not available in samudera mode')
+        return
+    try:
+        result = set_splits(
+            conn, ledger_id=body.get('ledger_id'),
+            allocations=body.get('allocations') or [],
+            actor=body.get('actor', 'user'))
+        if result.get('ok'):
+            _ok(handler, result)
+        else:
+            _err(handler, 400, result.get('error', 'Split failed'))
+    finally:
+        conn.close()
+
+
+def _handle_splits_unsplit(handler, ledger_id: int) -> None:
+    conn = _get_db(handler)
+    if not conn:
+        _err(handler, 403, 'Not available in samudera mode')
+        return
+    try:
+        result = unsplit(conn, ledger_id=ledger_id, actor='user')
+        _ok(handler, result)
+    finally:
+        conn.close()
 
 
 def _handle_upload(handler, body: dict) -> None:

@@ -4033,3 +4033,46 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
   color: var(--text-muted); background: var(--bg-glass); border-color: var(--border); padding: 4px 7px;
 }
 .task-dismiss-btn:hover, .task-reopen-btn:hover { color: var(--text-primary); border-color: var(--border-active); }
+
+/* ═══════════════════════════════════════════
+   TRANSACTIONS · TRIPS VIEW
+   ═══════════════════════════════════════════ */
+.tx-trip-toolbar { display: flex; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-2); }
+.tx-trip-form {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  padding: var(--sp-2) 0 var(--sp-3); border-bottom: 1px dashed var(--border);
+  margin-bottom: var(--sp-3);
+}
+.tx-trip-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--sp-2);
+}
+.tx-trip-card {
+  text-align: left; cursor: pointer; border-radius: var(--radius-md);
+  background: var(--bg-glass); border: 1px solid var(--border);
+  padding: var(--sp-3); display: flex; flex-direction: column; gap: 4px;
+  transition: border-color .12s, background .12s, transform .08s;
+  font: inherit; color: var(--text-primary);
+}
+.tx-trip-card:hover {
+  border-color: var(--border-active); background: var(--bg-hover);
+  transform: translateY(-1px);
+}
+.tx-trip-name { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tx-trip-meta { font-size: var(--fs-xs); color: var(--text-muted); }
+.tx-trip-spend { font-family: var(--font-mono); font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.tx-trip-total { text-align: right; }
+.tx-trip-total b { font-family: var(--font-mono); font-size: var(--fs-lg); font-variant-numeric: tabular-nums; }
+.tx-trip-excluded {
+  margin-top: var(--sp-2); font-size: var(--fs-xs); color: var(--text-muted);
+  border-top: 1px dashed var(--border); padding-top: var(--sp-2);
+}
+.tx-trip-cat { margin-bottom: var(--sp-2); }
+.tx-trip-cat-head {
+  display: flex; justify-content: space-between; gap: var(--sp-2);
+  font-size: var(--fs-sm); margin-bottom: 3px;
+}
+.tx-trip-bar { background: var(--bg-hover); border-radius: 999px; height: 8px; overflow: hidden; }
+.tx-trip-bar-fill { height: 100%; border-radius: 999px; min-width: 2px; }
+.tx-trip-cands-top { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: var(--sp-2); }
+.tx-trip-cands-top .tx-select { flex: 1 1 220px; }

@@ -12,6 +12,13 @@ from typing import Any, Optional
 
 import schema
 
+# ── trip accounting semantics (single source of truth) ─────────────────────
+# Trip spend = every assigned allocation counted exactly once. Natures that
+# never count even when explicitly assigned; and income natures that count as
+# movement, not spend.
+TRIP_EXCLUDED_NATURES = ('internal_transfer', 'top_up', 'void')
+TRIP_INCOME_NATURES = ('income', 'refund', 'cashback')
+
 # ── helpers ──────────────────────────────────────────────────────────────
 
 def _now_wib() -> str:
@@ -454,13 +461,42 @@ def update_trip(conn: sqlite3.Connection, trip_id: int, **fields) -> bool:
     return True
 
 def list_trips(conn: sqlite3.Connection) -> list[dict]:
-    return [dict(r) for r in conn.execute(
+    trips = [dict(r) for r in conn.execute(
         "SELECT t.*, "
-        "  SUM(CASE WHEN l.nature='expense' THEN l.amount ELSE 0 END) AS spend_total, "
         "  COUNT(l.id) AS member_count "
         "FROM trips t "
         "LEFT JOIN ledger_txns l ON l.trip_id=t.id "
         "GROUP BY t.id ORDER BY t.start_date DESC, t.id DESC").fetchall()]
+    for t in trips:
+        t['spend_total'] = trip_spend_total(conn, t['id'])
+    return trips
+
+def trip_spend_total(conn: sqlite3.Connection, trip_id: int) -> int:
+    """Total trip spend under the resolved accounting rules.
+
+    - Trip-pinned split allocations always count their split amount.
+    - Whole-row members count their amount UNLESS the row also carries
+      trip-pinned splits (those split amounts already cover it - never count
+      a parent twice).
+    - 'internal_transfer', 'top_up' and 'void' never count, even if assigned.
+    - Income natures ('income'/'refund'/'cashback') are movement, not spend.
+    """
+    s = conn.execute(
+        "SELECT COALESCE(SUM(amount),0) FROM txn_splits WHERE trip_id=?",
+        (trip_id,)).fetchone()[0]
+    split_total = int(s or 0)
+    rows = [dict(r) for r in conn.execute(
+        "SELECT l.id, l.amount, l.nature, "
+        "       EXISTS(SELECT 1 FROM txn_splits t "
+        "              WHERE t.parent_ledger_id=l.id) AS has_split "
+        "FROM ledger_txns l WHERE l.trip_id=?",
+        (trip_id,)).fetchall()]
+    row_total = sum(
+        int(r['amount']) for r in rows
+        if not r['has_split']
+        and r['nature'] not in TRIP_EXCLUDED_NATURES
+        and r['nature'] not in TRIP_INCOME_NATURES)
+    return split_total + row_total
 
 def list_trip_members(conn: sqlite3.Connection, trip_id: int) -> list[dict]:
     """Ledger rows currently assigned to a trip (reuses the list join shape)."""

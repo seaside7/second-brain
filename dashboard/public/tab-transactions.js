@@ -76,10 +76,15 @@ const TransactionsTab = (() => {
   let _ovTransfers = false;  // person-transfers count as spend
   /* all-view drill-down state (set by chart clicks) */
   let _allCat = '';          // category id filter, '' = all
+  let _allTrip = '';         // trip id filter, '' = all
+  let _allTrips = [];        // cached trips for the dropdown
   /* transfers-view state */
   let _trNature = 'all';     // all | transfer_to_person | internal_transfer | top_up
   let _trPage = 0;
   let _trPageSize = 50;
+  /* trips-view state */
+  let _tripDetailId = null;  // active trip id, null = list
+  let _tripKeyword = '';     // candidate search keyword
 
   /* Query string for /api/transactions/analytics from overview state. */
   function _analyticsQS() {
@@ -144,6 +149,7 @@ const TransactionsTab = (() => {
     { id: 'overview',  label: 'Overview',  icon: 'chart' },
     { id: 'all',       label: 'All Txns',  icon: 'list' },
     { id: 'transfers', label: 'Transfers', icon: 'refresh' },
+    { id: 'trips',     label: 'Trips',     icon: 'briefcase' },
     { id: 'review',    label: 'Review',    icon: 'checkCircle', badge: true },
     { id: 'imports',   label: 'Imports',   icon: 'download' },
     { id: 'rules',     label: 'Rules',     icon: 'cog' },
@@ -278,6 +284,7 @@ const rpSigned = n => {
     const panel = document.getElementById('tab-transactions');
     if (!panel) return;
     _activeView = (filter && VIEWS.find(v => v.id === filter)) ? filter : 'overview';
+    if (_activeView !== 'trips') _tripDetailId = null;
     render(panel);
     await refreshView();
   }
@@ -319,6 +326,7 @@ const rpSigned = n => {
     panel.querySelectorAll('.tx-chip').forEach(b =>
       b.addEventListener('click', () => {
         _activeView = b.dataset.view;
+        if (_activeView !== 'trips') _tripDetailId = null;
         location.hash = `#transactions/${_activeView}`;
       }));
     panel.querySelector('#tx-period').addEventListener('change', e => {
@@ -378,6 +386,7 @@ const rpSigned = n => {
         case 'overview':  await _renderOverview(body); break;
         case 'all':       await _renderAll(body); break;
         case 'transfers': await _renderTransfers(body); break;
+        case 'trips':     await _renderTrips(body); break;
         case 'review':    await _renderReview(body); break;
         case 'imports':   await _renderImports(body); break;
         case 'rules':     await _renderRules(body); break;
@@ -673,12 +682,19 @@ const rpSigned = n => {
   async function _renderAll(el) {
     const size = _allPageSize;
     const catQ = _allCat ? `&category=${encodeURIComponent(_allCat)}` : '';
-    let d = await U.fetchJSON(`/api/transactions/list?limit=${size}&offset=${_allPage * size}&${_rangeQS()}${catQ}`);
+    const tripQ = _allTrip ? `&trip=${encodeURIComponent(_allTrip)}` : '';
+    let d = await U.fetchJSON(`/api/transactions/list?limit=${size}&offset=${_allPage * size}&${_rangeQS()}${catQ}${tripQ}`);
     const total = d.total || 0;
     const pages = Math.max(1, Math.ceil(total / size));
     if (_allPage >= pages) {
       _allPage = Math.max(0, pages - 1);
       return _renderAll(el);
+    }
+    if (!_allTrips.length) {
+      try {
+        const td = await U.fetchJSON('/api/transactions/trips');
+        _allTrips = td.trips || [];
+      } catch (_) { /* dropdown stays empty */ }
     }
     const pager = (d.rows || []).length || total > size ? `
       <div class="tx-pager">
@@ -695,12 +711,17 @@ const rpSigned = n => {
         <div class="tx-card-header">
           <h3 class="tx-card-title">All Transactions (${total})</h3>
           <span class="ov-allfilters">
+            <select id="tx-all-trip" class="tx-select" title="Filter by trip">
+              <option value="">All trips</option>
+              ${_allTrips.map(t =>
+                `<option value="${t.id}" ${String(t.id) === String(_allTrip) ? 'selected' : ''}>${U.esc(t.name)}</option>`).join('')}
+            </select>
             <select id="tx-all-cat" class="tx-select" title="Filter by category">
               <option value="">All categories</option>
               ${(_categories || []).map(c =>
                 `<option value="${c.id}" ${String(c.id) === String(_allCat) ? 'selected' : ''}>${U.esc(c.name)}</option>`).join('')}
             </select>
-            ${_allCat || (_from && _to && _period === 'custom') ? '<button class="btn tx-btn-sm" id="tx-all-clear">Clear</button>' : ''}
+            ${_allCat || _allTrip || (_from && _to && _period === 'custom') ? '<button class="btn tx-btn-sm" id="tx-all-clear">Clear</button>' : ''}
           </span>
         </div>
         ${pages > 1 ? `<span class="tx-pager-info">showing ${_allPage * size + 1}–${Math.min((_allPage + 1) * size, total)}</span>` : ''}
@@ -711,9 +732,13 @@ const rpSigned = n => {
     el.querySelector('#tx-all-cat').addEventListener('change', e => {
       _allCat = e.target.value; _allPage = 0; refreshView();
     });
+    const tripSel = el.querySelector('#tx-all-trip');
+    if (tripSel) tripSel.addEventListener('change', e => {
+      _allTrip = e.target.value; _allPage = 0; refreshView();
+    });
     const clr = el.querySelector('#tx-all-clear');
     if (clr) clr.addEventListener('click', () => {
-      _allCat = ''; _allPage = 0; refreshView();
+      _allCat = ''; _allTrip = ''; _allPage = 0; refreshView();
     });
     if (pages > 1) {
       el.querySelectorAll('[data-pg]').forEach(b => b.addEventListener('click', () => {
@@ -778,6 +803,227 @@ const rpSigned = n => {
       if (b.dataset.pg === 'prev' && _trPage > 0) { _trPage--; refreshView(); }
       if (b.dataset.pg === 'next' && _trPage < pages - 1) { _trPage++; refreshView(); }
     }));
+  }
+
+  /* ── trips ─────────────────────────────────────────────────────────── */
+
+  async function _renderTrips(el) {
+    if (_tripDetailId) return _renderTripDetail(el, _tripDetailId);
+    let d;
+    try {
+      d = await U.fetchJSON('/api/transactions/trips');
+    } catch (e) {
+      el.innerHTML = `<div class="tx-error">Could not load trips: ${U.esc(e.message)}</div>`;
+      return;
+    }
+    const trips = d.trips || [];
+    const cards = trips.map(t => {
+      const dates = (t.start_date && t.end_date)
+        ? `${U.esc((t.start_date || '').slice(0, 10))} – ${U.esc((t.end_date || '').slice(0, 10))}`
+        : ((t.start_date || '').slice(0, 10) || 'no dates');
+      const dest = t.destination ? ` · ${U.esc(t.destination)}` : '';
+      return `<button class="tx-trip-card" data-trip="${t.id}" title="Open ${U.esc(t.name)}">
+        <div class="tx-trip-name">${U.esc(t.name)}${dest}</div>
+        <div class="tx-trip-meta">${dates} · ${t.member_count || 0} items</div>
+        <div class="tx-trip-spend">${rp(t.spend_total)}</div>
+      </button>`;
+    }).join('') || '<div class="tx-empty">No trips yet. Create one to group a journey\'s costs, then assign its transactions.</div>';
+
+    el.innerHTML = `
+      <div class="tx-card">
+        <div class="tx-card-header">
+          <h3 class="tx-card-title">Trips</h3>
+          <button id="tx-trip-new" class="btn tx-btn-outline">${Comp.ic('plus')} New Trip</button>
+        </div>
+        <div id="tx-trip-form" class="tx-trip-form" hidden>
+          <input id="tf-name" class="tx-select" placeholder="Trip name *">
+          <input id="tf-dest" class="tx-select" placeholder="Destination">
+          <input id="tf-start" class="tx-select tx-date" type="date" title="Start date">
+          <input id="tf-end" class="tx-select tx-date" type="date" title="End date">
+          <button id="tf-save" class="btn tx-btn-primary">Create</button>
+          <button id="tf-cancel" class="btn tx-btn-outline">Cancel</button>
+        </div>
+        <div class="tx-trip-grid">${cards}</div>
+      </div>
+    `;
+    el.querySelectorAll('[data-trip]').forEach(b => b.addEventListener('click', () => {
+      _tripDetailId = Number(b.dataset.trip);
+      refreshView();
+    }));
+    const f = el.querySelector('#tx-trip-form');
+    el.querySelector('#tx-trip-new').addEventListener('click', () => { f.hidden = !f.hidden; });
+    el.querySelector('#tf-cancel').addEventListener('click', () => { f.hidden = true; });
+    el.querySelector('#tf-save').addEventListener('click', async () => {
+      const name = (el.querySelector('#tf-name').value || '').trim();
+      if (!name) { toast('Trip name is required', false); return; }
+      const start = el.querySelector('#tf-start').value || '';
+      const end = el.querySelector('#tf-end').value || '';
+      if (start && end && end < start) { toast('End date is before start date', false); return; }
+      _busy(true);
+      try {
+        const res = await _post('/api/transactions/trips/create', {
+          name,
+          destination: (el.querySelector('#tf-dest').value || '').trim(),
+          start_date: start, end_date: end,
+        }, 15000);
+        toast('Trip created', true);
+        _tripDetailId = res.trip_id;
+        refreshView();
+      } catch (e) { toast(e.message, false); }
+      finally { _busy(false); }
+    });
+  }
+
+  function _tripMemberRow(m) {
+    const inDir = (m.nature === 'refund' || m.nature === 'cashback' || m.nature === 'income') ? 'in' : 'out';
+    const sign = inDir === 'in' ? '+' : '−';
+    const catCell = m.kind === 'split'
+      ? `<div class="tx-cat-wrap"><span class="tx-desc-main">${U.esc(m.category_name || '—')}</span>${m.notes ? `<div class="tx-desc-sub">${U.esc(m.notes)}</div>` : ''}</div>`
+      : `<div class="tx-cat-wrap">${_catSelect({ id: m.id, category_id: m.category_id, direction: inDir })}</div>`;
+    const src = m.kind === 'split'
+      ? `<span class="tx-badge tx-badge-muted" title="Allocated from a shared parent transfer">split</span>`
+      : `<span class="tx-badge">row</span>`;
+    const remove = m.kind === 'row'
+      ? `<button class="btn tx-btn-sm" data-unassign="${m.id}" title="Remove from trip" aria-label="Remove from trip">${Comp.ic('close')}</button>`
+      : '';
+    return `<tr class="tx-tr" data-id="${m.id}">
+      <td class="tx-td-date" data-label="Date">${_fmtDate(m.occurred_at)}</td>
+      <td class="tx-td-desc" data-label="Description"><div class="tx-desc-main">${U.esc(m.description || 'Unknown')}</div></td>
+      <td class="tx-td-cat" data-label="Category">${catCell}</td>
+      <td class="tx-td-wallet" data-label="Source">${src} ${_walletHtml(m.provider)}</td>
+      <td class="tx-td-amount ${inDir === 'in' ? 'tx-pos' : 'tx-neg'}" data-label="Amount">${sign}${rp(m.amount)}</td>
+      <td class="tx-td-status" data-label="">${remove}</td>
+    </tr>`;
+  }
+
+  function _candRow(c) {
+    const sign = c.direction === 'in' ? '+' : '−';
+    const dir = c.direction === 'in' ? 'tx-pos' : 'tx-neg';
+    return `<tr class="tx-tr">
+      <td class="tx-td-date" data-label=""><input type="checkbox" class="tx-cand-check" value="${c.id}"></td>
+      <td class="tx-td-date" data-label="Date">${_fmtDate(c.occurred_at)}</td>
+      <td class="tx-td-desc" data-label="Description"><div class="tx-desc-main">${U.esc(c.description || c.merchant || 'Unknown')}</div></td>
+      <td class="tx-td-wallet" data-label="Account">${_walletHtml(c.provider)}</td>
+      <td class="tx-td-cat" data-label="Category"><span class="tx-desc-main">${U.esc(c.category_name || '—')}</span></td>
+      <td class="tx-td-amount ${dir}" data-label="Amount">${sign}${rp(c.amount)}</td>
+    </tr>`;
+  }
+
+  async function _renderTripDetail(el, id) {
+    let d;
+    try { d = await U.fetchJSON(`/api/transactions/trips/${id}`); }
+    catch (e) {
+      el.innerHTML = `<div class="tx-error">Could not load trip: ${U.esc(e.message)}</div>`;
+      return;
+    }
+    const t = d.trip || {};
+    const mov = Object.entries(d.movement || {})
+      .filter(([, v]) => v)
+      .map(([k, v]) => `<span class="tx-badge tx-badge-muted">${U.esc(k)} ${rp(v)}</span>`).join('');
+    const dates = (t.start_date && t.end_date)
+      ? `${U.esc((t.start_date || '').slice(0, 10))} to ${U.esc((t.end_date || '').slice(0, 10))}`
+      : (t.start_date || '').slice(0, 10);
+    const rows = (d.members || []).map(_tripMemberRow).join('');
+    const catBars = (d.by_category || []).map((c, i) => {
+      const pct = d.spend_total ? Math.round(c.total / d.spend_total * 100) : 0;
+      return `<div class="tx-trip-cat">
+        <div class="tx-trip-cat-head"><span>${U.esc(c.category_name)}</span><span class="tx-num">${rp(c.total)}</span></div>
+        <div class="tx-trip-bar"><div class="tx-trip-bar-fill" style="width:${pct}%;background:var(--cat-${(i % 8) + 1})"></div></div>
+      </div>`;
+    }).join('');
+
+    el.innerHTML = `
+      <div class="tx-trip-toolbar"><button id="tx-trip-back" class="btn tx-btn-outline">← Trips</button></div>
+      <div class="tx-card">
+        <div class="tx-card-header">
+          <div>
+            <h3 class="tx-card-title">${U.esc(t.name || `Trip ${id}`)}${t.destination ? ` · ${U.esc(t.destination)}` : ''}</h3>
+            ${dates ? `<div class="tx-trip-meta">${dates}${t.notes ? ` · ${U.esc(t.notes)}` : ''}</div>` : ''}
+          </div>
+          <div class="tx-trip-total">Total spend <b>${rp(d.spend_total)}</b></div>
+        </div>
+        ${(d.excluded && d.excluded.length) ? `<div class="tx-trip-excluded">${d.excluded.length} assigned row(s) do not count toward spend: ${U.esc(d.excluded.map(x => x.reason).join('; '))}.</div>` : ''}
+      </div>
+      ${catBars ? `<div class="tx-card"><div class="tx-card-header"><h3 class="tx-card-title">By category</h3></div>${catBars}</div>` : ''}
+      <div class="tx-card">
+        <div class="tx-card-header"><h3 class="tx-card-title">Members (${(d.members || []).length})</h3>${mov}</div>
+        ${(d.members && d.members.length)
+          ? `<div class="tx-table-wrap"><table class="tx-table">
+              <colgroup><col class="tx-col-date"><col class="tx-col-desc"><col class="tx-col-cat"><col class="tx-col-account"><col class="tx-col-amount"></colgroup>
+              <thead><tr><th class="tx-th-date">Date</th><th>Description</th><th>Category</th><th>Source</th><th class="tx-th-amount">Amount</th><th></th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table></div>`
+          : '<div class="tx-empty">No members yet. Search below to assign transactions.</div>'}
+      </div>
+      <div class="tx-card">
+        <div class="tx-card-header"><h3 class="tx-card-title">Assign transactions</h3></div>
+        <div class="tx-trip-cands-top">
+          <input id="tx-cand-q" class="tx-select" placeholder="Search description / merchant…" value="${U.esc(_tripKeyword)}">
+          <button id="tx-cand-search" class="btn tx-btn-outline">${Comp.ic('search')} Search</button>
+          <button id="tx-cand-assign" class="btn tx-btn-primary" disabled>Assign selected</button>
+        </div>
+        <div id="tx-cand-rows"><div class="tx-empty">Type a keyword to find transactions to add (searched within the trip date band). Already-assigned and wallet top-ups are excluded; transfers can be added but never count toward spend.</div></div>
+      </div>
+    `;
+
+    el.querySelector('#tx-trip-back').addEventListener('click', () => {
+      _tripDetailId = null;
+      refreshView();
+    });
+    el.querySelectorAll('[data-unassign]').forEach(b => b.addEventListener('click', async () => {
+      _busy(true);
+      try {
+        await _post('/api/transactions/trips/unassign', { ledger_ids: [Number(b.dataset.unassign)] }, 15000);
+        toast('Removed from trip', true);
+        refreshView();
+      } catch (e) { toast(e.message, false); }
+      finally { _busy(false); }
+    }));
+    _wireCandidates(el, id);
+  }
+
+  async function _searchCandidates(el, id) {
+    const q = (el.querySelector('#tx-cand-q').value || '').trim();
+    _tripKeyword = q;
+    const rowsEl = el.querySelector('#tx-cand-rows');
+    rowsEl.innerHTML = '<div class="tx-loading">Searching…</div>';
+    try {
+      const d = await U.fetchJSON(`/api/transactions/trips/${id}/candidates?q=${encodeURIComponent(q)}`);
+      const rows = d.rows || [];
+      if (!rows.length) {
+        rowsEl.innerHTML = '<div class="tx-empty">No unassigned transactions match within the trip date band.</div>';
+        return;
+      }
+      rowsEl.innerHTML = `<div class="tx-table-wrap"><table class="tx-table">
+        <thead><tr><th></th><th class="tx-th-date">Date</th><th>Description</th><th>Account</th><th>Category</th><th class="tx-th-amount">Amount</th></tr></thead>
+        <tbody>${rows.map(_candRow).join('')}</tbody>
+      </table></div>`;
+      const btn = el.querySelector('#tx-cand-assign');
+      el.querySelectorAll('.tx-cand-check').forEach(cb => cb.addEventListener('change', () => {
+        btn.disabled = !el.querySelector('.tx-cand-check:checked');
+      }));
+    } catch (e) {
+      rowsEl.innerHTML = `<div class="tx-error">${U.esc(e.message)}</div>`;
+    }
+  }
+
+  function _wireCandidates(el, id) {
+    el.querySelector('#tx-cand-search').addEventListener('click', () => _searchCandidates(el, id));
+    el.querySelector('#tx-cand-q').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); _searchCandidates(el, id); }
+    });
+    el.querySelector('#tx-cand-assign').addEventListener('click', async () => {
+      const ids = Array.from(el.querySelectorAll('.tx-cand-check:checked')).map(cb => Number(cb.value));
+      if (!ids.length) return;
+      _busy(true);
+      try {
+        const r = await _post('/api/transactions/trips/assign',
+                              { trip_id: id, ledger_ids: ids }, 15000);
+        toast(`Assigned ${r.assigned.length} to trip${r.already_assigned.length ? ` (${r.already_assigned.length} already there)` : ''}`, true);
+        refreshView();
+      } catch (e) { toast(e.message, false); }
+      finally { _busy(false); }
+    });
   }
 
   /* ── review queue ───────────────────────────────────────────────── */

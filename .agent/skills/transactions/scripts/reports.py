@@ -22,6 +22,8 @@ import store
 SPEND_NATURES = ('expense',)
 FEE_NATURES = ('fee',)
 INCOME_NATURES = ('income', 'refund', 'cashback')
+TRIP_EXCLUDED_NATURES = store.TRIP_EXCLUDED_NATURES
+TRIP_INCOME_NATURES = store.TRIP_INCOME_NATURES
 
 
 def period_bounds(period: str) -> tuple[Optional[str], Optional[str]]:
@@ -212,6 +214,147 @@ def analytics(conn: sqlite3.Connection, *,
         'mom': mom,
         'totals': totals,
     }
+
+
+def trip_breakdown(conn: sqlite3.Connection, *, trip_id: int) -> dict:
+    """Per-trip spend report under the resolved trip accounting rules.
+
+    Members come from two sources, never double-counted:
+    - whole-row members: ledger rows with l.trip_id = trip
+    - split members:    txn_splits allocations pinned to the trip
+
+    A row that carries trip-pinned splits contributes ONLY its split amounts,
+    never its own amount. 'internal_transfer'/'top_up'/'void' never count even
+    when assigned. Income natures are reported as movement, not spend.
+
+    Returns {ok, trip, spend_total, member_count, members, by_category,
+    movement, excluded}.
+    """
+    trip = store.get_trip(conn, trip_id)
+    if not trip:
+        return {'ok': False, 'error': f'Trip {trip_id} not found'}
+
+    rows = [dict(r) for r in conn.execute(
+        "SELECT l.id, l.amount, l.direction, l.nature, l.category_id, "
+        "       l.review_status, l.notes, "
+        "       e.occurred_at, e.provider, e.description, e.merchant, "
+        "       e.recipient, "
+        "       c.name AS category_name, c.\"group\" AS category_group "
+        "FROM ledger_txns l "
+        "LEFT JOIN extracted_txns e ON e.id=l.ext_id "
+        "LEFT JOIN categories c ON c.id=l.category_id "
+        "WHERE l.trip_id=?", (trip_id,)).fetchall()]
+
+    splits = [dict(r) for r in conn.execute(
+        "SELECT s.id AS split_id, s.parent_ledger_id AS id, s.amount, "
+        "       s.category_id, s.notes, "
+        "       c.name AS category_name, c.\"group\" AS category_group, "
+        "       l.nature, l.direction, l.review_status, "
+        "       e.occurred_at, e.provider, e.description, e.merchant, "
+        "       e.recipient "
+        "FROM txn_splits s "
+        "LEFT JOIN ledger_txns l ON l.id=s.parent_ledger_id "
+        "LEFT JOIN extracted_txns e ON e.id=l.ext_id "
+        "LEFT JOIN categories c ON c.id=s.category_id "
+        "WHERE s.trip_id=?", (trip_id,)).fetchall()]
+
+    # A row that has ANY split allocations is never counted as a whole member
+    # (its split amounts carry the spend, each pinned to its own trip). The
+    # exclusion applies even when the split belongs to a different trip, so
+    # every rupiah is counted exactly once across trips.
+    split_parents = {r[0] for r in conn.execute(
+        "SELECT DISTINCT parent_ledger_id FROM txn_splits").fetchall()}
+
+    members: list[dict] = []
+    by_cat: dict[Any, dict] = {}
+    movement: dict[str, int] = {}
+    excluded: list[dict] = []
+
+    def _emit(cat_key: Any, amount: int, name: str, group: str) -> None:
+        b = by_cat.setdefault(cat_key, {'category_id': cat_key,
+                                        'category_name': name or 'Uncategorized',
+                                        'group': group or 'Uncategorized',
+                                        'total': 0, 'count': 0})
+        b['total'] += amount
+        b['count'] += 1
+
+    def _row(ledger_id: int, kind: str, nature: str,
+             split_id: int | None = None) -> dict:
+        return {
+            'id': ledger_id,
+            'kind': kind,
+            'split_id': split_id,
+            'amount': 0, 'direction': 'out', 'nature': nature or 'expense',
+            'category_id': None, 'category_name': None, 'group': None,
+            'notes': '', 'occurred_at': '', 'provider': '',
+            'description': 'Unknown', 'review_status': 'ok',
+        }
+
+    # Whole-row members first (their split amounts are handled below).
+    for r in rows:
+        if r['id'] in split_parents:
+            continue
+        nature = r['nature']
+        amount = int(r['amount'])
+        m = _row(r['id'], 'row', nature)
+        m.update({'amount': amount,
+                  'direction': r.get('direction', 'out'),
+                  'category_id': r.get('category_id'),
+                  'category_name': r.get('category_name'),
+                  'group': r.get('category_group'),
+                  'notes': r.get('notes') or '',
+                  'occurred_at': r.get('occurred_at') or '',
+                  'provider': r.get('provider') or '',
+                  'description': (r.get('description') or r.get('merchant')
+                                  or r.get('recipient') or 'Unknown'),
+                  'review_status': r.get('review_status') or 'ok'})
+        if nature in TRIP_EXCLUDED_NATURES:
+            excluded.append({'id': r['id'], 'amount': amount,
+                             'description': m['description'],
+                             'reason': f'{nature} never counts as trip spend'})
+            continue
+        if nature in TRIP_INCOME_NATURES:
+            movement[nature] = movement.get(nature, 0) + amount
+            members.append(m)
+            continue
+        members.append(m)
+        _emit(r.get('category_id'), amount, r.get('category_name'),
+              r.get('category_group'))
+
+    # Split members (partial allocations pinned to this trip).
+    for s in splits:
+        amount = int(s['amount'])
+        m = _row(s['id'], 'split', s.get('nature') or 'expense',
+                 split_id=s.get('split_id'))
+        m.update({'amount': amount,
+                  'direction': s.get('direction', 'out'),
+                  'category_id': s.get('category_id'),
+                  'category_name': s.get('category_name'),
+                  'group': s.get('category_group'),
+                  'notes': s.get('notes') or '',
+                  'occurred_at': s.get('occurred_at') or '',
+                  'provider': s.get('provider') or '',
+                  'description': (s.get('description') or s.get('merchant')
+                                  or s.get('recipient') or 'Unknown'),
+                  'review_status': s.get('review_status') or 'ok'})
+        members.append(m)
+        _emit(s.get('category_id'), amount, s.get('category_name'),
+              s.get('category_group'))
+
+    members.sort(key=lambda m: (m.get('occurred_at') or '', m['id']),
+                 reverse=True)
+    by_category = sorted(by_cat.values(), key=lambda b: b['total'], reverse=True)
+    spend_total = sum(m['amount'] for m in members
+                      if m['nature'] not in TRIP_EXCLUDED_NATURES
+                      and m['nature'] not in TRIP_INCOME_NATURES)
+
+    return {'ok': True, 'trip': trip,
+            'spend_total': spend_total,
+            'member_count': len(members),
+            'members': members,
+            'by_category': by_category,
+            'movement': movement,
+            'excluded': excluded}
 
 
 def _range_days(from_date: str | None, to_date: str | None) -> int | None:
