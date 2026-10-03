@@ -23,6 +23,7 @@ if str(_SKILL_DIR) not in sys.path:
 
 try:
     from schema import connect, ensure_tables, DB_PATH
+    import store
     from store import (list_accounts, get_account, add_account, update_account,
                        list_ledger, get_ledger, update_ledger, count_ledger,
                        list_transfers, get_transfer_for_ledger,
