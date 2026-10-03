@@ -3645,6 +3645,8 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
 .tx-status-inner { display: inline-flex; gap: 6px; align-items: center; justify-content: flex-end; }
 .tx-btn-sm { padding: 4px 10px; font-size: var(--fs-xs); border-radius: var(--radius); cursor: pointer; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); }
 .tx-btn-skip:hover { border-color: var(--text-muted); }
+.tx-btn-ok { border-color: var(--positive, #2e7d32); color: var(--positive, #2e7d32); }
+.tx-btn-ok:hover { background: rgba(46,125,50,.12); }
 .tx-btn-cat:hover { border-color: var(--accent); background: rgba(255,170,0,.1); }
 
 .tx-account-alias { font-weight: 600; }

@@ -1037,6 +1037,7 @@ const rpSigned = n => {
         <td class="tx-td-cat" data-label="Category"><div class="tx-cat-wrap">${_confDot(r)}${_catSelect(r)}</div></td>
         <td class="tx-td-amount ${r.direction === 'in' ? 'tx-pos' : 'tx-neg'}" data-label="Amount">${r.direction === 'in' ? '+' : '−'}${rp(r.amount)}</td>
         <td class="tx-td-status tx-review-actions" data-label="Status"><span class="tx-status-inner">
+          ${r.category_id ? `<button class="btn tx-btn-sm tx-btn-ok" data-id="${r.id}" data-cat="${r.category_id}" title="Confirm with the current category">Confirm</button>` : ''}
           <button class="btn tx-btn-sm tx-btn-skip" data-id="${r.id}">Skip</button>
         </span></td>
       </tr>`).join('');
@@ -1059,6 +1060,21 @@ const rpSigned = n => {
     `;
     el.querySelectorAll('.tx-btn-skip').forEach(b =>
       b.addEventListener('click', () => _reviewSkip(b.dataset.id)));
+    el.querySelectorAll('.tx-btn-ok').forEach(b =>
+      b.addEventListener('click', () => _reviewConfirm(b.dataset.id, Number(b.dataset.cat))));
+  }
+
+  async function _reviewConfirm(id, category_id) {
+    _busy(true);
+    try {
+      await _post(`/api/transactions/${id}/edit`, { category_id }, 15000);
+      toast('Confirmed');
+      await refreshView();
+    } catch (e) {
+      toast(e.message, false);
+    } finally {
+      _busy(false);
+    }
   }
 
   async function _reviewSkip(id) {
