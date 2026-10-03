@@ -953,5 +953,134 @@ class InternalTransferRuleTestCase(unittest.TestCase):
         self.assertTrue(s['expense'] > 0)  # the real expense is still counted
 
 
+class BriCcParserTestCase(unittest.TestCase):
+    """BRI credit-card charge emails (Notification BRI).
+
+    Provider: bri | Domain: bri.co.id | Sender: BankBRI@bri.co.id
+    Body pattern: '... Kartu Kredit BRI 436502xxxxxx1008 di OPENCODE
+                   sejumlah Rp 185.956,03 pada 03-10-2026 20:42:09'
+    Amount format: Indonesian (185.956,03 = 185,956 IDR).
+    transaction_type is always 'cc_charge' - never transfer, top-up, or bill.
+    """
+
+    def setUp(self):
+        self._tmp = Path(tempfile.mkdtemp())
+        self._conn = schema.connect(str(self._tmp / 't.db'))
+        schema.ensure_tables(self._conn)
+        self._conn.commit()
+
+    def tearDown(self):
+        self._conn.close()
+        shutil.rmtree(self._tmp, ignore_errors=True)
+
+    def _parse(self, body, subject='Notification BRI',
+               occurred_at='2026-10-03T20:42:09Z'):
+        return gmail_sync._parse_bri(body, subject, occurred_at)
+
+    def _cat(self, **row):
+        base = {'direction': 'out', 'principal_amount': 0, 'fee_amount': 0,
+                'total_amount': 0, 'transaction_type': '', 'description': '',
+                'raw_description': '', 'merchant': '', 'recipient': '',
+                'provider': 'bri'}
+        base.update(row)
+        res = categorize.categorize_batch(self._conn, [base])[0]
+        return dict(res, group=_q_cat(self._conn, res['category_id'])[0],
+                    name=_q_cat(self._conn, res['category_id'])[1])
+
+    # ── Parse tests ─────────────────────────────────────────────────────────────
+
+    def test_bri_cc_opencode_charge_parses(self):
+        body = (
+            'Terimakasi telah bertransaksi menggunakan Kartu Kredit BRI '
+            '436502xxxxxx1008 di OPENCODE sejumlah Rp 185.956,03 pada '
+            '03-10-2026 20:42:09. Dana telah ditransfer. '
+            'Segera Lakukan pembayaran sebelum jatuh tempo.'
+        )
+        rows = self._parse(body)
+        self.assertEqual(len(rows), 1)
+        r = rows[0]
+        self.assertEqual(r['provider'], 'bri')
+        self.assertEqual(r['total_amount'], 185956)
+        self.assertEqual(r['direction'], 'out')
+        self.assertEqual(r['transaction_type'], 'cc_charge')
+        self.assertIn('Opencode', r['description'])
+        self.assertIn('Opencode', r['merchant'])
+
+    def test_bri_cc_warung_merchants_parses(self):
+        body = (
+            'Kartu Kredit BRI 436502xxxxxx1008 di WARUNG BUBUR MANIS '
+            'sejumlah Rp 45.000,00 pada 03-10-2026 08:15:00'
+        )
+        rows = self._parse(body)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['total_amount'], 45000)
+        self.assertIn('Warung', rows[0]['merchant'])
+
+    def test_bri_cc_unknown_merchant_parses(self):
+        body = (
+            'Kartu Kredit BRI 436502xxxxxx1008 di XZ RETAIL '
+            'sejumlah Rp 722.100,00 pada 02-10-2026 14:33:00'
+        )
+        rows = self._parse(body)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['total_amount'], 722100)
+        self.assertEqual(rows[0]['merchant'], 'Xz Retail')
+
+    def test_bri_cc_invalid_body_returns_empty(self):
+        self.assertEqual(self._parse('Tidak ada transaksi kartu kredit'), [])
+
+    # ── Categorize tests ────────────────────────────────────────────────────────
+
+    def test_bri_cc_opencode_is_digital_subscriptions(self):
+        r = self._cat(transaction_type='cc_charge', merchant='OPENCODE',
+                      description='BRI Card - OPENCODE', total_amount=185956,
+                      direction='out')
+        self.assertEqual(r['group'], 'Utilities')
+        self.assertEqual(r['name'], 'Digital & Subscriptions')
+        self.assertEqual(r['nature'], 'expense')
+        self.assertEqual(r['confidence'], 'medium')
+
+    def test_bri_cc_warung_is_food_dining(self):
+        r = self._cat(transaction_type='cc_charge', merchant='WARUNG BUBUR MANIS',
+                      description='BRI Card - Warung Bubur Manis', total_amount=45000,
+                      direction='out')
+        self.assertEqual(r['group'], 'Food & Dining')
+        self.assertEqual(r['name'], 'Food & Dining')
+        self.assertEqual(r['nature'], 'expense')
+        self.assertEqual(r['confidence'], 'medium')
+
+    def test_bri_cc_ecommerce_is_online_shopping(self):
+        r = self._cat(transaction_type='cc_charge', merchant='TOKOPEDIA',
+                      description='BRI Card - Tokopedia', total_amount=250000,
+                      direction='out')
+        self.assertEqual(r['group'], 'Shopping')
+        self.assertEqual(r['name'], 'Online Shopping')
+        self.assertEqual(r['nature'], 'expense')
+        self.assertEqual(r['confidence'], 'high')
+
+    def test_bri_cc_unknown_merchant_needs_review(self):
+        r = self._cat(transaction_type='cc_charge', merchant='XZ RETAIL',
+                      description='BRI Card - Xz Retail', total_amount=722100,
+                      direction='out')
+        self.assertEqual(r['nature'], 'needs_review')
+        self.assertEqual(r['confidence'], 'none')
+        self.assertEqual(r['group'], 'Uncategorized')
+        self.assertIn('card charge', r['reason'].lower())
+
+    def test_bri_cc_food_word_medium_confidence(self):
+        r = self._cat(transaction_type='cc_charge', merchant='WARKOP BANG JACK',
+                      description='BRI Card - Warkop Bang Jack', total_amount=20000,
+                      direction='out')
+        self.assertEqual(r['group'], 'Food & Dining')
+        self.assertEqual(r['confidence'], 'medium')
+
+    def test_bri_cc_medical_is_health(self):
+        r = self._cat(transaction_type='cc_charge', merchant='APOTEK KIMIA FARMA',
+                      description='BRI Card - Apotek Kimia Farma', total_amount=150000,
+                      direction='out')
+        self.assertEqual(r['group'], 'Health')
+        self.assertEqual(r['name'], 'Medical')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

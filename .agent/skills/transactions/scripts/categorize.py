@@ -77,6 +77,7 @@ _CAT = {
     'bills_internet': ('Utilities', 'Internet'),
     'bills_phone':    ('Utilities', 'Mobile & Data'),
     'bills_cc':       ('Utilities', 'Credit Card'),
+    'digital':        ('Utilities', 'Digital & Subscriptions'),
     'groceries':      ('Groceries', 'Groceries'),
     'food':            ('Food & Dining', 'Food & Dining'),
     'transport_fuel': ('Transport', 'Fuel'),
@@ -128,6 +129,9 @@ _FOOD_DELIVERY = ['gofood', 'grabfood', 'shopeefood', 'go food', 'delivery']
 _FOOD_RESTAURANT = ['restoran', 'restaurant', 'rm ', 'warung makan', 'rumah makan']
 _FOOD_CAFE = ['cafe', 'kopi', 'café', 'kafé']
 _ECOMMERCE = ['tokopedia', 'shopee', 'lazada', 'blibli', 'forumer', ' marketplace']
+
+# Digital subscriptions / SaaS paid by card (e.g. the opencode.ai plan).
+_DIGITAL_SUBS = ['opencode']
 
 # Standalone food words -> Food & Dining unconditionally. 'warung'/'warkop' are
 # treated as food on their own (no extra food word required). Keep 'nasi' and
@@ -185,6 +189,52 @@ def _text(row: dict) -> str:
     return ((row.get('description', '') + ' ' + row.get('raw_description', '')
              + ' ' + row.get('merchant', '')
              + ' ' + row.get('recipient', ''))).lower()
+
+
+# Biller keywords usable for a CARD CHARGE: every _BILLERS entry except the
+# card-bill ones ('kartu kredit' / 'credit card' / 'payment cc' describe a
+# bill PAYMENT; a charge description always contains 'Kartu Kredit' and
+# must never match them).
+_CC_CHARGE_BILLERS = [t for t in _BILLERS if t[1] != 'bills_cc']
+
+
+def _match_cc_merchant(desc: str, row: dict) -> Optional[tuple]:
+    """(cat_key, confidence, reason) for an obvious card-charge merchant,
+    or None when nothing matches (caller falls to Review)."""
+    bill = _match_table(desc, _CC_CHARGE_BILLERS)
+    if bill:
+        return (bill, 'high', 'CC charge: biller match')
+    if any(_has(desc, m) for m in _GROCERIES):
+        return ('groceries', 'high', 'CC charge: retail merchant')
+    if any(_has(desc, m) for m in _HOME_UPKEEP):
+        return ('home_upkeep', 'high', 'CC charge: home repair')
+    if any(_has(desc, m) for m in _MEDICAL):
+        return ('health_medical', 'high', 'CC charge: medical / pharmacy')
+    if any(_has(desc, m) for m in _VITAMINS):
+        return ('health_vitamins', 'high', 'CC charge: vitamins')
+    if any(_has(desc, m) for m in _LEISURE):
+        return ('leisure', 'high', 'CC charge: leisure')
+    if any(_has(desc, m) for m in _FOOD_WORDS):
+        return ('food', 'medium', 'CC charge: food word')
+    if any(_has(desc, m) for m in _FOOD_RESTAURANT):
+        return ('food', 'high', 'CC charge: restaurant')
+    if any(_has(desc, m) for m in _FOOD_CAFE):
+        return ('food', 'high', 'CC charge: cafe')
+    if any(_has(desc, m) for m in _FOOD_DELIVERY):
+        return ('food', 'high', 'CC charge: food delivery')
+    if any(_has(desc, m) for m in _TRANSPORT_FUEL):
+        return ('transport_fuel', 'high', 'CC charge: fuel')
+    if any(_has(desc, m) for m in _TRANSPORT_TOLL):
+        return ('transport_toll', 'high', 'CC charge: toll')
+    if any(_has(desc, m) for m in _TRANSPORT_PARKING):
+        return ('transport_parking', 'high', 'CC charge: parking')
+    if any(_has(desc, m) for m in _VEHICLE_SERVICE):
+        return ('vehicle_service', 'high', 'CC charge: vehicle service')
+    if any(_has(desc, m) for m in _ECOMMERCE):
+        return ('shopping', 'high', 'CC charge: e-commerce')
+    if any(_has(desc, m) for m in _DIGITAL_SUBS):
+        return ('digital', 'medium', 'CC charge: digital subscription')
+    return None
 
 
 def _clean_text(row: dict) -> str:
@@ -391,6 +441,20 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
         hit['nature'] = rule['nature']
         hit['confidence'] = 'high'
         hit['reason'] = f'Rule: {rule["merchant_or_recipient"]}'
+        return hit
+
+    # 0.4 CREDIT-CARD charge (e.g. BRI 'Notification BRI' emails). A card
+    #     charge is always a payment - never a transfer, top-up or bill
+    #     payment. Obvious merchants file to their category; everything
+    #     else falls to Review. The description contains 'Kartu Kredit',
+    #     which must NOT match the bills_cc keyword (that key is for bill
+    #     PAYMENTS, not charges).
+    if tx_type == 'cc_charge':
+        cc = _match_cc_merchant(desc, row)
+        if cc:
+            set_cat(cc[0], 'expense', cc[1], cc[2])
+            return hit
+        set_fallback('Card charge - assign category')
         return hit
 
     # 0.5 Explicit fee rows (parser split an admin fee) are always Fees.

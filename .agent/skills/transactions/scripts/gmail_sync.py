@@ -27,6 +27,7 @@ _VERIFIED_SENDERS = [
     {'domain': 'bca.co.id', 'provider': 'bca'},
     {'domain': 'bni.co.id', 'provider': 'bni'},
     {'domain': 'bankmandiri.co.id', 'provider': 'mandiri'},
+    {'domain': 'bri.co.id', 'provider': 'bri'},
     {'domain': 'go-pay.co.id', 'provider': 'gopay'},
     {'domain': 'gopay.co.id', 'provider': 'gopay'},
 ]
@@ -63,7 +64,7 @@ _DEFAULT_QUERY = f'({_SENDER_Q}) newer_than:30d'
 # Bumped whenever parsing changes in a way that would produce different output
 # for the same email, so source_documents can record which parser produced a
 # row. Stamped onto every document written by _process_message.
-PARSER_VERSION = '3.1'
+PARSER_VERSION = '3.2'
 
 # Owner names that need stripping from wallet recipients (ours, not the wallet).
 _OWNER_NAMES = {'said', 'sakd', 'sa', 's.'}
@@ -317,6 +318,8 @@ def _parse_email(body: str, provider: str, subject: str,
         rows = _parse_bni(body, subject, occurred_at)
     elif provider == 'mandiri':
         rows = _parse_mandiri(body, subject, occurred_at)
+    elif provider == 'bri':
+        rows = _parse_bri(body, subject, occurred_at)
     elif provider == 'gopay':
         rows = _parse_gopay(body, subject, occurred_at)
     else:
@@ -1214,6 +1217,38 @@ def _gopay_principal(body: str, total: int, fee: int) -> int:
         if 0 < v < total:
             return v
     return max(total - fee, 0)
+
+
+def _parse_bri(body: str, subject: str, occurred_at: str) -> list[dict]:
+    """BRI credit-card charge notification ('Notification BRI').
+
+    'Terimakasih telah bertransaksi menggunakan Kartu Kredit BRI
+    436502xxxxxx1008 di OPENCODE sejumlah Rp 185.956,03 pada
+    03-10-2026 20:42:09 ...' A card charge is always money out - never
+    a transfer, top-up or bill payment. transaction_type 'cc_charge'
+    tells the categorizer to file by merchant (or hold to Review).
+    """
+    m = re.search(
+        r'kartu kredit bri\s+([\d*x]+)\s+di\s+(.+?)\s+sejumlah\s+Rp\.?\s*([\d.,]+)',
+        body, re.IGNORECASE)
+    if not m:
+        return []
+    _card, merchant, raw_amt = m.group(1), m.group(2).strip(), m.group(3)
+    amount = _parse_idr(raw_amt)
+    if amount <= 0:
+        return []
+    # The body carries its own timestamp; the Date header is the fallback.
+    when = occurred_at
+    ts = re.search(r'pada\s+(\d{2})-(\d{2})-(\d{4})\s+(\d{2}:\d{2}(?::\d{2})?)',
+                   body)
+    if ts:
+        hhmm = ts.group(4) if len(ts.group(4)) == 8 else ts.group(4) + ':00'
+        when = f'{ts.group(3)}-{ts.group(2)}-{ts.group(1)}T{hhmm}'
+    clean = _display_case(merchant[:60])
+    return [_build_row('bri', f'BRI Card - {clean}', 'out', amount,
+                       _extract_txn_id(body), when,
+                       raw_description=body[:2000],
+                       transaction_type='cc_charge', merchant=clean)]
 
 
 def _extract_biller(body: str, subject: str) -> str:
