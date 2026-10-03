@@ -7,6 +7,7 @@ All routes are personal-only (reject samudera).
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 import sys
@@ -30,8 +31,8 @@ try:
                        list_rules, add_rule, deactivate_rule,
                        list_import_batches, get_import_batch,
                        add_audit, list_audit, fmt_idr)
-    from import_engine import (upload_pdf, confirm_import, delete_import,
-                               preview_import, add_manual_tx)
+    from import_engine import (upload_pdf, upload_screenshot, confirm_import,
+                               delete_import, preview_import, add_manual_tx)
     from categorize import apply_correction
     from reconcile import (find_transfer_candidates, confirm_transfer,
                            suggest_transfer, reject_transfer, unlink_transfer)
@@ -40,6 +41,8 @@ try:
     from gmail_sync import sync_gmail
     from scheduler import TransactionScheduler
     from reprocess import reprocess as reprocess_engine
+    from sheets_import import preview_recap as preview_recap_engine, \
+        confirm_recap as confirm_recap_engine
     _IMPORTS_OK = True
 except ImportError as exc:
     _IMPORTS_OK = False
@@ -416,6 +419,8 @@ def route_post(handler) -> None:
     try:
         if path == '/api/transactions/upload':
             _handle_upload(handler, body)
+        elif path == '/api/transactions/upload/screenshot':
+            _handle_upload_screenshot(handler, body)
         elif path == '/api/transactions/manual':
             _handle_manual(handler, body)
         elif path == '/api/transactions/categories/create':
@@ -424,6 +429,10 @@ def route_post(handler) -> None:
             _handle_preview(handler, body)
         elif path == '/api/transactions/import/confirm':
             _handle_confirm(handler, body)
+        elif path == '/api/transactions/recap/preview':
+            _handle_recap_preview(handler, body)
+        elif path == '/api/transactions/recap/confirm':
+            _handle_recap_confirm(handler, body)
         elif path.startswith('/api/transactions/import/') and path.endswith('/delete'):
             batch_id = int(path.split('/')[-2])
             _handle_delete(handler, batch_id)
@@ -471,11 +480,32 @@ def _handle_upload(handler, body: dict) -> None:
         result = upload_pdf(conn, filename=filename, b64data=b64data,
                             provider=body.get('provider', 'gopay'),
                             password=body.get('password', ''),
-                            month=body.get('month', ''))
+                            month=body.get('month', ''),
+                            auto_confirm=bool(body.get('auto_confirm', False)))
         if result.get('ok'):
             _ok(handler, result)
         else:
             _err(handler, 400, result.get('error', 'Upload failed'))
+    finally:
+        conn.close()
+
+
+def _handle_upload_screenshot(handler, body: dict) -> None:
+    conn = _get_db(handler)
+    if not conn:
+        _err(handler, 403, 'Not available in samudera mode')
+        return
+    filename = body.get('filename', '')
+    b64data = body.get('data', '')
+    if not filename or not b64data:
+        _err(handler, 400, 'Missing filename or data')
+        return
+    try:
+        result = upload_screenshot(conn, filename=filename, b64data=b64data)
+        if result.get('ok'):
+            _ok(handler, result)
+        else:
+            _err(handler, 400, result.get('error', 'Screenshot upload failed'))
     finally:
         conn.close()
 
@@ -538,6 +568,65 @@ def _handle_confirm(handler, body: dict) -> None:
             _ok(handler, result)
         else:
             _err(handler, 400, result.get('error', 'Confirm failed'))
+    finally:
+        conn.close()
+
+
+def _materialize_recap(body: dict) -> tuple[Optional[Path], Optional[str]]:
+    filename = body.get('filename', '')
+    data = body.get('data', '')
+    if not filename or not data:
+        return None, 'Missing filename or data'
+    name = Path(filename).name or 'recap_upload.csv'
+    suffix = Path(name).suffix.lower()
+    if suffix not in ('.csv', '.json'):
+        return None, 'Recap export must be a CSV or JSON file'
+    try:
+        raw = base64.b64decode(data)
+    except Exception as exc:
+        return None, f'Bad base64 payload: {exc}'
+    target = Path(DB_PATH).parent / f'recap_upload{suffix}'
+    target.write_bytes(raw)
+    return target, None
+
+
+def _handle_recap_preview(handler, body: dict) -> None:
+    conn = _get_db(handler)
+    if not conn:
+        _err(handler, 403, 'Not available in samudera mode')
+        return
+    path, err = _materialize_recap(body)
+    if err:
+        _err(handler, 400, err)
+        return
+    try:
+        result = preview_recap_engine(conn, path=path)
+        if result.get('ok'):
+            _ok(handler, result)
+        else:
+            _err(handler, 400, result.get('error', 'Recap preview failed'))
+    finally:
+        conn.close()
+
+
+def _handle_recap_confirm(handler, body: dict) -> None:
+    conn = _get_db(handler)
+    if not conn:
+        _err(handler, 403, 'Not available in samudera mode')
+        return
+    path, err = _materialize_recap(body)
+    if err:
+        _err(handler, 400, err)
+        return
+    try:
+        result = confirm_recap_engine(
+            conn, path=path,
+            apply_hashes=body.get('apply_hashes') or None,
+            resolutions=body.get('resolutions') or None)
+        if result.get('ok'):
+            _ok(handler, result)
+        else:
+            _err(handler, 400, result.get('error', 'Recap confirm failed'))
     finally:
         conn.close()
 

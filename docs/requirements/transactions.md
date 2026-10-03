@@ -17,6 +17,8 @@ Explicitly out of scope: executing transfers or payments (read-only analysis onl
 | Mandiri / Livin' transaction emails (bankmandiri.co.id) | Email | Same Gmail sync; has the trickiest parsing (see SKILL.md Livin' notes) |
 | GoPay statement PDFs | PDF upload | `POST /api/transactions/upload` -> `parsers/gopay_pdf.py` |
 | Bank statement PDFs / screenshots (manual recap) | PDF / image | Manually loaded, cited per row e.g. `BCA PDF p.19` |
+| Transaction screenshots | Image | `POST /api/transactions/upload/screenshot` -> `vision_extract.py` (Gemini vision), preview-only |
+| Recap spreadsheet export (one-time) | CSV / JSON | `POST /api/transactions/recap/preview` + `/recap/confirm` -> `sheets_import.py` |
 | User confirmation | Chat | Resolves `Perlu konfirmasi` / `Dikonfirmasi pengguna` flags |
 | Local SQLite DB | DB | `.agent/workspaces/personal/state/transactions.db` (WAL mode) |
 
@@ -69,9 +71,24 @@ Each ledger row carries a money-out split into four non-overlapping buckets so R
 
 Opposite-direction same-nominal pairs across accounts get linked (`Transfer` table, IDs `T01+`, matched both sides, status `Cocok` / `Dikonfirmasi pengguna`). Balance tab cross-checks per account: opening + credits - debits = closing, observed change reported.
 
+### 3.7 Recap import (one-time, from Google Sheet export)
+
+The recap Google Sheet is a learning reference + one-time starting dataset. There is NO ongoing Sheets integration: ongoing input stays on dashboard Upload (PDFs/screenshots) + the daily email sync. Import flow:
+
+- Export the recap `Transaksi` tab to CSV (or JSON list) and upload it in the Transactions Imports tab.
+- `preview_recap` (dry-run, never writes): classifies rows into parents (bank debits) vs allocation children vs excluded (summary/adjustment/no-date), then matches each parent against the ledger by amount + date, weighted by direction and description-token overlap. Buckets: matched (`exact`/`likely`), new (no match), ambiguous (same amount+day across directions or tied candidates).
+- `confirm_recap` (one transaction, rollback on error): 
+  - Confirmed recap categories/splits OVERRIDE automatic categorization even at high confidence, except rows with an existing manual correction, which become conflicts and stay untouched (shown in the preview).
+  - Unconfirmed recap categories fill only uncategorized / low-confidence ledger rows.
+  - All changes are recorded as corrections rows (reason `recap_import`, actor `user`) so reprocessing never re-overrides them, and every row writes a `sheet_import_log` entry for idempotent re-runs.
+  - New rows insert through source_documents (kind `sheet`) -> extracted_txns -> ledger_txns and are protected the same way.
+  - Allocation-child rows (split of a parent) become `txn_splits` linked to the parent; they are never separate debits. Sum mismatch is audited, never rebalanced.
+  - Ambiguous rows and any new rows that are not explicitly approved (`apply_hashes`) are held to review (`held_review`), never auto-inserted.
+- Column mapping (Indonesian headers -> canonical fields) lives in `RECAP_COLUMN_ALIASES` in `sheets_import.py`.
+
 ## 4. Outputs
 
-- **API routes** (personal-only, 403 for samudera): overview, list, detail, spending by category, transfer links, accounts, review queue, import history, rules, audit; POST upload/preview/confirm/delete, gmail sync, categorize, edit, review respond, transfers ops, rules/accounts create.
+- **API routes** (personal-only, 403 for samudera): overview, list, detail, spending by category, transfer links, accounts, review queue, import history, rules, audit, recap preview/confirm; POST upload/preview/confirm/delete, screenshot upload, gmail sync, categorize, edit, review respond, transfers ops, rules/accounts create.
 - **Reports**: spending, cash-flow, fee, category breakdown (`reports.py`).
 - **Recap spreadsheet** (analysis deliverable): see Appendix 1 - currently under study, not yet adopted as the official output.
 - **Finance engine** (`personal-finance` skill, read-only: no transfers ever executed): analysis, 30-day forecast, afford/ask, briefing against the finance Google Sheet.
@@ -109,15 +126,25 @@ Backfilled entries from backups + recorded decisions. Append only, newest at the
 - `2026-09-13 | vehicle service category | added vehicle/service split for car-related spend | changed: taxonomy + reprocess (backup vehicle-service-2026-09-13.bak)`
 - `2026-09-24 | BCA backfill complete | full BCA mutation coverage confirmed through Sep 24 | changed: transactions.db + backups taxonomy-backup-2026-09-24.bak`
 - `2026-09-30 | daily recap convention | every finance/trading ask records a dated recap; transactions keeps a per-menu requirements doc in this folder | changed: CLAUDE.md checklist + docs/requirements/*`
+- `2026-10-03 | schema v5 -> v6 + preview & screenshot + trips/splits + one-time recap import | sheets + trips/splits landed; uploads default to preview; recap import engine + tests + API + Imports-tab UI; Appendix 1 recap adopted as one-time starting data only (no ongoing Sheets integration) | changed: schema.py v6 (sheet kind + sheet_import_log), import_engine.py (preview-only upload, upload_screenshot, _row_flags, _to_int_amount), vision_extract.py (Gemini vision, no model_router), trips.py + splits.py + tests, sheets_import.py + tests/test_sheets_import.py (121 tests green), transactions_api.py + tab-transactions.js + style.css (recap preview/confirm endpoints + Imports-tab recap card)`
+- `2026-10-03 | PENDING | true transactions deploy: schema v6 migration runs on next connect; recap CSV export from owner still needed to validate RECAP_COLUMN_ALIASES against real headers; trips/splits API routes + reports + categorize fixes (top-up vs toll, own_person_transfer) still queued from the prior task | changed: none yet`
 
 ---
 
-## Appendix 1 - Rekap spreadsheet (under study, NO action taken)
+## Appendix 1 - Rekap spreadsheet (adopted for ONE-TIME import, no ongoing integration)
 
-User shared `Rekap Keuangan 25 September - 25 Oktober 2026` (sheet id `1vTcM2HK7muq_AArjhjQSE7udn4mf7faI4Rq3bbDx9vQ`) on 2026-10-01 with instruction to learn it first, take no action. Not yet adopted as an official output of this menu; do not reference it as current until a change request approves it. Learned structure (read-only):
+User shared `Rekap Keuangan 25 September - 25 Oktober 2026` (sheet id `1vTcM2HK7muq_AArjhjQSE7udn4mf7faI4Rq3bbDx9vQ`) on 2026-10-01 with instruction to learn it first, take no action. On 2026-10-03 the owner APPROVED a one-time import of the recap as starting data + learning reference, with NO ongoing Google Sheets integration (no new dashboard; the enhanced existing dashboard remains the input surface). Decision details (owner spec):
 
-- Tabs: `Grafik` (119x12), `Ringkasan` (metrics + category table with bank-vs-external split and "Dibayar 24 Sep" adjustment), `Transaksi` (ledger, R001+, 18 cols incl. 4-way split and `Lokasi / konteks`), `Transfer` (T01-T09, Cocok/Dikonfirmasi pengguna), `Saldo` (per-account opening/closing + observed change), `Detail QRIS Solo` (excl. KAI, 1,652,690), `Rincian Dinda` (lump transfer 1,467,000 itemized + 2,900 `Perlu konfirmasi`), `Detail Pengeluaran Bank` (itemized to 91,749,538, ties to Ringkasan).
-- Example period: total in 95,290,976 (Gaji 41,250,976 + Pinjaman masuk 52,340,000 + dinas Maju 1,700,000), bank outflow 92,542,538, closing BCA+Mandiri 5,880,795.
-- Example taxonomy used: 33 categories (Makan dan minum, Biaya bank, Pembayaran utang, Transfer internal, Top-up (ShopeePay/OVO/e-money), Padel/Hotel/Tiket, Belanja/Groceries/Apotek/RS Anak, Tagihan rumah/KPR/Cicilan kendaraan/Pinjol, Gaji/Dana perjalanan kerja/Pinjaman masuk, Dinda/Bulanan Dinda/Transfer keluarga, dll.).
+- Confirmed recap categories/splits override automatic categorization even at high confidence.
+- Existing manual corrections are preserved; where they conflict with confirmed recap data, both are shown in the preview for review.
+- Unconfirmed recap categories fill only uncategorized / low-confidence rows.
+- Every import change records its source; imported confirmations are protected from reprocessing.
+- Ambiguous rows are held to review, never auto-inserted.
 
-Awaiting the owner's go-ahead to wire this format into the requirements (a change request entry would then be appended above).
+Learned structure (read-only reference): tabs `Grafik` (119x12), `Ringkasan` (metrics + category table with bank-vs-external split and "Dibayar 24 Sep" adjustment), `Transaksi` (ledger, R001+, 18 cols incl. 4-way split and `Lokasi / konteks`), `Transfer` (T01-T09, Cocok/Dikonfirmasi pengguna), `Saldo` (per-account opening/closing + observed change), `Detail QRIS Solo` (excl. KAI, 1,652,690), `Rincian Dinda` (lump transfer 1,467,000 itemized + 2,900 `Perlu konfirmasi`), `Detail Pengeluaran Bank` (itemized to 91,749,538, ties to Ringkasan).
+
+Example period: total in 95,290,976 (Gaji 41,250,976 + Pinjaman masuk 52,340,000 + dinas Maju 1,700,000), bank outflow 92,542,538, closing BCA+Mandiri 5,880,795.
+
+Example taxonomy used: 33 categories (Makan dan minum, Biaya bank, Pembayaran utang, Transfer internal, Top-up (ShopeePay/OVO/e-money), Padel/Hotel/Tiket, Belanja/Groceries/Apotek/RS Anak, Tagihan rumah/KPR/Cicilan kendaraan/Pinjol, Gaji/Dana perjalanan kerja/Pinjaman masuk, Dinda/Bulanan Dinda/Transfer keluarga, dll.).
+
+Implementation: `sheets_import.py` reads a CSV (or JSON) export of the `Transaksi` tab via `RECAP_COLUMN_ALIASES` and drives the flow in 3.7. The owner still needs to export the recap to CSV so the header mapping can be validated against the real columns and a dry-run preview run against a temp copy.

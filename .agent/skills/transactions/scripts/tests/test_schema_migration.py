@@ -22,8 +22,8 @@ if sys_path not in os.sys.path:
 
 import schema  # noqa: E402
 
-OLD_KIND = "('gmail','gopay_pdf','manual')"
-NEW_KIND = "('gmail','gopay_pdf','bca_pdf','bni_pdf','manual')"
+OLD_KIND = "kind IN ('gmail', 'gopay_pdf', 'bca_pdf', 'bni_pdf', 'mandiri_pdf', 'screenshot', 'manual')"
+NEW_KIND = "kind IN ('gmail', 'gopay_pdf', 'bca_pdf', 'bni_pdf', 'mandiri_pdf', 'screenshot', 'sheet', 'manual')"
 
 
 def _old_ddl():

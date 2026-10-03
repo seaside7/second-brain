@@ -10,6 +10,97 @@ import re
 import sqlite3
 from typing import Optional
 
+_REF_RUN_RE = re.compile(r'\b\d{10,16}\b')
+
+
+def _ref_run(text: str) -> str:
+    """First bank-reference run (10-16 digits) in text, or ''."""
+    m = _REF_RUN_RE.search(text or '')
+    return m.group(0) if m else ''
+
+
+def _token_set(*parts: str) -> set[str]:
+    tokens = set()
+    for p in parts:
+        for w in re.findall(r'[a-z0-9]{3,}', (p or '').lower()):
+            tokens.add(w)
+    return tokens
+
+
+def match_overlap(conn: sqlite3.Connection, cand: dict, *,
+                  window_days: int = 1) -> dict:
+    """Check a candidate extracted row against committed ledger rows.
+
+    Catches the SAME real-world transaction captured by a second statement or
+    an email/notification (cross-source). Compared to check_duplicates this adds
+    identity signals beyond amount+day: bank-reference equality, fee-row
+    identity, counterparty-token overlap, and same-owner interbank pairing.
+
+    cand expects extracted-row fields: occurred_at, total_amount, direction,
+    transaction_type, bank_ref, recipient, merchant, src_txn_id.
+
+    Returns {status, ledger_id, ext_id, reason} where status is
+    'identical' | 'likely' | 'possible' | 'different'.
+    """
+    amount = int(cand.get('total_amount', 0) or 0)
+    day = (cand.get('occurred_at') or '')[:10]
+    if not amount or not day:
+        return {'status': 'different', 'ledger_id': None, 'ext_id': None,
+                'reason': 'no amount/date'}
+
+    rows = [dict(r) for r in conn.execute(
+        "SELECT l.id AS ledger_id, e.id AS ext_id, e.bank_ref, e.direction, "
+        " e.transaction_type, e.recipient, e.merchant, e.provider "
+        "FROM ledger_txns l JOIN extracted_txns e ON e.id = l.ext_id "
+        "JOIN import_batches b ON b.id = e.batch_id "
+        "WHERE b.state = 'committed' AND e.total_amount = ? "
+        "  AND date(e.occurred_at) BETWEEN date(?, ?) AND date(?, ?)",
+        (amount, day, f'-{int(window_days)} day', day, f'+{int(window_days)} day'))]
+    if not rows:
+        return {'status': 'different', 'ledger_id': None, 'ext_id': None,
+                'reason': 'no overlap'}
+
+    cand_ref = _ref_run(' '.join([
+        cand.get('bank_ref', ''), cand.get('recipient', ''),
+        cand.get('merchant', '')]))
+    cand_type = (cand.get('transaction_type') or '').lower()
+    cand_cp = _token_set(cand.get('recipient'), cand.get('merchant'))
+    cand_dir = cand.get('direction', 'out')
+
+    # 1. Identical bank reference (strongest signal; survives cross-account).
+    for r in rows:
+        if cand_ref and (r.get('bank_ref') or '') and (
+                _ref_run(r['bank_ref']) == cand_ref):
+            return {'status': 'identical', 'ledger_id': r['ledger_id'],
+                    'ext_id': r['ext_id'], 'reason': 'bank reference match'}
+
+    # 2. Fee rows: same day + amount + fee type is the row itself.
+    if cand_type == 'fee':
+        for r in rows:
+            if (r.get('transaction_type') or '').lower() == 'fee':
+                return {'status': 'identical', 'ledger_id': r['ledger_id'],
+                        'ext_id': r['ext_id'], 'reason': 'fee row'}
+
+    # 3. Same-owner interbank: opposite direction + own-name counterparty.
+    if cand_cp and {'said', 'iskandar'} & cand_cp:
+        for r in rows:
+            if r['direction'] != cand_dir:
+                return {'status': 'likely', 'ledger_id': r['ledger_id'],
+                        'ext_id': r['ext_id'],
+                        'reason': 'same-owner interbank transfer'}
+
+    # 4. Same direction + counterparty-token overlap within the window.
+    for r in rows:
+        cp = _token_set(r.get('recipient'), r.get('merchant'))
+        if r['direction'] == cand_dir and cp and (cand_cp & cp):
+            return {'status': 'likely', 'ledger_id': r['ledger_id'],
+                    'ext_id': r['ext_id'],
+                    'reason': 'amount + counterparty tokens'}
+
+    # 5. Amount + day + direction only - weak, flag for review.
+    return {'status': 'possible', 'ledger_id': None, 'ext_id': None,
+            'reason': 'amount + day only'}
+
 
 def check_duplicates(conn: sqlite3.Connection, *,
                       source_key: str = '',
@@ -18,13 +109,6 @@ def check_duplicates(conn: sqlite3.Connection, *,
                       occurred_at: str = '',
                       total_amount: int = 0,
                       direction: str = 'out') -> tuple[str, Optional[int]]:
-    """Check for duplicates against existing extracted rows.
-
-    Returns (dup_status, duplicate_of_id):
-        ('unique', None)           - no duplicates
-        ('exact_dup', ledger_id)   - already imported (skip)
-        ('possible', ledger_id)    - possible duplicate (flag for review)
-    """
     # Exact: same source_key (txn ID)
     if source_key:
         r = conn.execute(

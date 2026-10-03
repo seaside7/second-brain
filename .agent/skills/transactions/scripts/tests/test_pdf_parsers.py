@@ -335,6 +335,85 @@ class UploadEngineTestCase(unittest.TestCase):
                             provider='bca', month='13-2026')
         self.assertFalse(res.get('ok'))
 
+    def test_upload_preview_only_holds_batch_and_flags_overlap(self):
+        committed = _row(src_txn_id='c1', occurred_at='2026-08-01T08:00:00',
+                         description='QRIS alfamart', merchant='alfamart',
+                         recipient='', total_amount=25000, direction='out',
+                         provider='bca')
+        self._stub('bca', [committed])
+        c = ie.upload_pdf(self._conn, filename='a.pdf', b64data=self._b64,
+                          provider='bca', month='2026-08')
+        ledger_before = self._conn.execute(
+            'SELECT COUNT(*) FROM ledger_txns').fetchone()[0]
+
+        rows = [
+            _row(src_txn_id='p1', occurred_at='2026-08-02T08:00:00',
+                 description='QRIS alfamart', merchant='alfamart',
+                 recipient='BUDI', total_amount=25000, direction='out',
+                 provider='bca'),
+            _row(src_txn_id='p2', occurred_at='2026-08-03T08:00:00',
+                 description='TRANSFER KE BUDI', merchant='', recipient='BUDI',
+                 total_amount=100000, direction='out', provider='bca'),
+        ]
+        self._stub('bca', rows)
+        r = ie.upload_pdf(self._conn, filename='b.pdf',
+                          b64data=base64.b64encode(b'%PDF-preview-file').decode(),
+                          provider='bca', month='2026-08', auto_confirm=False)
+        self.assertTrue(r.get('ok'))
+        self.assertTrue(r.get('confirm_pending'))
+        self.assertIsNone(r.get('account_id'))
+        batch_state = self._conn.execute(
+            'SELECT state FROM import_batches WHERE id=?',
+            (r['batch_id'],)).fetchone()[0]
+        self.assertEqual(batch_state, 'preview')
+        ledger_after = self._conn.execute(
+            'SELECT COUNT(*) FROM ledger_txns').fetchone()[0]
+        self.assertEqual(ledger_after, ledger_before)
+        flags = {row['idx']: row['overlap_status'] for row in r['rows']}
+        self.assertEqual(flags, {0: 'likely', 1: 'different'})
+
+    def test_upload_screenshot_preview_and_dedupe(self):
+        import vision_extract
+        orig = vision_extract.extract_transactions
+
+        def fake(path):
+            return [
+                {'direction': 'out', 'amount_rp': 25000,
+                 'description': 'Indomaret', 'merchant': 'Indomaret',
+                 'recipient': '', 'occurred_at': '2026-09-01T08:31:00',
+                 'reference': 'REF-1'},
+                {'direction': 'in', 'amount_rp': 500000,
+                 'description': 'Transfer', 'merchant': '',
+                 'recipient': 'ALICE', 'occurred_at': '2026-09-02',
+                 'reference': ''},
+            ]
+        vision_extract.extract_transactions = fake
+        try:
+            png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+            r = ie.upload_screenshot(self._conn, filename='stmt.png', b64data=png)
+            self.assertTrue(r.get('ok'), r.get('error'))
+            self.assertTrue(r.get('confirm_pending'))
+            self.assertEqual(r['row_count'], 2)
+            self.assertIsNone(r.get('account_id'))
+            ledger = self._conn.execute(
+                'SELECT COUNT(*) FROM ledger_txns').fetchone()[0]
+            self.assertEqual(ledger, 0)
+            doc_kind = tuple(self._conn.execute(
+                'SELECT kind, provider FROM source_documents WHERE id=?',
+                (r['doc_id'],)).fetchone())
+            self.assertEqual(doc_kind, ('screenshot', 'screenshot'))
+            dup = ie.upload_screenshot(self._conn, filename='stmt.png', b64data=png)
+            self.assertFalse(dup.get('ok'))
+            self.assertIn('already been imported', dup.get('error', ''))
+        finally:
+            vision_extract.extract_transactions = orig
+
+    def test_upload_screenshot_rejects_bad_magic(self):
+        r = ie.upload_screenshot(self._conn, filename='fake.png',
+                                 b64data=base64.b64encode(b'not-an-image').decode())
+        self.assertFalse(r.get('ok'))
+        self.assertIn('Not a valid image file', r.get('error', ''))
+
 
 class SchemaMigrationTestCase(unittest.TestCase):
     def test_kind_allows_new_pdf_parsers(self):

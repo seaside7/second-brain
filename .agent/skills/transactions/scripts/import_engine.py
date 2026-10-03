@@ -21,6 +21,7 @@ import schema
 from parsers.gopay_pdf import parse_gopay_pdf, PARSER_VERSION as GOPAY_VERSION
 from parsers.bca_pdf import parse_bca_pdf, PARSER_VERSION as BCA_VERSION
 from parsers.bni_pdf import parse_bni_pdf, PARSER_VERSION as BNI_VERSION
+from parsers.mandiri_pdf import parse_mandiri_pdf, PARSER_VERSION as MANDIRI_VERSION
 from duplicates import check_duplicates
 from categorize import categorize_batch
 
@@ -29,6 +30,8 @@ UPLOAD_PROVIDERS = {
               'kwargs': {'include_coins': False}},
     'bca': {'parser': parse_bca_pdf, 'version': BCA_VERSION, 'kwargs': {}},
     'bni': {'parser': parse_bni_pdf, 'version': BNI_VERSION, 'kwargs': {}},
+    'mandiri': {'parser': parse_mandiri_pdf, 'version': MANDIRI_VERSION,
+                'kwargs': {}},
 }
 
 # Brand labels shown in the UI when an upload's account is auto-created.
@@ -36,6 +39,7 @@ _ACCOUNT_DEFS = {
     'gopay': {'type': 'ewallet', 'provider': 'gopay', 'alias': 'GoPay'},
     'bca': {'type': 'bank', 'provider': 'bca', 'alias': 'BCA'},
     'bni': {'type': 'bank', 'provider': 'bni', 'alias': 'BNI'},
+    'mandiri': {'type': 'bank', 'provider': 'mandiri', 'alias': 'Mandiri'},
 }
 
 _UPLOAD_DIR = Path(os.environ.get(
@@ -65,16 +69,22 @@ def upload_pdf(conn: sqlite3.Connection, *,
                provider: str = 'gopay',
                password: str = '',
                month: str = '',
+               auto_confirm: bool = True,
                max_size_mb: int = 20) -> dict:
     """Upload a bank/e-wallet statement PDF (base64-encoded).
 
-    ``provider`` selects the parser (gopay|bca|bni); ``password`` is passed
-    through for encrypted statements (e.g. BNI); ``month`` (YYYY-MM) keeps only
-    that month's rows. Matching rows are stamped with the provider's account
-    and auto-confirmed straight into the ledger.
+    ``provider`` selects the parser (gopay|bca|bni|mandiri); ``password`` is
+    passed through for encrypted statements (e.g. Mandiri/BNI); ``month``
+    (YYYY-MM) keeps only that month's rows.
+
+    With auto_confirm=True (default) matching rows are stamped with the
+    provider's account and confirmed straight into the ledger. With
+    auto_confirm=False the upload stops at a 'preview' batch and returns the
+    extracted rows with duplicate + cross-statement overlap flags; callers
+    then confirm via confirm_import(...).
 
     Returns {ok, doc_id, batch_id, account_id, total_rows, new_rows,
-    duplicate_rows, categorized, skipped_rows} or {ok:False, error}.
+    duplicate_rows, categorized, skipped_rows, ...} or {ok:False, error}.
     """
     # Decode
     try:
@@ -170,14 +180,9 @@ def upload_pdf(conn: sqlite3.Connection, *,
     if rows:
         _store_extracted_rows(conn, batch_id, doc_id, rows, provider)
 
-    # Auto-confirm into the ledger, stamped with the provider's account
-    account_id = _ensure_account(conn, provider)
-    confirm = confirm_import(conn, batch_id, account_id=account_id)
-
     preview_data = {
         'doc_id': doc_id,
         'batch_id': batch_id,
-        'account_id': account_id,
         'row_count': len(rows),
         'skipped_rows': skipped_rows,
         'account_name': parse_result.get('account_name', ''),
@@ -186,15 +191,232 @@ def upload_pdf(conn: sqlite3.Connection, *,
         'warnings': parse_result.get('warnings', []),
         'parser_version': parse_result.get('parser_version', parser_spec['version']),
         'provider': provider,
+    }
+    if not auto_confirm:
+        # Preview-only: leave the batch in 'preview' state and report
+        # duplicates + cross-statement overlap flags per row. The dashboard
+        # passes auto_confirm=False so humans approve before the ledger moves.
+        rows_meta = _row_flags(conn, batch_id)
+        return {
+            'ok': True, **preview_data,
+            'account_id': None,
+            'confirm_pending': True,
+            'rows': rows_meta['rows'],
+            'new_rows': rows_meta['new_rows'],
+            'duplicate_rows': rows_meta['duplicate_rows'],
+            'overlap_rows': rows_meta['overlap_rows'],
+        }
+
+    # Auto-confirm into the ledger, stamped with the provider's account
+    account_id = _ensure_account(conn, provider)
+    confirm = confirm_import(conn, batch_id, account_id=account_id)
+    if not confirm.get('ok'):
+        return {'ok': False, **preview_data,
+                'account_id': account_id,
+                'error': confirm.get('error', 'Auto-confirm failed')}
+    return {
+        'ok': True, **preview_data,
+        'account_id': account_id,
+        'confirm_pending': False,
         'total_rows': confirm.get('total_rows', len(rows)),
         'new_rows': confirm.get('new_rows', 0),
         'duplicate_rows': confirm.get('duplicate_rows', 0),
         'categorized': confirm.get('categorized', 0),
     }
-    if not confirm.get('ok'):
-        return {'ok': False, **preview_data,
-                'error': confirm.get('error', 'Auto-confirm failed')}
-    return {'ok': True, **preview_data}
+
+
+def _row_flags(conn: sqlite3.Connection, batch_id: int) -> dict:
+    """Per-row preview flags for a preview batch.
+
+    Each extracted row is reported with its duplicate status and a
+    cross-account overlap hint (used to catch the same transaction appearing
+    on two statements, e.g. a transfer on both bank legs).
+    """
+    from duplicates import match_overlap
+    rows = store.list_extracted_by_batch(conn, batch_id)
+    preview = []
+    new_rows = 0
+    duplicate_rows = 0
+    overlap_rows = 0
+    for row in rows:
+        cand = {
+            'src_txn_id': row.get('src_txn_id', ''),
+            'occurred_at': row.get('occurred_at', ''),
+            'direction': row.get('direction', 'out'),
+            'total_amount': row.get('total_amount', 0),
+            'bank_ref': row.get('bank_ref', ''),
+            'recipient': row.get('recipient', ''),
+            'merchant': row.get('merchant', ''),
+            'transaction_type': row.get('transaction_type', ''),
+        }
+        overlap = match_overlap(conn, cand)
+        dup = row.get('dup_status') in ('exact_dup', 'possible')
+        item = {
+            'idx': row.get('ext_index', 0),
+            'occurred_at': row.get('occurred_at', ''),
+            'description': row.get('description', ''),
+            'direction': row.get('direction', 'out'),
+            'total_amount': row.get('total_amount', 0),
+            'duplicate': 1 if dup else 0,
+            'duplicate_of': row.get('duplicate_of'),
+            'overlap_status': overlap.get('status', 'different'),
+        }
+        if dup:
+            duplicate_rows += 1
+        elif overlap.get('status') in ('identical', 'likely'):
+            overlap_rows += 1
+        else:
+            new_rows += 1
+        preview.append(item)
+    return {
+        'rows': preview,
+        'new_rows': new_rows,
+        'duplicate_rows': duplicate_rows,
+        'overlap_rows': overlap_rows,
+    }
+
+
+_IMAGE_MAGIC = [(b'\x89PNG\r\n\x1a\n', 'image/png'),
+                (b'\xff\xd8\xff', 'image/jpeg'),
+                (b'RIFF', 'image/webp')]
+
+
+def upload_screenshot(conn: sqlite3.Connection, *,
+                      filename: str, b64data: str,
+                      max_size_mb: int = 10) -> dict:
+    """Upload a bank/e-wallet app screenshot and extract its rows via Gemini.
+
+    Screenshots are always preview-only: rows are held in a 'preview' batch
+    (kind 'screenshot', auto_confirm=False semantics) so the owner reviews
+    vision extraction before anything is confirmed. Auth keys are read at call
+    time via vision_extract and never logged.
+
+    Returns the same preview payload shape as upload_pdf(auto_confirm=False).
+    """
+    import uuid
+    from vision_extract import extract_transactions
+
+    try:
+        raw = base64.b64decode(b64data)
+    except Exception:
+        return {'ok': False, 'error': 'Invalid base64 data'}
+    if len(raw) > max_size_mb * 1024 * 1024:
+        return {'ok': False, 'error': f'File exceeds {max_size_mb}MB limit'}
+
+    ext = (Path(filename).suffix or '.png').lower()
+    if ext not in ('.png', '.jpg', '.jpeg', '.webp'):
+        return {'ok': False, 'error': 'Unsupported image type (use PNG/JPG/WebP)'}
+    mime_of = {'.png': 'image/png', '.jpg': 'image/jpeg',
+               '.jpeg': 'image/jpeg', '.webp': 'image/webp'}[ext]
+    if not any(raw.startswith(m) for m, _ in _IMAGE_MAGIC):
+        return {'ok': False, 'error': 'Not a valid image file'}
+
+    provider = 'screenshot'
+    kind = 'screenshot'
+    fingerprint = hashlib.sha256(raw).hexdigest()[:32]
+    source_key = f'screenshot:{fingerprint}'
+    safe_name = Path(filename).stem.replace('..', '').replace('/', '_').replace('\\', '_')[:80]
+    safe_name = ''.join(c for c in safe_name if c.isalnum() or c in '._- ') + ext
+
+    existing_doc = store.source_doc_exists(conn, source_key=source_key, fingerprint=fingerprint)
+    if existing_doc:
+        batch_count = conn.execute(
+            'SELECT COUNT(*) FROM import_batches WHERE source_document_id=?',
+            (existing_doc,)).fetchone()[0]
+        if batch_count:
+            return {'ok': False, 'error': 'This image has already been imported', 'doc_id': existing_doc}
+        conn.execute('DELETE FROM extracted_txns WHERE doc_id=?', (existing_doc,))
+        conn.execute('DELETE FROM import_batches WHERE source_document_id=?', (existing_doc,))
+        conn.execute('DELETE FROM source_documents WHERE id=?', (existing_doc,))
+        conn.commit()
+
+    upload_dir = ensure_upload_dir()
+    doc_dir = upload_dir / fingerprint
+    doc_dir.mkdir(exist_ok=True)
+    file_path = doc_dir / safe_name
+    file_path.write_bytes(raw)
+
+    doc_id = store.add_source_document(conn,
+        kind=kind, source_key=source_key, fingerprint=fingerprint,
+        provider=provider, upload_path=str(file_path))
+
+    try:
+        raw_rows = extract_transactions(file_path)
+    except Exception as e:
+        store.update_source_document(conn, doc_id, status='failed', error=str(e))
+        return {'ok': False, 'error': f'Extraction failed: {e}', 'doc_id': doc_id}
+
+    rows = []
+    for i, r in enumerate(raw_rows):
+        amount = _to_int_amount(r.get('amount_rp'))
+        direction = 'in' if str(r.get('direction', 'in')).strip().lower() == 'in' else 'out'
+        occurred = (r.get('occurred_at') or '').strip()
+        if occurred and not re.match(r'^\d{4}-\d{2}-\d{2}', occurred):
+            occurred = ''
+        rows.append({
+            'provider': provider,
+            'src_txn_id': f'{fingerprint}:{i}',
+            'occurred_at': occurred,
+            'description': (r.get('description') or '').strip(),
+            'raw_description': (r.get('description') or '').strip(),
+            'transaction_type': '',
+            'merchant': (r.get('merchant') or '').strip(),
+            'recipient': (r.get('recipient') or '').strip(),
+            'direction': direction,
+            'principal_amount': amount,
+            'fee_amount': 0,
+            'total_amount': amount,
+            'bank_ref': (r.get('reference') or '').strip(),
+            'source_page': 0,
+            'raw1': json.dumps(r, ensure_ascii=False),
+            'raw2': '',
+            'parser_version': 'screenshot-vision-1.0',
+        })
+
+    store.update_source_document(conn, doc_id, status='parsed',
+        parser_version='screenshot-vision-1.0',
+        preview=json.dumps({'row_count': len(rows), 'account_name': 'Screenshot',
+                            'period': ''}, ensure_ascii=False))
+
+    if not rows:
+        store.update_source_document(conn, doc_id, status='failed',
+            error='No transaction rows found in the screenshot')
+        return {'ok': False, 'error': 'No transaction rows found', 'doc_id': doc_id}
+
+    batch_id = store.add_import_batch(conn, doc_id)
+    _store_extracted_rows(conn, batch_id, doc_id, rows, provider)
+
+    rows_meta = _row_flags(conn, batch_id)
+    return {
+        'ok': True,
+        'doc_id': doc_id,
+        'batch_id': batch_id,
+        'account_id': None,
+        'row_count': len(rows),
+        'skipped_rows': 0,
+        'account_name': 'Screenshot',
+        'period': '',
+        'fingerprint': fingerprint,
+        'warnings': [],
+        'parser_version': 'screenshot-vision-1.0',
+        'provider': provider,
+        'confirm_pending': True,
+        'rows': rows_meta['rows'],
+        'new_rows': rows_meta['new_rows'],
+        'duplicate_rows': rows_meta['duplicate_rows'],
+        'overlap_rows': rows_meta['overlap_rows'],
+    }
+
+
+def _to_int_amount(value) -> int:
+    """Coerce a vision-read amount ('12.345,67', '12345', 12345.0) to int."""
+    try:
+        if value in (None, ''):
+            return 0
+        text = str(value).replace('.', '').replace(',', '.')
+        return int(float(text))
+    except (ValueError, TypeError):
+        return 0
 
 
 def _store_extracted_rows(conn: sqlite3.Connection,

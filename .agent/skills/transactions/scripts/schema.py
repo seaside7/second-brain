@@ -55,12 +55,17 @@ def connect(path: Path | str | None = None, *,
 # Schema – idempotent
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 6
 
-_SOURCE_DOC_CREATE = """
+_SOURCE_KINDS = ('gmail', 'gopay_pdf', 'bca_pdf', 'bni_pdf', 'mandiri_pdf',
+                 'screenshot', 'sheet', 'manual')
+
+_SOURCE_KINDS_SQL = ', '.join("'" + k + "'" for k in _SOURCE_KINDS)
+
+_SOURCE_DOC_CREATE = f"""
 CREATE TABLE IF NOT EXISTS source_documents (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    kind             TEXT    NOT NULL CHECK(kind IN ('gmail','gopay_pdf','bca_pdf','bni_pdf','manual')),
+    kind             TEXT    NOT NULL CHECK(kind IN ({_SOURCE_KINDS_SQL})),
     source_key       TEXT    NOT NULL,
     fingerprint      TEXT    NOT NULL,
     provider         TEXT    NOT NULL DEFAULT '',
@@ -137,6 +142,19 @@ CREATE TABLE IF NOT EXISTS extracted_txns (
     UNIQUE(doc_id, source_page, ext_index)
 );
 
+-- trips: named travel/event windows; trip dates are independent of the
+-- payment dates of the transactions assigned to them.
+CREATE TABLE IF NOT EXISTS trips (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT    NOT NULL,
+    destination TEXT    NOT NULL DEFAULT '',
+    start_date  TEXT    NOT NULL DEFAULT '',   -- YYYY-MM-DD
+    end_date    TEXT    NOT NULL DEFAULT '',   -- YYYY-MM-DD
+    notes       TEXT    NOT NULL DEFAULT '',
+    created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+    updated_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
+);
+
 -- ledger_txns: mutable normalised records (one-to-one with extracted)
 CREATE TABLE IF NOT EXISTS ledger_txns (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -150,6 +168,8 @@ CREATE TABLE IF NOT EXISTS ledger_txns (
                                             'refund','cashback','debt_repayment',
                                             'pending_reconcile','needs_review')),
     category_id      INTEGER DEFAULT NULL,
+    trip_id          INTEGER DEFAULT NULL REFERENCES trips(id),
+    payment_method   TEXT    NOT NULL DEFAULT '',
     notes            TEXT    NOT NULL DEFAULT '',
     confidence       TEXT    NOT NULL DEFAULT 'none'
                            CHECK(confidence IN ('high','medium','low','none')),
@@ -184,6 +204,22 @@ CREATE TABLE IF NOT EXISTS categories (
     name    TEXT    NOT NULL UNIQUE,
     "group" TEXT    NOT NULL DEFAULT '',
     builtin INTEGER NOT NULL DEFAULT 0
+);
+
+-- txn_splits: break one real bank/e-wallet debit into category (and optional
+-- trip) allocations. The parent ledger row counts once in balance/net cash;
+-- category + trip reports substitute the allocation sums, which must equal the
+-- parent amount (mismatches are surfaced as a discrepancy flag, never silently).
+CREATE TABLE IF NOT EXISTS txn_splits (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    parent_ledger_id INTEGER NOT NULL REFERENCES ledger_txns(id) ON DELETE CASCADE,
+    category_id      INTEGER NOT NULL REFERENCES categories(id),
+    trip_id          INTEGER DEFAULT NULL REFERENCES trips(id),
+    amount           INTEGER NOT NULL,
+    notes            TEXT    NOT NULL DEFAULT '',
+    created_at       TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+    updated_at       TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+    UNIQUE(parent_ledger_id, category_id, trip_id)
 );
 
 -- category_rules: remembered merchant/recipient -> category + nature
@@ -229,6 +265,18 @@ after_json  TEXT    NOT NULL DEFAULT '{{}}',
 CREATE TABLE IF NOT EXISTS sync_state (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL DEFAULT ''
+);
+
+-- sheet_import_log: one-time recap import bookkeeping. One row per sheet row,
+-- keyed by its content hash so a re-run of the same recap is a no-op.
+CREATE TABLE IF NOT EXISTS sheet_import_log (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    row_hash      TEXT    NOT NULL UNIQUE,
+    sheet_row     INTEGER NOT NULL DEFAULT 0,
+    action        TEXT    NOT NULL,
+    ledger_id     INTEGER DEFAULT NULL REFERENCES ledger_txns(id) ON DELETE SET NULL,
+    reviewed      INTEGER NOT NULL DEFAULT 0,
+    created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
 );
 
 -- schema_version marker (single row, updated on migration)
@@ -289,7 +337,7 @@ def _migrate_source_documents_kind(conn: sqlite3.Connection) -> None:
             "SELECT 1 FROM sqlite_master WHERE type='table' "
             "AND name='source_documents__old'").fetchone()
         sd_sql = (sd[0] or '') if sd else ''
-        kind_ok = all(k in sd_sql for k in ('bca_pdf', 'bni_pdf'))
+        kind_ok = all(k in sd_sql for k in _SOURCE_KINDS)
 
         if sd and not kind_ok and not has_old:
             # normal upgrade path: rename-rebuild preserves ids for FKs
@@ -327,6 +375,16 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE extracted_txns ADD COLUMN transaction_type "
                      "TEXT NOT NULL DEFAULT ''")
     _migrate_source_documents_kind(conn)
+
+    lcols = {r['name'] for r in conn.execute("PRAGMA table_info(ledger_txns)").fetchall()}
+    if lcols:
+        if 'trip_id' not in lcols:
+            conn.execute("ALTER TABLE ledger_txns ADD COLUMN trip_id "
+                         "INTEGER DEFAULT NULL REFERENCES trips(id)")
+        if 'payment_method' not in lcols:
+            conn.execute("ALTER TABLE ledger_txns ADD COLUMN payment_method "
+                         "TEXT NOT NULL DEFAULT ''")
+
     if cols and 'transaction_type' in cols and 'raw_description' in cols:
         conn.execute(
             "INSERT OR REPLACE INTO _meta(key, value) VALUES (?, ?)",

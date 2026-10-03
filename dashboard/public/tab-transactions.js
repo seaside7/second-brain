@@ -66,6 +66,9 @@ const TransactionsTab = (() => {
   let _accounts = [];
   let _allPage = 0;
   let _allPageSize = 50;
+  /* one-time recap (Google Sheet) import preview state */
+  let _recapPreview = null;
+  let _recapFile = null;
   /* overview (finance dashboard) filter state */
   let _ovCats = [];          // selected category ids, [] = all
   let _ovProviders = '';     // '' = all wallets/banks
@@ -845,7 +848,92 @@ const rpSigned = n => {
       <div class="tx-card"><h3 class="tx-card-title">Import History</h3>
         ${rows || '<div class="tx-empty">No imports yet. Upload a statement PDF (GoPay / BCA / BNI) to start.</div>'}
       </div>
+      <div class="tx-card"><h3 class="tx-card-title">Recap (Google Sheet) one-time import</h3>
+        <div class="tx-recap-pick">
+          <input id="tx-recap-file" type="file" accept=".csv,.json">
+          <button id="tx-recap-preview-btn" class="btn tx-btn-outline">${Comp.ic('search')} Preview</button>
+        </div>
+        <div id="tx-recap-result"></div>
+      </div>
     `;
+    el.querySelector('#tx-recap-file').addEventListener('change', e => { _recapFile = e.target.files[0]; _recapPreview = null; _renderRecapResult(el); });
+    el.querySelector('#tx-recap-preview-btn').addEventListener('click', ev => _previewRecap(ev, el));
+    if (_recapFile) _renderRecapResult(el);
+  }
+
+  async function _previewRecap(ev, el) {
+    const btn = ev.currentTarget;
+    if (!_recapFile) { toast('Pick a recap CSV/JSON export first', false); return; }
+    btn.disabled = true; btn.textContent = 'Previewing...';
+    _busy(true);
+    try {
+      const b64 = await _fileToBase64(_recapFile);
+      const res = await _post('/api/transactions/recap/preview',
+        { filename: _recapFile.name, data: b64 }, 30000);
+      if (!res.ok) { toast(res.error || 'Recap preview failed', false); return; }
+      _recapPreview = res;
+      toast('Recap previewed. Review the counts then confirm.', true);
+    } catch (e) {
+      toast(e.message, false);
+    } finally {
+      btn.disabled = false; btn.textContent = 'Preview';
+      _busy(false);
+      if (_recapFile) _renderRecapResult(el);
+    }
+  }
+
+  function _renderRecapResult(el) {
+    const box = el.querySelector('#tx-recap-result');
+    if (!box) return;
+    const p = _recapPreview;
+    if (!p || !p.ok) {
+      box.innerHTML = _recapFile
+        ? '<div class="tx-empty">Preview to see how this recap maps onto the ledger.</div>'
+        : '';
+      return;
+    }
+    const t = p.totals || {};
+    const fmt = v => 'Rp ' + Math.round(v || 0).toLocaleString('id-ID');
+    box.innerHTML = `
+      <div class="tx-recap-counts">
+        <span class="tx-recap-num">${p.matched.length}</span><span class="tx-recap-label">matched (will update)</span>
+        <span class="tx-recap-num">${p.new_rows.length}</span><span class="tx-recap-label">new (${fmt(t.new)})</span>
+        <span class="tx-recap-num">${p.ambiguous.length}</span><span class="tx-recap-label">ambiguous (held)</span>
+        <span class="tx-recap-num">${p.excluded.length}</span><span class="tx-recap-label">excluded</span>
+      </div>
+      <div class="tx-recap-total">Recap sheet total: <b>${fmt(t.sheet_total)}</b></div>
+      ${p.new_rows.length || p.matched.length
+        ? `<button id="tx-recap-confirm-btn" class="btn tx-btn-primary">Confirm ${p.new_rows.length ? p.new_rows.length + ' new + ' : ''}${p.matched.length} matched</button>
+           <div class="tx-recap-hint">Conflicts stay untouched; ambiguous rows are held for review.</div>`
+        : ''}
+    `;
+    const cb = box.querySelector('#tx-recap-confirm-btn');
+    if (cb) cb.addEventListener('click', () => _confirmRecap(el));
+  }
+
+  async function _confirmRecap(el) {
+    if (!_recapFile || !_recapPreview) return;
+    const b64 = await _fileToBase64(_recapFile);
+    _busy(true);
+    try {
+      const res = await _post('/api/transactions/recap/confirm', {
+        filename: _recapFile.name,
+        data: b64,
+        apply_hashes: (_recapPreview.new_rows || []).map(r => r.hash),
+      }, 60000);
+      if (res.ok) {
+        toast(`Recap applied: ${res.enriched} updated, ${res.inserted} inserted, ` +
+              `${res.conflicts} conflicts, ${res.held_review} held for review.`, true);
+        _recapPreview = null;
+        await refreshView();
+      } else {
+        toast(res.error || 'Recap confirm failed', false);
+      }
+    } catch (e) {
+      toast(e.message, false);
+    } finally {
+      _busy(false);
+    }
   }
 
   async function _confirmImport(ev) {
@@ -1111,8 +1199,14 @@ const rpSigned = n => {
         const res = await _post('/api/transactions/upload',
           { filename: file.name, data: b64, provider, password, month }, 120000);
         if (res.ok) {
-          toast(`Imported ${res.new_rows || 0} rows (${res.duplicate_rows || 0} duplicates skipped)` +
-                (res.skipped_rows ? `, ${res.skipped_rows} out-of-month skipped` : ''), true);
+          if (res.confirm_pending) {
+            toast(`Parsed ${res.row_count || res.new_rows || 0} rows — ` +
+                  `${res.new_rows || 0} new, ${res.duplicate_rows || 0} dup, ` +
+                  `${res.overlap_rows || 0} overlapping. Confirm in the Imports tab.`, true);
+          } else {
+            toast(`Imported ${res.new_rows || 0} rows (${res.duplicate_rows || 0} duplicates skipped)` +
+                  (res.skipped_rows ? `, ${res.skipped_rows} out-of-month skipped` : ''), true);
+          }
           await refreshView();
         } else {
           toast(res.error || 'Upload failed', false);

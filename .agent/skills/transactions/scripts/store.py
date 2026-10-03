@@ -241,6 +241,7 @@ def get_ledger(conn: sqlite3.Connection, ledger_id: int) -> Optional[dict]:
 
 def update_ledger(conn: sqlite3.Connection, ledger_id: int, **fields) -> bool:
     allowed = {'account_id','amount','direction','nature','category_id',
+               'trip_id','payment_method',
                'notes','confidence','confidence_reason','review_status',
                'txn_status','evidence_json'}
     sets = {k: v for k, v in fields.items() if k in allowed}
@@ -291,6 +292,7 @@ def list_ledger(conn: sqlite3.Connection, *,
                 txn_status: str | None = None,
                 account_id: int | None = None,
                 category_id: int | None = None,
+                trip_id: int | None = None,
                 from_date: str | None = None,
                 to_date: str | None = None,
                 search: str | None = None,
@@ -307,6 +309,8 @@ def list_ledger(conn: sqlite3.Connection, *,
         conds.append("l.account_id=?"); params.append(account_id)
     if category_id:
         conds.append("l.category_id=?"); params.append(category_id)
+    if trip_id is not None:
+        conds.append("l.trip_id=?"); params.append(trip_id)
     if from_date:
         conds.append("e.occurred_at>=?"); params.append(from_date)
     if to_date:
@@ -318,6 +322,8 @@ def list_ledger(conn: sqlite3.Connection, *,
     sql = (
         "SELECT l.*, a.alias as account_alias, a.masked as account_masked, "
         "c.name as category_name, c.\"group\" as category_group, "
+        "t.name as trip_name, t.destination as trip_destination, "
+        "t.start_date as trip_start, t.end_date as trip_end, "
         "e.description, e.raw_description, e.transaction_type, e.merchant, "
         "e.recipient, e.src_txn_id, e.provider, "
         "e.phone_suffix, e.bank_ref, e.occurred_at, "
@@ -325,6 +331,7 @@ def list_ledger(conn: sqlite3.Connection, *,
         "FROM ledger_txns l "
         "LEFT JOIN accounts a ON a.id=l.account_id "
         "LEFT JOIN categories c ON c.id=l.category_id "
+        "LEFT JOIN trips t ON t.id=l.trip_id "
         "LEFT JOIN extracted_txns e ON e.id=l.ext_id "
         "LEFT JOIN source_documents s ON s.id=e.doc_id "
         f"{where} ORDER BY e.occurred_at DESC, l.created_at DESC LIMIT ? OFFSET ?")
@@ -335,6 +342,7 @@ def count_ledger(conn: sqlite3.Connection, *,
                  txn_status: str | None = None,
                  review_status: str | None = None,
                  category_id: int | None = None,
+                 trip_id: int | None = None,
                  from_date: str | None = None,
                  to_date: str | None = None) -> int:
     conds, params = [], []
@@ -344,6 +352,8 @@ def count_ledger(conn: sqlite3.Connection, *,
         conds.append("l.review_status=?"); params.append(review_status)
     if category_id:
         conds.append("l.category_id=?"); params.append(category_id)
+    if trip_id is not None:
+        conds.append("l.trip_id=?"); params.append(trip_id)
     if from_date:
         conds.append("e.occurred_at>=?"); params.append(from_date)
     if to_date:
@@ -414,6 +424,97 @@ def delete_transfer(conn: sqlite3.Connection, transfer_id: int) -> bool:
     conn.execute("DELETE FROM transfers WHERE id=?", (transfer_id,))
     conn.commit()
     return conn.total_changes > 0
+
+# ── trips ────────────────────────────────────────────────────────────────
+
+def add_trip(conn: sqlite3.Connection, *, name: str,
+             destination: str = '', start_date: str = '',
+             end_date: str = '', notes: str = '') -> int:
+    cur = conn.execute(
+        "INSERT INTO trips(name,destination,start_date,end_date,notes) "
+        "VALUES(?,?,?,?,?)",
+        (name, destination, start_date, end_date, notes))
+    conn.commit()
+    return cur.lastrowid
+
+def get_trip(conn: sqlite3.Connection, trip_id: int) -> Optional[dict]:
+    r = conn.execute("SELECT * FROM trips WHERE id=?", (trip_id,)).fetchone()
+    return dict(r) if r else None
+
+def update_trip(conn: sqlite3.Connection, trip_id: int, **fields) -> bool:
+    allowed = {'name','destination','start_date','end_date','notes'}
+    sets = {k: v for k, v in fields.items() if k in allowed}
+    if not sets:
+        return False
+    sets['updated_at'] = _now_wib()
+    conn.execute(
+        f"UPDATE trips SET {', '.join(f'{k}=?' for k in sets)} WHERE id=?",
+        (*sets.values(), trip_id))
+    conn.commit()
+    return True
+
+def list_trips(conn: sqlite3.Connection) -> list[dict]:
+    return [dict(r) for r in conn.execute(
+        "SELECT t.*, "
+        "  SUM(CASE WHEN l.nature='expense' THEN l.amount ELSE 0 END) AS spend_total, "
+        "  COUNT(l.id) AS member_count "
+        "FROM trips t "
+        "LEFT JOIN ledger_txns l ON l.trip_id=t.id "
+        "GROUP BY t.id ORDER BY t.start_date DESC, t.id DESC").fetchall()]
+
+def list_trip_members(conn: sqlite3.Connection, trip_id: int) -> list[dict]:
+    """Ledger rows currently assigned to a trip (reuses the list join shape)."""
+    return list_ledger(conn, trip_id=trip_id, limit=1000)
+
+# ── txn_splits ───────────────────────────────────────────────────────────
+
+def add_split(conn: sqlite3.Connection, *, parent_ledger_id: int,
+              category_id: int, trip_id: int | None = None,
+              amount: int = 0, notes: str = '') -> int:
+    cur = conn.execute(
+        "INSERT OR REPLACE INTO txn_splits"
+        "(parent_ledger_id,category_id,trip_id,amount,notes) "
+        "VALUES(?,?,?,?,?)",
+        (parent_ledger_id, category_id, trip_id, amount, notes))
+    conn.commit()
+    return cur.lastrowid
+
+def list_splits(conn: sqlite3.Connection,
+                parent_ledger_id: int | None = None) -> list[dict]:
+    conds, params = [], []
+    if parent_ledger_id is not None:
+        conds.append("s.parent_ledger_id=?"); params.append(parent_ledger_id)
+    where = ("WHERE " + " AND ".join(conds)) if conds else ""
+    return [dict(r) for r in conn.execute(
+        f"SELECT s.*, c.name as category_name, c.\"group\" as category_group, "
+        "t.name as trip_name "
+        "FROM txn_splits s "
+        "LEFT JOIN categories c ON c.id=s.category_id "
+        "LEFT JOIN trips t ON t.id=s.trip_id "
+        f"{where} ORDER BY s.id", params).fetchall()]
+
+def delete_splits(conn: sqlite3.Connection, parent_ledger_id: int,
+                  category_id: int | None = None,
+                  trip_id: int | None = None) -> int:
+    conds, params = ["parent_ledger_id=?"], [parent_ledger_id]
+    if category_id is not None:
+        conds.append("category_id=?"); params.append(category_id)
+    if trip_id is not None:
+        if trip_id == 0:
+            conds.append("trip_id IS NULL")
+        else:
+            conds.append("trip_id=?"); params.append(trip_id)
+    cur = conn.execute(
+        f"DELETE FROM txn_splits WHERE {' AND '.join(conds)}", params)
+    conn.commit()
+    return cur.rowcount
+
+def split_balance(conn: sqlite3.Connection, parent_ledger_id: int) -> int:
+    """Sum of allocation amounts for a parent ledger row (0 when none)."""
+    r = conn.execute(
+        "SELECT COALESCE(SUM(amount),0) FROM txn_splits "
+        "WHERE parent_ledger_id=?", (parent_ledger_id,)).fetchone()
+    return r[0] if r else 0
 
 # ── categories + rules ──────────────────────────────────────────────────
 
