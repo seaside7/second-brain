@@ -332,16 +332,42 @@ def _parse_email(body: str, provider: str, subject: str,
     return rows
 
 
+_PAYEE_SNIFF_LABELS = ('Company/Product Name', 'Beneficiary Name', 'Payee',
+                       'Name')
+_PAYEE_SNIFF_RE = re.compile(
+    r'(' + '|'.join(re.escape(l) for l in _PAYEE_SNIFF_LABELS) +
+    r')\s*[:\-]\s*([^|]{3,200})', re.IGNORECASE)
+
+
+def _strip_payee_for_sniff(body_l: str) -> str:
+    """Blank a counterparty name from a body before direction sniffing.
+
+    A company/product name can legitimately contain 'kredit'/'credit'
+    ('PT KREDIT PINTAR INDONESIA', 'TOYOTA ASTRA KREDIT') and must never flip
+    a payment the owner makes to an inflow just because of that substring.
+    Only values that actually carry 'kredit'/'credit' are blanked, so genuine
+    inflow cues ('Received Amount', 'dana masuk') elsewhere in the body are
+    never touched.
+    """
+    def _drop_selected(m):
+        if re.search(r'kredit|credit', m.group(2), re.IGNORECASE):
+            return m.group(1) + ' : '
+        return m.group(0)
+
+    return _PAYEE_SNIFF_RE.sub(_drop_selected, body_l)
+
+
 def _has_inflow_signal(body_l: str, extra: tuple[str, ...] = ()) -> bool:
     """True when the body signals money actually coming IN - not just the
     bare word 'credit'/'kredit' appearing as part of a PRODUCT name
-    ('Credit Card', 'Kartu Kredit'). A "Credit Card & Paylater" journal
-    entry is the owner PAYING their card bill - an outflow - but a bare
-    `'credit' in body_l` check used to true it into 'in' just because the
-    transaction type happens to be named "Credit Card"."""
-    stripped = body_l.replace('credit card', ' ').replace('kartu kredit', ' ')
+    ('Credit Card', 'Kartu Kredit', 'PT KREDIT PINTAR INDONESIA'). A "Credit
+    Card & Paylater" journal entry is the owner PAYING their card bill - an
+    outflow - but a bare `'credit' in body_l` check used to true it into 'in'
+    just because the transaction type happens to be named "Credit Card"."""
+    body_l = _strip_payee_for_sniff(body_l).replace('credit card', ' ')
+    body_l = body_l.replace('kartu kredit', ' ')
     signals = ('credit', 'received', 'dana masuk', 'kredit') + tuple(extra)
-    return any(k in stripped for k in signals)
+    return any(k in body_l for k in signals)
 
 
 def _parse_bca(body: str, subject: str, occurred_at: str) -> list[dict]:

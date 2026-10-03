@@ -37,7 +37,7 @@ _VA_LOAN_BILLERS = ('pegadaian', 'gadai')
 # the categorizer never guesses). -> Online Credit.
 _VA_ONLINE_CREDIT = ('spaylater', 'spinjam', 'gopay later', 'golater', 'paylater',
                      'shopee pinjam', 'kredivo', 'akulaku', 'indodana',
-                     'ada kredit')
+                     'ada kredit', 'kredit pintar')
 
 # Wallet providers that can be OUR OWN wallet. A bank debit only counts as an
 # own-wallet top-up when the parsed counterparty (recipient/merchant - never
@@ -111,6 +111,7 @@ _BILLERS = [
     ('telkomsel', 'bills_phone'), ('indosat', 'bills_phone'),
     ('pulsa', 'bills_phone'), ('paket data', 'bills_phone'),
     ('kartu kredit', 'bills_cc'), ('payment cc', 'bills_cc'),
+    ('credit card', 'bills_cc'),
 ]
 
 _GROCERIES = ['indomaret', 'alfamart', 'superindo', 'hypermart', 'transmart',

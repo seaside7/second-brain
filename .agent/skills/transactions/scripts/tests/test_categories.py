@@ -247,6 +247,23 @@ class CategorizerTestCase(unittest.TestCase):
         self.assertEqual(r['group'], 'Loans')
         self.assertEqual(r['name'], 'Online Credit')
 
+    def test_15c_kredit_pintar_va_is_online_credit(self):
+        r = self._cat(description='VA - PT Kredit Pintar Indonesia / Kreditpintar',
+                      transaction_type='va_payment')
+        self.assertEqual(r['nature'], 'expense')
+        self.assertEqual(r['group'], 'Loans')
+        self.assertEqual(r['name'], 'Online Credit')
+        self.assertEqual(r['confidence'], 'high')
+
+    def test_15d_credit_card_bill_payment_is_cc_bill(self):
+        r = self._cat(description='Credit Card & Paylater - BCA Source Of Fund '
+                                  ': 7310****26 Card No. / Customer No. : '
+                                  '0000000014****88 Name : ISKANDAR',
+                      transaction_type='payment')
+        self.assertEqual(r['nature'], 'expense')
+        self.assertEqual(r['group'], 'Utilities')
+        self.assertEqual(r['name'], 'Credit Card')
+
     def test_16_pegadaian_va_is_loan_payment(self):
         r = self._cat(description='VA 19008/P Gadai Indo', transaction_type='va_payment')
         self.assertEqual(r['group'], 'Loans')
@@ -344,6 +361,54 @@ class BcaJournalParserTestCase(unittest.TestCase):
 
     def _parse(self, body, subject='Internet Transaction Journal'):
         return gmail_sync._parse_bca(body, subject, '2026-09-20T10:00:00Z')
+
+    def test_va_payee_named_kredit_is_still_debit(self):
+        # The payee's corporate name contains 'kredit' - paying a Kredit Pintar
+        # VA is an outflow; the name must never flip the direction to inflow.
+        body = (
+            'Hello SAID ISKANDAR,\n'
+            'You just made a transaction through myBCA.\n'
+            'Here are the details of your transaction :\n'
+            'Status : Successful\n'
+            'Transaction Date : 30 Sep 2026 09:58:48\n'
+            'Transfer Type : Transfer to BCA Virtual Account\n'
+            'Source of Fund : 7310xxxx26\n'
+            'BCA Virtual Account No. : 395397376709159\n'
+            'Name : PANJILEWAUDDINDAENGMALEWA\n'
+            'Company/Product Name : PT KREDIT PINTAR INDONESIA / KREDITPINTAR\n'
+            'Pay Amount : IDR 1,888,388.00\n'
+            'Total Payment : IDR 1,888,388.00\n'
+            'Description : Payment Success\n'
+            'Reference No. : 9527120260930095848478TVA5657803200\n'
+            'Note(s):\n'
+            'Fees Include VAT (if any)\n'
+            'PT BANK CENTRAL ASIA TBK.\n'
+            'MENARA BCA - JAKARTA PUSAT\n'
+            'NPWP: 0013084496091000'
+        )
+        rows = gmail_sync._parse_bca(body, 'Internet Transaction Journal',
+                                     '2026-09-30T09:59:00Z')
+        self.assertEqual(len(rows), 1)
+        r = rows[0]
+        self.assertEqual(r['total_amount'], 1888388)
+        self.assertEqual(r['direction'], 'out')
+        self.assertEqual(r['transaction_type'], 'va_payment')
+        self.assertIn('Kredit Pintar', r['description'])
+
+    def test_inflow_signal_survives_payee_strip(self):
+        # Inbound cues ('Received Amount') right after a payee name must still
+        # classify as money in - the payee value carries no kredit/credit.
+        body = (
+            'You just made a transaction through myBCA.\n'
+            'Transfer Type : Transfer from BCA Account\n'
+            'Beneficiary Name : SAID ISKANDAR\n'
+            'Received Amount : IDR 500,000.00\n'
+            'Total Payment : IDR 500,000.00'
+        )
+        rows = gmail_sync._parse_bca(body, 'Internet Transaction Journal',
+                                     '2026-09-30T10:00:00Z')
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['direction'], 'in')
 
     def test_transfer_uses_beneficiary_and_remarks(self):
         body = (
