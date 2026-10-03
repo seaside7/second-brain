@@ -115,7 +115,7 @@ def _type_fields(remarks: str) -> tuple[str, str]:
     if 'TRANSFER BI FAST' in up or 'TRANSFER KE' in up or up.startswith('TRANSFER'):
         return 'transfer', 'Transfer'
     if any(k in up for k in ('TOP-UP', 'TOP UP', 'TOPUP')):
-        return 'top_up', 'Top-up e-money'
+        return 'top_up', 'E-money Top-up'
     if 'PEMBAYARAN QR' in up or 'QRIS' in up:
         return 'payment', 'QRIS payment'
     if any(k in up for k in ('TARIKAN TUNAI', 'PENARIKAN TUNAI', 'ATM')):

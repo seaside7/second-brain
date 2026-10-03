@@ -68,17 +68,17 @@ _OWN_NAMES = ['said iskandar']
 # ── category taxonomy (group, name); get_or_create adds rows on first use ──
 _CAT = {
     'income':         ('Income', 'Income'),
-    'internal':       ('Transfers', 'Transfer internal'),
-    'family':         ('Transfers', 'Transfer keluarga'),
+    'internal':       ('Transfers', 'Internal Transfer'),
+    'family':         ('Transfers', 'Family Transfer'),
     'topup_3rd':      ('Transfers', 'Top Up (3rd party)'),
-    'topup_shopeepay': ('Transfers', 'Top-up ShopeePay'),
-    'topup_ovo':      ('Transfers', 'Top-up OVO'),
+    'topup_shopeepay': ('Transfers', 'ShopeePay Top-up'),
+    'topup_ovo':      ('Transfers', 'OVO Top-up'),
     'bills_elec':     ('Utilities', 'Electricity (PLN)'),
     'bills_internet': ('Utilities', 'Internet'),
     'bills_phone':    ('Utilities', 'Mobile & Data'),
     'bills_cc':       ('Utilities', 'Credit Card'),
     'groceries':      ('Groceries', 'Groceries'),
-    'food':            ('Food & Dining', 'Makan dan minum'),
+    'food':            ('Food & Dining', 'Food & Dining'),
     'transport_fuel': ('Transport', 'Fuel'),
     'transport_toll': ('Transport', 'Toll'),
     'transport_parking': ('Transport', 'Parking'),
@@ -89,10 +89,10 @@ _CAT = {
     'health_vitamins': ('Health', 'Vitamins'),
     'health_medical': ('Health', 'Medical'),
     'cash':           ('Cash', 'Cash Withdrawal'),
-    'fee':            ('Fees', 'Biaya bank'),
+    'fee':            ('Fees', 'Bank Fee'),
     'loan_payment':   ('Loans', 'Loan Payment'),
     'online_credit':  ('Loans', 'Online Credit'),
-    'car_loan':       ('Loans', 'Car Loan'),
+    'car_loan':       ('Loans', 'Vehicle Installment'),
     # Manual-only categories (owner assigns by hand; the categorizer never
     # auto-fires them): money received from a friend (income) and money paid
     # back to a friend (expense).
@@ -446,6 +446,17 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
         if _own_person_transfer(conn, row):
             set_cat('internal', 'internal_transfer', 'medium',
                     'Transfer to own (registered) account')
+            return hit
+        # Family transfers stay in Review so the owner can read the remark
+        # (e.g. 'Beli Ayam') and pick the category themselves. Only Dinda is
+        # held this way (owner decision).
+        if re.search(r'\bdinda\b', _text(row), re.I):
+            set_fallback('Family transfer to Dinda - review remarks & assign category')
+            return hit
+        # Adeeva (owner's daughter) transfers file straight to her category.
+        if re.search(r'\badeeva\b', _text(row), re.I):
+            set_cat('adeeva', 'transfer_to_person', 'medium',
+                    'Transfer to Adeeva')
             return hit
         # Transfer to a person, optionally with a categorizable note.
         if 'belanja' in desc or any(_has(desc, m) for m in _GROCERIES):

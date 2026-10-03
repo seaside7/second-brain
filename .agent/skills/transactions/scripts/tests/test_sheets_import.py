@@ -379,8 +379,11 @@ class FamilyTests(RecapImportTestCase):
         self.assertEqual(sum(s[1] for s in splits), 2500000)
         cats = self._conn.execute(
             'SELECT id,name FROM categories WHERE name IN '
-            "('Bulanan Dinda','Groceries')").fetchall()
+            "('Dinda Allowance','Groceries')").fetchall()
         self.assertEqual(len(cats), 2)
+        self.assertNotIn('Bulanan Dinda',
+                         [c[0] for c in self._conn.execute(
+                             'SELECT name FROM categories')])
         self.assertNotIn(None, [s[0] for s in splits])
 
     def test_family_not_applied_stays_held(self):

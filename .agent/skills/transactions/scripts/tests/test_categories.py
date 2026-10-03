@@ -194,13 +194,21 @@ class CategorizerTestCase(unittest.TestCase):
         self.assertEqual(r['group'], 'Cash')
         self.assertIn('Withdrawal', r['name'])
 
-    def test_09_transfer_to_person(self):
+    def test_09_dinda_transfer_holds_for_review(self):
         r = self._cat(description='Transfer - Dinda Fitri Nurul Aini',
                       transaction_type='transfer', recipient='DINDA FITRI NURUL AINI')
+        self.assertEqual(r['nature'], 'needs_review')
+        self.assertEqual(r['confidence'], 'none')
+        # Held for the owner to read the remark and assign the category.
+        self.assertEqual(r['name'], 'Uncategorized')
+
+    def test_09b_adeeva_transfer_files_to_adeeva(self):
+        r = self._cat(description='Transfer - Adeeva Latisha Iskandar',
+                      transaction_type='transfer',
+                      recipient='ADEEVA LATISHA ISKANDAR')
         self.assertEqual(r['nature'], 'transfer_to_person')
-        self.assertEqual(r['group'], 'Transfers')
-        # No per-recipient category - just a shared 'Transfer' (owner notes names).
-        self.assertEqual(r['name'], 'Transfer')
+        self.assertEqual(r['name'], 'Adeeva')
+        self.assertEqual(r['group'], 'Family')
 
     def test_10_explicit_admin_fee(self):
         r = self._cat(description='GoPay Top Up - Admin Fee', transaction_type='fee')
@@ -312,7 +320,7 @@ class CategorizerTestCase(unittest.TestCase):
             transaction_type='va_payment', provider='bca')
         self.assertEqual(r['nature'], 'top_up')
         self.assertEqual(r['group'], 'Transfers')
-        self.assertEqual(r['name'], 'Top-up ShopeePay')
+        self.assertEqual(r['name'], 'ShopeePay Top-up')
 
     def test_19c_airpay_shopee_bill_is_spend(self):
         # SHOPEE Bill (an invoice for goods) is not a wallet top-up - it stays
@@ -342,7 +350,7 @@ class CategorizerTestCase(unittest.TestCase):
             transaction_type='va_payment', provider='bca')
         self.assertEqual(r['nature'], 'top_up')
         self.assertEqual(r['group'], 'Transfers')
-        self.assertEqual(r['name'], 'Top-up OVO')
+        self.assertEqual(r['name'], 'OVO Top-up')
 
     def test_19e_visionet_ovo_other_holder_is_review(self):
         # An OVO top-up whose holder is someone else - review, never spend.
@@ -895,7 +903,7 @@ class InternalTransferRuleTestCase(unittest.TestCase):
         self.assertEqual(r['nature'], 'internal_transfer')
         self.assertEqual(r['confidence'], 'high')
         self.assertEqual(r['group'], 'Transfers')
-        self.assertEqual(r['name'], 'Transfer internal')
+        self.assertEqual(r['name'], 'Internal Transfer')
 
     def test_transfer_in_from_own_name_internal(self):
         r = self._cat(description='Transfer Masuk', transaction_type='transfer',

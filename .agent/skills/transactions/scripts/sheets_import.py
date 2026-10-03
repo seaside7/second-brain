@@ -60,6 +60,44 @@ RECAP_COLUMN_ALIASES = {
     'source': {'source', 'sumber'},
 }
 
+# Recap sheet category names -> English canonical system category. The recap
+# taxonomy is Indonesian; the ledger taxonomy is English since 2026-10-03, so
+# a re-import must never recreate Indonesian-named categories.
+RECAP_CATEGORY_ALIASES = {
+    'Bulanan Dinda': 'Dinda Allowance',
+    'Makan dan minum': 'Food & Dining',
+    'Biaya bank': 'Bank Fee',
+    'Transfer internal': 'Internal Transfer',
+    'Transfer keluarga': 'Family Transfer',
+    'Pembayaran utang': 'Loan Payment',
+    'Pembayaran Pinjol': 'Pinjol Payment',
+    'Tagihan rumah': 'Household Bills',
+    'Top-up ShopeePay': 'ShopeePay Top-up',
+    'Top-up OVO': 'OVO Top-up',
+    'Top-up e-money': 'E-money Top-up',
+    'Belanja': 'Online Shopping',
+    'Gaji': 'Salary',
+    'Dana perjalanan kerja': 'Work Travel Allowance',
+    'Pinjaman masuk': 'Loan Received',
+    'KPR': 'Mortgage',
+    'Cicilan kendaraan': 'Vehicle Installment',
+    'Pengembalian pinjaman': 'Loan Repayment',
+    'Tiket kereta': 'Train Ticket',
+    'Transportasi': 'Transportation',
+    'Asuransi': 'Insurance',
+    'Apotek': 'Pharmacy',
+    'RS Anak': "Children's Hospital",
+    'Tukang': 'Handyman',
+    'Arif Pinjam': 'Arif Loan',
+    'Perlu konfirmasi': 'Pending Confirmation',
+    'Digital dan langganan': 'Digital & Subscriptions',
+}
+
+def _cat_name_for_recap(raw: str) -> str:
+    """Map a recap sheet category value to the English canonical name."""
+    name = (raw or '').strip()
+    return RECAP_CATEGORY_ALIASES.get(name, name)
+
 SUMMARY_TYPES = {'total', 'subtotal', 'summary', 'total biaya', 'total pengeluaran',
                  'total amount'}
 ADJUSTMENT_TYPES = {'adjustment', 'adjust', 'chart', 'pivot', 'chart adjustment',
@@ -545,7 +583,7 @@ def _enrich_matched(conn, row: dict, res: dict) -> dict:
     cat_name = (row.get('category') or '').strip()
 
     if cat_name and row.get('confirmed'):
-        cat = store.get_or_create_category(conn, name=cat_name)
+        cat = store.get_or_create_category(conn, name=_cat_name_for_recap(cat_name))
         if cat != ledger.get('category_id'):
             if store.has_manual_correction(conn, lid, ('category_id',)):
                 out['conflict'] = True
@@ -556,7 +594,7 @@ def _enrich_matched(conn, row: dict, res: dict) -> dict:
                 out['applied'] = True
     elif cat_name and not row.get('confirmed') and not ledger.get('category_id'):
         if res.get('apply_category', True):
-            cat = store.get_or_create_category(conn, name=cat_name)
+            cat = store.get_or_create_category(conn, name=_cat_name_for_recap(cat_name))
             _raw_update(conn, lid, category_id=cat)
             _raw_correction(conn, lid, 'category_id', '', str(cat))
             out['applied'] = True
@@ -623,7 +661,7 @@ def _insert_missing(conn, row: dict) -> int:
     ext = cur.lastrowid
     cat = None
     if row.get('category'):
-        cat = store.get_or_create_category(conn, name=row['category'])
+        cat = store.get_or_create_category(conn, name=_cat_name_for_recap(row['category']))
     is_fam = bool(row.get('family_slices'))
     cur = conn.execute(
         "INSERT INTO ledger_txns(ext_id,account_id,amount,direction,nature,"
@@ -653,7 +691,7 @@ def _apply_splits(conn, parent_ledger_id: int, alloc_rows: list[dict]) -> None:
     for a in alloc_rows:
         if not (a.get('category') or '').strip():
             continue
-        cat = store.get_or_create_category(conn, name=a['category'])
+        cat = store.get_or_create_category(conn, name=_cat_name_for_recap(a['category']))
         allocations.append({'category_id': cat, 'amount': abs(int(a['amount']))})
     if not allocations:
         return
