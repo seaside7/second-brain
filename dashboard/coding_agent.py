@@ -1695,6 +1695,21 @@ def repo_stop(name):
     return {'ok': True}
 
 
+def repo_pull(name):
+    """git pull --ff-only the repo's real checkout; returns the command output."""
+    info = _find_repo(name)
+    if not info:
+        raise ValueError('repo not found')
+    r = _git(info['path'], 'pull', '--ff-only', timeout=600)
+    output = (r.stdout or '') if r.returncode == 0 else (r.stderr or r.stdout or '')
+    if r.returncode == 0 and r.stderr and r.stderr.strip():
+        output = (output + '\n' + r.stderr.strip()).strip()
+    _log(f"pull {name}: rc={r.returncode}")
+    return {'ok': r.returncode == 0, 'rc': r.returncode,
+            'output': output.strip()[:20000] or '(no output)',
+            'repo': _repo_info(info['path'])}
+
+
 def repo_diff(name):
     info = _find_repo(name)
     if not info:
@@ -2127,6 +2142,8 @@ def route_post(handler):
                 handler._send_json(200, json.dumps(
                     repo_answer_permission(name, (body or {}).get('permission_id'),
                                            (body or {}).get('response')), ensure_ascii=False))
+            elif sub == 'pull':
+                handler._send_json(200, json.dumps(repo_pull(name), ensure_ascii=False))
             elif sub == 'preview':
                 if subsub in (None, 'start'):
                     handler._send_json(200, json.dumps(

@@ -230,7 +230,13 @@ const CodingTab = (() => {
                 data-mode="build">🔨 Build</button>
             </span>
             <span id="coding-busy" class="coding-type-muted"></span>
+            <span class="coding-type-label">Sync:</span>
+            <button class="coding-btn" data-coding-action="pull" title="git pull --ff-only in this repo's real checkout">⇣ Pull</button>
+            <span id="coding-pull-status" class="coding-type-muted"></span>
           </div>
+        </div>
+        <div id="coding-pull-out" class="coding-pull-out" hidden>
+          <pre id="coding-pull-pre" class="coding-diff">git fetch + pull --ff-only…</pre>
         </div>
         <div class="card-body">
           <div id="coding-preview-bar"></div>
@@ -377,6 +383,7 @@ const CodingTab = (() => {
         else if (action === 'reset') { if (confirm('Forget this repo\'s session memory and start fresh?')) await resetRepo(); }
         else if (action === 'preview') await startPreview();
         else if (action === 'preview-stop') await stopPreview();
+        else if (action === 'pull') await repoPull();
       } catch (err) {
         Comp.toast(`Gagal: ${err.message}`, false);
       } finally {
@@ -484,6 +491,47 @@ const CodingTab = (() => {
     });
     Comp.toast('Preview stopped');
     await refreshSession(true);
+  }
+
+  /* ── git pull (per-repo terminal) ─────────────────────────────────── */
+  async function repoPull() {
+    if (!T.active) return;
+    const box = $('coding-pull-out');
+    const pre = $('coding-pull-pre');
+    const status = $('coding-pull-status');
+    const btn = () => document.querySelector('[data-coding-action="pull"]');
+    if (box) box.hidden = false;
+    if (pre) pre.textContent = 'git fetch + pull --ff-only …';
+    if (status) status.textContent = 'pulling…';
+    if (btn()) btn().disabled = true;
+    const done = (ok, msg) => {
+      if (status) {
+        status.innerHTML = ok
+          ? `<span class="badge badge--good">${esc(msg)}</span>`
+          : `<span class="badge badge--warn">${esc(msg)}</span>`;
+        setTimeout(() => { if (status) status.textContent = ''; }, 6000);
+      }
+      if (btn()) btn().disabled = false;
+    };
+    try {
+      const res = await fetchJSON(`/api/coding/repos/${encodeURIComponent(T.active)}/pull`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+      });
+      if (res && res.error) throw new Error(res.error);
+      if (pre) pre.textContent = (res && res.output) || '(no output)';
+      if (pre) pre.scrollTop = 0;
+      if (res && res.repo) {
+        const i = T.repos.findIndex(x => x.name === T.active);
+        if (i >= 0) T.repos[i] = res.repo;
+        const cfg = res.repo.config || {};
+        const sub = document.querySelector('.coding-term-sub');
+        if (sub) sub.textContent = `${esc(cfg.type || 'other')} · ${esc(res.repo.default_branch || '')} · ${esc(res.repo.origin_url || '')}`;
+      }
+      done(!!(res && res.ok), res && res.ok ? 'pull ok' : 'pull failed');
+    } catch (err) {
+      if (pre) pre.textContent = `pull error: ${err.message}`;
+      done(false, 'pull failed');
+    }
   }
 
   return { load, _stopPoll: stopPoll };
