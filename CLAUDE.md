@@ -308,6 +308,14 @@ For each recurring task, define the exact steps. The AI follows these in order.
 8. Commit + push second-brain `main`, then pull on the VPS (`/home/ubuntu/projects/second-brain`) - stage only the recap + related doc edits
 9. If a strategy change was agreed during the recap, also record it in trading-brain's BACKTEST_LOG.md
 
+### Requirement Logs
+1. Every menu (transactions, news, trading, chat, coding, meetings, investments, inbox, approvals, memory, model-router) has a requirements doc at `docs/requirements/<menu>.md` (index: `docs/requirements/README.md`)
+2. WHENEVER the user requests or changes something in any menu, update that menu's doc BEFORE the task is done: edit spec sections if logic/data changed, and append a Change Request entry (`date | request | decision | changed + files`)
+3. Append-only logging, newest entry at the bottom
+4. Same sync rule as trading recaps: commit + push `main`, pull on the VPS (`/home/ubuntu/projects/second-brain`) - stage only intended files
+5. Skill `SKILL.md` files are operational specs - keep in place, link from the requirements doc instead of duplicating
+6. Rekap/analysis spreadsheets or new formats shared for review: learn first, take NO action until the owner approves wiring them in (then log a change request entry)
+
 ### [Add your own recurring task types here]
 
 ---
