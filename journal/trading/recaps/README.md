@@ -24,3 +24,5 @@ Whenever the user asks for a trading summary/check (e.g. "check my trading", "gi
 | 2026-09-30.md | Wed | Breakout day - swing-gate gap finding, SL-cooldown vs CURRENT re-entry |
 | 2026-10-01.md | Thu | Variant study + ATR-E paper leg deployed (bb 0.015, TP 2.5, gate both, 04:00-10:00) |
 | 2026-10-02.md | Fri | ATR legs removed, focus on CURRENT; improvement backtest |
+| 2026-10-05.md | Mon | _Backfilled_: CURRENT first trade under upgrades, SHORT TP +$41.77 |
+| 2026-10-06.md | Tue | Why no trade today: BB-width filter + quiet weekend |

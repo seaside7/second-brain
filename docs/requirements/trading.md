@@ -3,18 +3,20 @@
 Bridge doc for the trading domain. **Strategy/backtest detail lives in the trading-brain repo** (`STRATEGY.md`, `DEPLOYMENT.md`, `BACKTEST_LOG.md`, branch `master`) - do not duplicate it here; this doc holds the index, the live config summary, and the second-brain-side change log. Daily recaps: `journal/trading/recaps/`. Operational reference skill: `.agent/skills/trading-sheets/SKILL.md` (kept in place).
 
 ## 1. Purpose & scope
-- Paper-trading experiments (ASTERUSDT), two engines live: ATR-D (8x, swing gate + SL cooldown) and CURRENT (4x control). SUI leg removed 2026-09-25.
+- Paper-trading experiments (ASTERUSDT), two engines live since 2026-10-02: **CURRENT** (Mon-Thu BB-fade, ATR exits, 8x, 50% bet) and **WEEKEND** (Sat+Sun volume-confirmed momentum breakouts, $1000, 25% bet x 8x). ATR-D / ATR-E legs and the SUMMARY comparison were removed 2026-10-02; SUI leg removed 2026-09-25.
 - Analysis and records live here (second-brain); data/logs live on the VPS in trading-brain.
 
 ## 2. Inputs / sources
 - trading-brain repo on VPS (`/home/ubuntu/projects/trading-brain`), branch `master`.
-- State: `journal/state/paper_trader_atrd_state.json`, `journal/paper_trader_atrd.log`, `journal/paper_trader.log`.
-- Live config: ATR-D `--capital 2017.89`, daily caps $120/$600, 8x.
+- State/logs: `journal/state/paper_trader_state.json` + `journal/paper_trader.log` (CURRENT), `journal/state/paper_trader_weekend_state.json` + `journal/paper_trader_weekend.log` (WEEKEND).
+- Sheet tabs per month: `CURRENT <Mon YYYY>`, `WEEKEND <Mon YYYY>` (created on the first closed trade of the month).
+- Live config CURRENT: window 05:30-11:00 WIB, Mon-Thu, BB width >= 0.015, ATR exits TP 2.5 / SL 1.0, 8x, bet 50%, caps $120/$600. WEEKEND: Sat+Sun, BB width >= 0.05, volume >= 1.5x avg, break of 20-bar high/low + BB band, ATR 2.5/1.0, max 2 trades/day, SL cooldown. Full parameters: trading-brain STRATEGY.md.
 
 ## 3. Logic & rules
-- Swing gate: block SHORT when close >= 20-bar swing high (wick-based). Known gap: spike wicks inflate the high - candidate tightening (0.5x ATR buffer / close-based highs), backtest pending.
-- SL-cooldown: ATR-D blocks same-direction re-entry after an SL for the day (CURRENT has no cooldown).
-- Known issue: OPENED/CLOSED/COOLDOWN log banners are stdout block-buffered (lag hours); state file + periodic Cap lines are the reliable real-time source - flush=True fix pending.
+- CURRENT no longer uses the swing gate / SL cooldown (ATR-D features; gate on both sides backtests PF 2.49 on 72 trades but is not enabled).
+- WEEKEND trades only when ALL conditions hold, so many weekends are empty by design (about 0.5 trades per weekend). The edge depends on the volume filter (without it the edge was only the Sep-Oct 2025 ASTER launch weeks).
+- A quiet day is normal: on 2026-10-06 CURRENT saw one close outside the BB (07:30) but BB width was 0.0141 < 0.015, so it was filtered.
+- Known issues: CURRENT's OPENED/CLOSED log banners are stdout block-buffered (lag hours; use the state file or sheet); Bybit rate-limit errors (about 55 logged) are benign but both traders share the VPS IP; WEEKEND evaluates entries only on the latest completed candle, so a fetch outage of 15+ min could skip a signal (fix: evaluate all unprocessed candles).
 
 ## 4. Outputs
 - Journal recap `journal/trading/recaps/YYYY-MM-DD.md` (per "Trading Daily Recap" checklist in CLAUDE.md).
@@ -29,4 +31,11 @@ Bridge doc for the trading domain. **Strategy/backtest detail lives in the tradi
 ## 7. Change Requests
 - `2026-09-25 | remove SUI, fold into ASTER, bigger amount | SUI leg dropped; ASTER capital $2017.89 anchored in service; caps scaled to $120/$600; CURRENT untouched | changed: trading-brain code + .md docs (see recaps/2026-09-25.md)`
 - `2026-09-30 | recap journal every time a trading summary is asked | daily recap convention established | changed: CLAUDE.md checklist + journal/trading/recaps/*`
-- TODO: append pending decisions once executed (gate tightening, log flushing).
+- `2026-10-01 | analyze recaps vs strategy, extend time, avoid -7 losses, more leverage | backtest study; ATR-E filtered variant built as a 3rd paper leg | changed: trading-brain (paper_trader_atrd --variant E, docs, scripts/atr_variants) - superseded 10-02`
+- `2026-10-02 | delete the other legs, focus on CURRENT, how to improve | ATR-D/ATR-E + summary_updater removed (services, code, state, logs); sheet data archived to journal/trading/archive/ (gitignored); CURRENT upgrade study | changed: trading-brain 16858b1 (+docs); sheet tabs deleted by owner`
+- `2026-10-02 | apply all upgrades to CURRENT | BB width 0.002->0.015, fixed TP/SL -> ATR 2.5/1.0, 4x->8x, caps $30/$150->$60/$300 | changed: trading-brain 51ea9c6 (paper_trader.py main(), ATR support)`
+- `2026-10-02 | keep window 05:30-11:00, test bigger bet | window 05:30-09:00 -> 05:30-11:00; bet-size backtest logged | changed: trading-brain e90c4c7`
+- `2026-10-02 | CURRENT paper: try 50% bet | position_size_pct 25->50 (4x exposure), caps -> $120/$600 | changed: trading-brain 33f7058 (backtest: PF 1.40, about $19/day, 6.4% chance of -50%)`
+- `2026-10-02 | find a weekend strategy (trade only when all parameters pass) | WEEKEND momentum paper leg: Sat+Sun, BB width >= 0.05, volume >= 1.5x, 20-bar breakout + BB band, ATR 2.5/1.0, $1000, 25% bet x 8x; launch-week dependence found and fixed with the volume filter | changed: trading-brain 422edaf (paper_trader_weekend.py, paper-trader-weekend.service, scripts/weekend)`
+- `2026-10-06 | why no trade record today | diagnosis only: CURRENT filtered by BB width (0.0141 < 0.015), WEEKEND no qualifying breakout 10-03/04; CURRENT did trade Mon 10-05 (SHORT TP +$41.77, balance $1094.11) | changed: none (docs + recaps)`
+- TODO: candidate fixes - WEEKEND evaluate all unprocessed candles; CURRENT log flush; review both legs after 3-4 weeks (CURRENT) / 10-15 weekends (WEEKEND).
