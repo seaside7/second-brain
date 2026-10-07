@@ -110,6 +110,7 @@ _CAT = {
     'adeeva':         ('Family', 'Adeeva'),
     'dinda':          ('Family', 'Dinda'),
     'savings':        ('Transfers', 'Savings'),
+    'maid_salary':    ('Home', 'Maid Salary'),
     'uncategorized':  ('Uncategorized', 'Uncategorized'),
 }
 

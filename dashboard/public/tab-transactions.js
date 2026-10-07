@@ -1519,8 +1519,6 @@ const rpSigned = n => {
 
     const card = document.createElement('div');
     card.className = 'tx-modal-backdrop';
-    const listEl = document.createElement('div');
-    listEl.className = 'tx-split-list';
 
     function buildCatSelect(selectedId, index) {
       const groups = _catGroups('out', selectedId);
@@ -1611,8 +1609,10 @@ const rpSigned = n => {
       <div class="tx-modal-card tx-modal-split">
         <h3>Split transaction</h3>
         <div class="tx-split-desc">${U.esc(description)}</div>
-        <div class="tx-split-list" id="tx-split-list"></div>
-        <button class="btn tx-btn-outline tx-btn-sm" id="tx-split-add">${Comp.ic('plus')} Add split</button>
+        <button class="btn tx-btn-outline tx-btn-sm" id="tx-split-add" style="margin-bottom:8px">${Comp.ic('plus')} Add split</button>
+        <div class="tx-split-list-wrap">
+          <div class="tx-split-list" id="tx-split-list"></div>
+        </div>
         <div class="tx-split-footer">
           <span id="tx-split-remain">${rp(parentAmount)} total</span>
           <div class="tx-split-actions">
@@ -1622,7 +1622,7 @@ const rpSigned = n => {
         </div>
       </div>`;
 
-    card.querySelector('.tx-modal-card').appendChild(listEl);
+    const listEl = card.querySelector('#tx-split-list');
     document.body.appendChild(card);
 
     card.querySelector('#tx-split-cancel').addEventListener('click', () => card.remove());

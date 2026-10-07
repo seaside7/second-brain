@@ -3860,7 +3860,11 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
   margin-bottom: var(--sp-3);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.tx-split-list { display: flex; flex-direction: column; gap: var(--sp-2); margin-bottom: var(--sp-2); }
+.tx-split-list-wrap {
+  max-height: 320px;
+  overflow-y: auto;
+  margin: var(--sp-2) 0;
+}
 .tx-split-row {
   display: grid;
   grid-template-columns: 1fr 110px 1fr auto;
