@@ -373,7 +373,7 @@ def _movement_totals(conn: sqlite3.Connection, from_date: str | None,
                      to_date: str | None, providers: list[str] | None,
                      include_fees: bool, include_transfers: bool) -> dict:
     """Income / movement-line totals over a range (provider filter applies)."""
-    conds = ["l.nature NOT IN ('void')"]
+    conds = ["l.txn_status NOT IN ('void')"]
     params: list[Any] = []
     if from_date:
         conds.append("e.occurred_at >= ?"); params.append(from_date)

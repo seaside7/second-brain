@@ -306,6 +306,8 @@ def list_ledger(conn: sqlite3.Connection, *,
                 limit: int = 200,
                 offset: int = 0) -> list[dict]:
     conds, params = [], []
+    if not nature:
+        conds.append("l.txn_status IS NOT 'void'")
     if nature:
         conds.append("l.nature=?"); params.append(nature)
     if review_status:
