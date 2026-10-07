@@ -306,7 +306,8 @@ def list_ledger(conn: sqlite3.Connection, *,
                 limit: int = 200,
                 offset: int = 0) -> list[dict]:
     def _build_conds(with_cat: str = 'l.category_id',
-                    include_void: bool = False) -> tuple[str, list]:
+                    include_void: bool = False,
+                    cat_ids: list[int] | None = None) -> tuple[str, list]:
         c, p = [], []
         if include_void:
             if nature:
@@ -322,10 +323,10 @@ def list_ledger(conn: sqlite3.Connection, *,
             c.append("l.txn_status=?"); p.append(txn_status)
         if account_id:
             c.append("l.account_id=?"); p.append(account_id)
-        if category_ids:
-            cats_esc = ','.join('?' * len(category_ids))
+        if cat_ids:
+            cats_esc = ','.join('?' * len(cat_ids))
             c.append(f"{with_cat} IN ({cats_esc})")
-            p.extend(category_ids)
+            p.extend(cat_ids)
         if trip_id is not None:
             c.append("l.trip_id=?"); p.append(trip_id)
         if from_date:
@@ -338,7 +339,7 @@ def list_ledger(conn: sqlite3.Connection, *,
         return ("WHERE " + " AND ".join(c), p) if c else ("", [])
 
     # --- ledger rows (non-void, non-split parents) ---
-    wh_l, p_l = _build_conds('l.category_id', include_void=False)
+    wh_l, p_l = _build_conds('l.category_id', include_void=False, cat_ids=category_ids)
     p_l.extend([limit, offset])
     ledger_sql = (
         "SELECT l.id, l.amount, l.direction, l.nature, l.category_id, "
@@ -363,7 +364,7 @@ def list_ledger(conn: sqlite3.Connection, *,
         "ORDER BY e.occurred_at DESC, l.created_at DESC LIMIT ? OFFSET ?")
 
     # --- split rows ---
-    wh_sp, p_sp = _build_conds('sp.category_id', include_void=True)
+    wh_sp, p_sp = _build_conds('sp.category_id', include_void=True, cat_ids=category_ids)
     p_sp.extend([limit, offset])
     split_sql = (
         "SELECT l.id, sp.amount, l.direction, l.nature, sp.category_id, "
