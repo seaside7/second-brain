@@ -119,10 +119,14 @@ def set_splits(conn=None, *, ledger_id: int,
                 "VALUES(?,?,?,?,?)",
                 (ledger_id, n['category_id'], n['trip_id'], n['amount'],
                  n['notes']))
+        primary_cat_id = norm[0]['category_id'] if norm else None
+        new_nature = store.nature_for_category(
+            conn, parent.get('nature', 'needs_review'),
+            primary_cat_id, parent.get('direction'))
         conn.execute(
-            "UPDATE ledger_txns SET review_status='ok', txn_status='confirmed' "
+            "UPDATE ledger_txns SET review_status='ok', txn_status='confirmed', nature=? "
             "WHERE id=?",
-            (ledger_id,))
+            (new_nature, ledger_id))
         conn.commit()
     except Exception:
         conn.rollback()
