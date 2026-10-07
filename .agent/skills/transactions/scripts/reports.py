@@ -157,24 +157,26 @@ def analytics(conn: sqlite3.Connection, *,
             "       l.category_id AS category_id, "
             "       COALESCE(c.name, 'Uncategorized') AS name, "
             "       COALESCE(c.\"group\", 'Uncategorized') AS grp, "
-            "       l.amount AS total, 1 AS cnt "
+            "       SUM(l.amount) AS total, COUNT(*) AS cnt "
             "FROM ledger_txns l "
             "LEFT JOIN extracted_txns e ON e.id = l.ext_id "
             "LEFT JOIN categories c ON c.id = l.category_id "
-            f"{where}"
+            f"{where} AND l.category_id IS NOT NULL "
+            "GROUP BY bucket, l.category_id HAVING COUNT(*) > 0"
         )
         split_cols = (
             f"SELECT substr(e.occurred_at, 1, {cut}) AS bucket, "
             "       s.category_id AS category_id, "
             "       COALESCE(c.name, 'Uncategorized') AS name, "
             "       COALESCE(c.\"group\", 'Uncategorized') AS grp, "
-            "       s.amount AS total, 1 AS cnt "
+            "       SUM(s.amount) AS total, COUNT(*) AS cnt "
             "FROM txn_splits s "
             "JOIN ledger_txns l ON l.id = s.parent_ledger_id "
             "LEFT JOIN extracted_txns e ON e.id = l.ext_id "
             "LEFT JOIN categories c ON c.id = s.category_id "
             f"WHERE l.nature IN ({','.join('?' * len(spend_natures))}) "
-            f"AND l.txn_status != 'void'"
+            f"AND l.txn_status != 'void' AND s.category_id IS NOT NULL "
+            "GROUP BY bucket, s.category_id HAVING COUNT(*) > 0"
         )
         sp: list[Any] = list(spend_natures)
         if f:
@@ -187,10 +189,7 @@ def analytics(conn: sqlite3.Connection, *,
         if providers:
             split_cols += f" AND e.provider IN ({','.join('?' * len(providers))})"
             sp += list(providers)
-        sql = (
-            f"{base_cols} GROUP BY bucket, l.category_id "
-            f"UNION ALL {split_cols} GROUP BY bucket, s.category_id"
-        )
+        sql = f"{base_cols} UNION ALL {split_cols}"
         all_params = params + sp
         rows = [dict(r) for r in conn.execute(sql, all_params).fetchall()]
         aggregated: dict[tuple, dict] = {}

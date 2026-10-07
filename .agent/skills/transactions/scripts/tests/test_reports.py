@@ -90,7 +90,9 @@ class AnalyticsTestCase(unittest.TestCase):
             self._conn, from_date='2026-09-01T00:00:00',
             to_date='2026-09-30T23:59:59', category_ids=[self.food])
         self.assertEqual(d['totals']['spend'], 80000)
+        # category_ids filter applies to split query too, so only Food & Dining
         self.assertEqual(len(d['mom']), 1)
+        self.assertEqual(d['mom'][0]['name'], 'Food & Dining')
         self.assertEqual(d['mom'][0]['current'], 80000)
 
     def test_mom_compare(self):
