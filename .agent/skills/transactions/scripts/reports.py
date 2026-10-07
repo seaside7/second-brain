@@ -152,18 +152,56 @@ def analytics(conn: sqlite3.Connection, *,
             conds.append(f"e.provider IN ({','.join('?' * len(providers))})")
             params += list(providers)
         where = "WHERE " + " AND ".join(conds)
-        sql = (
+        base_cols = (
             f"SELECT substr(e.occurred_at, 1, {cut}) AS bucket, "
             "       l.category_id AS category_id, "
             "       COALESCE(c.name, 'Uncategorized') AS name, "
             "       COALESCE(c.\"group\", 'Uncategorized') AS grp, "
-            "       SUM(l.amount) AS total, COUNT(*) AS cnt "
+            "       l.amount AS total, 1 AS cnt "
             "FROM ledger_txns l "
             "LEFT JOIN extracted_txns e ON e.id = l.ext_id "
             "LEFT JOIN categories c ON c.id = l.category_id "
-            f"{where} GROUP BY bucket, l.category_id ORDER BY bucket"
+            f"{where}"
         )
-        return [dict(r) for r in conn.execute(sql, params).fetchall()]
+        split_cols = (
+            f"SELECT substr(e.occurred_at, 1, {cut}) AS bucket, "
+            "       s.category_id AS category_id, "
+            "       COALESCE(c.name, 'Uncategorized') AS name, "
+            "       COALESCE(c.\"group\", 'Uncategorized') AS grp, "
+            "       s.amount AS total, 1 AS cnt "
+            "FROM txn_splits s "
+            "JOIN ledger_txns l ON l.id = s.parent_ledger_id "
+            "LEFT JOIN extracted_txns e ON e.id = l.ext_id "
+            "LEFT JOIN categories c ON c.id = s.category_id "
+            f"WHERE l.nature IN ({','.join('?' * len(spend_natures))}) "
+            f"AND l.txn_status != 'void'"
+        )
+        sp: list[Any] = list(spend_natures)
+        if f:
+            split_cols += " AND e.occurred_at >= ?"; sp.append(f)
+        if t:
+            split_cols += " AND e.occurred_at <= ?"; sp.append(t)
+        if category_ids:
+            split_cols += f" AND s.category_id IN ({','.join('?' * len(category_ids))})"
+            sp += list(category_ids)
+        if providers:
+            split_cols += f" AND e.provider IN ({','.join('?' * len(providers))})"
+            sp += list(providers)
+        sql = (
+            f"{base_cols} GROUP BY bucket, l.category_id "
+            f"UNION ALL {split_cols} GROUP BY bucket, s.category_id"
+        )
+        all_params = params + sp
+        rows = [dict(r) for r in conn.execute(sql, all_params).fetchall()]
+        aggregated: dict[tuple, dict] = {}
+        for r in rows:
+            key = (r['bucket'], r['category_id'])
+            if key in aggregated:
+                aggregated[key]['total'] += r['total']
+                aggregated[key]['cnt'] += r['cnt']
+            else:
+                aggregated[key] = dict(r)
+        return list(aggregated.values())
 
     cur = _spend_rows(from_date, to_date)
     prev = _spend_rows(cmp_from, cmp_to) if (cmp_from or cmp_to) else []
@@ -453,20 +491,29 @@ def pending_transfers_list(conn: sqlite3.Connection) -> list[dict]:
 def _period_bounds(period: str) -> tuple[Optional[str], Optional[str]]:
     """Return (from_date, to_date) ISO strings for a period.
 
-    Bounds are calendar-correct: current_month ends on the month's real last
-    day, last_month covers exactly the previous calendar month.
+    Salary-cycle months: from 25th of the previous month to 24th of the
+    current month (salary received on the 25th).
     """
     now = datetime.now()
     if period == 'current_month':
-        last_day = calendar.monthrange(now.year, now.month)[1]
-        from_date = f'{now.year}-{now.month:02d}-01T00:00:00'
-        to_date = f'{now.year}-{now.month:02d}-{last_day:02d}T23:59:59'
+        from_day = 25
+        to_day = 24
+        if now.day >= 25:
+            from_month = now
+            to_month = now.replace(day=1) + timedelta(days=32)
+            to_month = to_month.replace(day=24)
+        else:
+            prev_month = now.replace(day=1) - timedelta(days=1)
+            from_month = prev_month.replace(day=25)
+            to_month = now.replace(day=24)
+        from_date = f'{from_month.year}-{from_month.month:02d}-25T00:00:00'
+        to_date = f'{to_month.year}-{to_month.month:02d}-24T23:59:59'
     elif period == 'last_month':
-        first_this = now.replace(day=1)
-        prev_end = first_this - timedelta(days=1)
-        from_date = f'{prev_end.year}-{prev_end.month:02d}-01T00:00:00'
-        to_date = (f'{prev_end.year}-{prev_end.month:02d}-{prev_end.day:02d}'
-                   'T23:59:59')
+        prev_month = now.replace(day=1) - timedelta(days=1)
+        from_month = prev_month.replace(day=25)
+        to_month = prev_month.replace(day=24)
+        from_date = f'{from_month.year}-{from_month.month:02d}-25T00:00:00'
+        to_date = f'{to_month.year}-{to_month.month:02d}-24T23:59:59'
     elif period == 'current_year':
         from_date = f'{now.year}-01-01T00:00:00'
         to_date = f'{now.year}-12-31T23:59:59'

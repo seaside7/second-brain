@@ -11,7 +11,7 @@ import sqlite3
 import sys
 import tempfile
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 SCRIPTS = str(Path(__file__).resolve().parent.parent)
@@ -113,22 +113,21 @@ class AnalyticsTestCase(unittest.TestCase):
 
 
 class PeriodBoundsTestCase(unittest.TestCase):
-    def test_current_month_ends_on_real_last_day(self):
+    def test_current_month_is_salary_cycle(self):
         now = datetime.now()
         f, t = reports.period_bounds('current_month')
-        last = calendar.monthrange(now.year, now.month)[1]
-        self.assertTrue(f.startswith(f'{now.year}-{now.month:02d}-01'))
-        self.assertTrue(t.startswith(f'{now.year}-{now.month:02d}-{last:02d}'))
+        prev = (now.replace(day=1) - timedelta(days=1))
+        self.assertTrue(f.startswith(f'{prev.year}-{prev.month:02d}-25'))
+        expected_to = now.replace(day=24)
+        self.assertTrue(t.startswith(f'{expected_to.year}-{expected_to.month:02d}-24'))
 
-    def test_last_month_is_exact_calendar_month(self):
+    def test_last_month_is_salary_cycle(self):
         now = datetime.now()
         f, t = reports.period_bounds('last_month')
-        first_this = now.replace(day=1)
-        self.assertLess(t, first_this.strftime('%Y-%m-%d'))
-        self.assertTrue(f.endswith('-01T00:00:00'))
-        # from/to fall in the same (previous) month
-        self.assertEqual(f[:7], t[:7])
-        self.assertNotEqual(f[:7], now.strftime('%Y-%m'))
+        prev = now.replace(day=1) - timedelta(days=1)
+        self.assertTrue(f.startswith(f'{prev.year}-{prev.month:02d}-25'))
+        expected_to = prev.replace(day=24)
+        self.assertTrue(t.startswith(f'{expected_to.year}-{expected_to.month:02d}-24'))
 
 
 class NatureForCategoryTestCase(unittest.TestCase):

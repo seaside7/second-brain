@@ -748,7 +748,7 @@ def spending_summary(conn: sqlite3.Connection, *,
     total_cashback, total_transfer_to_person, total_internal,
     total_top_up, count, by_category:[{id,name,count,total}], 
     by_account:[{alias,total}]}."""
-    conds = ["l.nature NOT IN ('void')"]
+    conds = ["l.txn_status IS NOT 'void'"]
     params: list[Any] = []
     if from_date:
         conds.append("e.occurred_at>=?"); params.append(from_date)
@@ -756,7 +756,7 @@ def spending_summary(conn: sqlite3.Connection, *,
         conds.append("e.occurred_at<=?"); params.append(to_date)
     where = "WHERE " + " AND ".join(conds)
 
-    # Totals by nature
+    # Totals by nature (ledger rows only, splits don't change nature)
     sql = f"SELECT l.nature, SUM(l.amount) as total, COUNT(*) as cnt " \
           "FROM ledger_txns l " \
           "LEFT JOIN extracted_txns e ON e.id=l.ext_id " \
@@ -764,12 +764,24 @@ def spending_summary(conn: sqlite3.Connection, *,
     rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
     by_nature = {r['nature']: {'total': r['total'], 'count': r['cnt']} for r in rows}
 
-    # By category
-    cat_sql = f"SELECT c.id, c.name, COUNT(*) as cnt, SUM(l.amount) as total " \
-              "FROM ledger_txns l " \
-              "LEFT JOIN extracted_txns e ON e.id=l.ext_id " \
-              "LEFT JOIN categories c ON c.id=l.category_id " \
-              f"{where} AND l.nature='expense' GROUP BY l.category_id"
+    # By category (ledger rows that are not split parents + split allocations)
+    cat_sql = (
+        f"SELECT c.id, c.name, COUNT(*) as cnt, SUM(l.amount) as total "
+        "FROM ledger_txns l "
+        "LEFT JOIN extracted_txns e ON e.id=l.ext_id "
+        "LEFT JOIN categories c ON c.id=l.category_id "
+        f"{where} AND l.nature='expense' AND l.id NOT IN "
+        "(SELECT parent_ledger_id FROM txn_splits) "
+        "GROUP BY l.category_id "
+        "UNION ALL "
+        f"SELECT c.id, c.name, COUNT(*) as cnt, SUM(s.amount) as total "
+        "FROM txn_splits s "
+        "JOIN ledger_txns l ON l.id=s.parent_ledger_id "
+        "LEFT JOIN extracted_txns e ON e.id=l.ext_id "
+        "LEFT JOIN categories c ON c.id=s.category_id "
+        f"{where} AND l.txn_status IS NOT 'void' "
+        "GROUP BY s.category_id"
+    )
     by_cat = [dict(r) for r in conn.execute(cat_sql, params).fetchall()]
 
     # By account

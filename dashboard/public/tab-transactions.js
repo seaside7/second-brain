@@ -501,9 +501,38 @@ const rpSigned = n => {
     const momPct = prevTotal > 0 ? Math.round((spend - prevTotal) / prevTotal * 100) : null;
     const rangeLabel = _ovRangeLabel(d);
 
-    const catChips = (_categories || []).map(c => `
-      <button class="ov-chip ${_ovCats.includes(c.id) ? 'is-active' : ''}"
-        data-ovcat="${c.id}" title="${U.esc(c.group || '')}">${U.esc(c.name)}</button>`).join('');
+    const grouped = {};
+    for (const c of (_categories || [])) {
+      const g = c.group || 'Other';
+      if (!grouped[g]) grouped[g] = [];
+      grouped[g].push(c);
+    }
+    const sortedGroups = Object.keys(grouped).sort();
+
+    const grpHtml = sortedGroups.map(g => {
+      const kids = grouped[g];
+      const selectedCount = kids.filter(k => _ovCats.includes(k.id)).length;
+      const allSelected = selectedCount === kids.length;
+      const someSelected = selectedCount > 0 && !allSelected;
+      return `
+      <div class="ovg" data-ovgrp="${U.esc(g)}">
+        <div class="ovg-hdr">
+          <label class="ovg-lbl">
+            <input type="checkbox" class="ovg-chk" data-ovgrpassign ${allSelected ? 'checked' : someSelected ? 'checked' : ''}>
+            <span class="ovg-name">${U.esc(g)}</span>
+            <span class="ovg-count">${selectedCount}/${kids.length}</span>
+          </label>
+          <button class="ovg-toggle" title="Expand / collapse"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+        </div>
+        <div class="ovg-children">
+          ${kids.map(k => `
+            <label class="ovg-child">
+              <input type="checkbox" class="ovg-childchk" value="${k.id}" ${_ovCats.includes(k.id) ? 'checked' : ''}>
+              <span>${U.esc(k.name)}</span>
+            </label>`).join('')}
+        </div>
+      </div>`;
+    }).join('');
 
     el.innerHTML = `
       <div class="tx-stats">
@@ -532,19 +561,26 @@ const rpSigned = n => {
         ${t.suggested_transfers ? `<span class="tx-badge tx-badge-info">${t.suggested_transfers} transfer suggestions</span>` : ''}
         <span class="tx-range-hint">${U.esc(rangeLabel)}</span>
       </div>
-      <div class="tx-card"><h3 class="tx-card-title">Filters</h3>
-        <div class="ov-filters">
-          <select id="ov-provider" class="tx-select" title="Wallet / bank">
-            <option value="">All wallets</option>
-            <option value="bca" ${_ovProviders === 'bca' ? 'selected' : ''}>BCA</option>
-            <option value="bni" ${_ovProviders === 'bni' ? 'selected' : ''}>BNI</option>
-            <option value="gopay" ${_ovProviders === 'gopay' ? 'selected' : ''}>GoPay</option>
-          </select>
-          <label class="ov-toggle"><input type="checkbox" id="ov-fees" ${_ovFees ? 'checked' : ''}> fees in spend</label>
-          <label class="ov-toggle"><input type="checkbox" id="ov-transfers" ${_ovTransfers ? 'checked' : ''}> person-transfers in spend</label>
-          <button class="btn tx-btn-sm" id="ov-reset">Reset</button>
-        </div>
-        <div class="ov-chips">${catChips || '<span class="tx-empty">No categories yet.</span>'}</div>
+      <div class="tx-card"><h3 class="tx-card-title">Filters
+          <div class="ov-filterbar">
+            <div class="ov-filterbar-left">
+              <select id="ov-provider" class="tx-select" title="Wallet / bank">
+                <option value="">All wallets</option>
+                <option value="bca" ${_ovProviders === 'bca' ? 'selected' : ''}>BCA</option>
+                <option value="bni" ${_ovProviders === 'bni' ? 'selected' : ''}>BNI</option>
+                <option value="gopay" ${_ovProviders === 'gopay' ? 'selected' : ''}>GoPay</option>
+              </select>
+              <label class="ov-toggle"><input type="checkbox" id="ov-fees" ${_ovFees ? 'checked' : ''}> fees</label>
+              <label class="ov-toggle"><input type="checkbox" id="ov-transfers" ${_ovTransfers ? 'checked' : ''}> transfers</label>
+            </div>
+            <div class="ov-filterbar-right">
+              <button class="btn tx-btn-sm" id="ov-all">All</button>
+              <button class="btn tx-btn-sm" id="ov-none">Clear</button>
+              <button class="btn tx-btn-sm" id="ov-reset">Reset</button>
+            </div>
+          </div>
+        </h3>
+        <div class="ov-cat-groups">${grpHtml || '<span class="tx-empty">No categories yet.</span>'}</div>
       </div>
       <div class="ov-grid">
         <div class="tx-card"><h3 class="tx-card-title">Spend trend <span class="tx-stat-sub">per month · last 6 months · click a bar to drill down</span></h3>
@@ -556,11 +592,48 @@ const rpSigned = n => {
         ${_ovMomTable(mom, colorOf, d)}</div>
     `;
 
-    el.querySelectorAll('[data-ovcat]').forEach(b => b.addEventListener('click', () => {
-      const id = Number(b.dataset.ovcat);
-      _ovCats = _ovCats.includes(id) ? _ovCats.filter(x => x !== id) : [..._ovCats, id];
+    // Group checkbox: select/deselect all children in group
+    el.querySelectorAll('.ovg-chk').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const hdr = cb.closest('.ovg');
+        const grpName = hdr.dataset.ovgrp;
+        const kids = grouped[grpName] || [];
+        if (cb.checked) {
+          _ovCats = [...new Set([..._ovCats, ...kids.map(k => k.id)])];
+        } else {
+          _ovCats = _ovCats.filter(id => !kids.find(k => k.id === id));
+        }
+        refreshView();
+      });
+    });
+
+    // Child checkbox
+    el.querySelectorAll('.ovg-childchk').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const id = Number(cb.value);
+        _ovCats = cb.checked ? [...new Set([..._ovCats, id])] : _ovCats.filter(x => x !== id);
+        refreshView();
+      });
+    });
+
+    // Group header toggle
+    el.querySelectorAll('.ovg-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const hdr = btn.closest('.ovg');
+        hdr.classList.toggle('is-open');
+      });
+    });
+
+    // Select all / Clear
+    el.querySelector('#ov-all')?.addEventListener('click', () => {
+      _ovCats = (_categories || []).map(c => c.id);
       refreshView();
-    }));
+    });
+    el.querySelector('#ov-none')?.addEventListener('click', () => {
+      _ovCats = [];
+      refreshView();
+    });
+
     el.querySelector('#ov-provider').addEventListener('change', e => { _ovProviders = e.target.value; refreshView(); });
     el.querySelector('#ov-fees').addEventListener('change', e => { _ovFees = e.target.checked; refreshView(); });
     el.querySelector('#ov-transfers').addEventListener('change', e => { _ovTransfers = e.target.checked; refreshView(); });
