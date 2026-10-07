@@ -1603,7 +1603,7 @@ const rpSigned = n => {
       syncRows();
     }
 
-    const splits = [...existingSplits];
+    let splits = [...existingSplits];
 
     card.innerHTML = `
       <div class="tx-modal-card tx-modal-split">
