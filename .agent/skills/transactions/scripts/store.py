@@ -305,47 +305,85 @@ def list_ledger(conn: sqlite3.Connection, *,
                 search: str | None = None,
                 limit: int = 200,
                 offset: int = 0) -> list[dict]:
-    conds, params = [], []
-    if not nature:
-        conds.append("l.txn_status IS NOT 'void'")
-    if nature:
-        conds.append("l.nature=?"); params.append(nature)
-    if review_status:
-        conds.append("l.review_status=?"); params.append(review_status)
-    if txn_status:
-        conds.append("l.txn_status=?"); params.append(txn_status)
-    if account_id:
-        conds.append("l.account_id=?"); params.append(account_id)
-    if category_id:
-        conds.append("l.category_id=?"); params.append(category_id)
-    if trip_id is not None:
-        conds.append("l.trip_id=?"); params.append(trip_id)
-    if from_date:
-        conds.append("e.occurred_at>=?"); params.append(from_date)
-    if to_date:
-        conds.append("e.occurred_at<=?"); params.append(to_date)
-    if search:
-        conds.append("(l.notes LIKE ? OR e.description LIKE ? OR e.merchant LIKE ?)")
-        s = f'%{search}%'; params.extend([s, s, s])
-    where = ("WHERE " + " AND ".join(conds)) if conds else ""
-    sql = (
-        "SELECT l.*, a.alias as account_alias, a.masked as account_masked, "
-        "c.name as category_name, c.\"group\" as category_group, "
-        "t.name as trip_name, t.destination as trip_destination, "
-        "t.start_date as trip_start, t.end_date as trip_end, "
-        "e.description, e.raw_description, e.transaction_type, e.merchant, "
-        "e.recipient, e.src_txn_id, e.provider, "
-        "e.phone_suffix, e.bank_ref, e.occurred_at, "
-        "s.email_subject "
+    def _build_conds(with_cat: str = 'l.category_id') -> tuple[str, list]:
+        c, p = [], []
+        if not nature:
+            c.append("l.txn_status IS NOT 'void'")
+        if nature:
+            c.append("l.nature=?"); p.append(nature)
+        if review_status:
+            c.append("l.review_status=?"); p.append(review_status)
+        if txn_status:
+            c.append("l.txn_status=?"); p.append(txn_status)
+        if account_id:
+            c.append("l.account_id=?"); p.append(account_id)
+        if category_id:
+            c.append(f"{with_cat}=?"); p.append(category_id)
+        if trip_id is not None:
+            c.append("l.trip_id=?"); p.append(trip_id)
+        if from_date:
+            c.append("e.occurred_at>=?"); p.append(from_date)
+        if to_date:
+            c.append("e.occurred_at<=?"); p.append(to_date)
+        if search:
+            c.append("(l.notes LIKE ? OR e.description LIKE ? OR e.merchant LIKE ?)")
+            s = f'%{search}%'; p.extend([s, s, s])
+        return ("WHERE " + " AND ".join(c), p) if c else ("", [])
+
+    # --- ledger rows (non-void, non-split parents) ---
+    wh_l, p_l = _build_conds('l.category_id')
+    p_l.extend([limit, offset])
+    ledger_sql = (
+        "SELECT l.id, l.amount, l.direction, l.nature, l.category_id, "
+        "       l.review_status, l.txn_status, l.account_id, l.trip_id, "
+        "       l.notes, l.created_at, "
+        "       a.alias as account_alias, a.masked as account_masked, "
+        "       c.name as category_name, c.\"group\" as category_group, "
+        "       t.name as trip_name, t.destination as trip_destination, "
+        "       e.description, e.raw_description, e.transaction_type, e.merchant, "
+        "       e.recipient, e.src_txn_id, e.provider, "
+        "       e.phone_suffix, e.bank_ref, e.occurred_at, "
+        "       s.email_subject, "
+        "       'ledger' as row_kind, l.id as ledger_row_id, NULL as split_id "
         "FROM ledger_txns l "
         "LEFT JOIN accounts a ON a.id=l.account_id "
         "LEFT JOIN categories c ON c.id=l.category_id "
         "LEFT JOIN trips t ON t.id=l.trip_id "
         "LEFT JOIN extracted_txns e ON e.id=l.ext_id "
         "LEFT JOIN source_documents s ON s.id=e.doc_id "
-        f"{where} ORDER BY e.occurred_at DESC, l.created_at DESC LIMIT ? OFFSET ?")
-    params.extend([limit, offset])
-    return [dict(r) for r in conn.execute(sql, params).fetchall()]
+        f"{wh_l} "
+        "AND l.id NOT IN (SELECT parent_ledger_id FROM txn_splits) "
+        "ORDER BY e.occurred_at DESC, l.created_at DESC LIMIT ? OFFSET ?")
+
+    # --- split rows ---
+    wh_sp, p_sp = _build_conds('sp.category_id')
+    p_sp.extend([limit, offset])
+    split_sql = (
+        "SELECT l.id, sp.amount, l.direction, l.nature, sp.category_id, "
+        "       l.review_status, l.txn_status, l.account_id, l.trip_id, "
+        "       sp.notes, l.created_at, "
+        "       a.alias as account_alias, a.masked as account_masked, "
+        "       c.name as category_name, c.\"group\" as category_group, "
+        "       t.name as trip_name, t.destination as trip_destination, "
+        "       e.description, e.raw_description, e.transaction_type, e.merchant, "
+        "       e.recipient, e.src_txn_id, e.provider, "
+        "       e.phone_suffix, e.bank_ref, e.occurred_at, "
+        "       doc.email_subject, "
+        "       'split' as row_kind, l.id as ledger_row_id, sp.id as split_id "
+        "FROM txn_splits sp "
+        "JOIN ledger_txns l ON l.id=sp.parent_ledger_id "
+        "LEFT JOIN accounts a ON a.id=l.account_id "
+        "LEFT JOIN categories c ON c.id=sp.category_id "
+        "LEFT JOIN trips t ON t.id=l.trip_id "
+        "LEFT JOIN extracted_txns e ON e.id=l.ext_id "
+        "LEFT JOIN source_documents doc ON doc.id=e.doc_id "
+        f"{wh_sp} "
+        "ORDER BY e.occurred_at DESC, l.created_at DESC LIMIT ? OFFSET ?")
+
+    rows = [dict(r) for r in conn.execute(ledger_sql, p_l).fetchall()]
+    rows += [dict(r) for r in conn.execute(split_sql, p_s).fetchall()]
+    rows.sort(key=lambda r: r.get('occurred_at') or '', reverse=True)
+    return rows[:limit]
 
 def count_ledger(conn: sqlite3.Connection, *,
                  txn_status: str | None = None,
