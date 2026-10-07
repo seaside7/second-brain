@@ -780,7 +780,8 @@ def spending_summary(conn: sqlite3.Connection, *,
         "JOIN ledger_txns l ON l.id=s.parent_ledger_id "
         "LEFT JOIN extracted_txns e ON e.id=l.ext_id "
         "LEFT JOIN categories c ON c.id=s.category_id "
-        f"{where} AND l.txn_status IS NOT 'void' "
+        f"WHERE l.txn_status IS NOT 'void' "
+        f"AND e.occurred_at>=? AND e.occurred_at<=? "
         "GROUP BY s.category_id"
     )
     cat_sql = f"{cat_base} UNION ALL {cat_split}"

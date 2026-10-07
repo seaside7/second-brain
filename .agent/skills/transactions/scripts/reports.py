@@ -175,7 +175,7 @@ def analytics(conn: sqlite3.Connection, *,
             "LEFT JOIN extracted_txns e ON e.id = l.ext_id "
             "LEFT JOIN categories c ON c.id = s.category_id "
             f"WHERE l.nature IN ({','.join('?' * len(spend_natures))}) "
-            f"AND l.txn_status != 'void' AND s.category_id IS NOT NULL "
+            f"AND s.category_id IS NOT NULL "
             "GROUP BY bucket, s.category_id HAVING COUNT(*) > 0"
         )
         sp: list[Any] = list(spend_natures)
