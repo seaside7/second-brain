@@ -3650,6 +3650,8 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
 .tx-btn-ok { border-color: var(--positive, #2e7d32); color: var(--positive, #2e7d32); }
 .tx-btn-ok:hover { background: rgba(46,125,50,.12); }
 .tx-btn-cat:hover { border-color: var(--accent); background: rgba(255,170,0,.1); }
+.tx-btn-split { border-color: var(--border-active); color: var(--text-secondary); }
+.tx-btn-split:hover { border-color: var(--accent); color: var(--accent); background: rgba(255,170,0,.08); }
 
 .tx-account-alias { font-weight: 600; }
 .tx-account-provider { color: var(--text-muted); }
@@ -3848,6 +3850,41 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
   display: flex; justify-content: flex-end; gap: var(--sp-2);
   margin-top: var(--sp-2);
 }
+
+/* ── split modal ──────────────────────────────────────────────────── */
+.tx-split-desc {
+  font-size: var(--fs-sm); color: var(--text-secondary);
+  margin-bottom: var(--sp-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tx-split-list { display: flex; flex-direction: column; gap: var(--sp-2); margin-bottom: var(--sp-2); }
+.tx-split-row {
+  display: grid;
+  grid-template-columns: 1fr 110px 1fr auto;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.tx-split-cat, .tx-split-amt, .tx-split-notes {
+  font: inherit; font-size: var(--fs-sm);
+  color: var(--text-primary); background: var(--bg-input);
+  border: 1px solid var(--border); border-radius: var(--radius-xs);
+  padding: 6px 8px; outline: none;
+}
+.tx-split-cat:focus, .tx-split-amt:focus, .tx-split-notes:focus { border-color: var(--border-active); }
+.tx-split-cat option { background: var(--surface-opaque); }
+.tx-btn-split-remove {
+  padding: 4px 8px; color: var(--text-muted); border-color: var(--border);
+}
+.tx-btn-split-remove:hover { border-color: #c00; color: #c00; }
+.tx-split-footer {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: var(--sp-3); padding-top: var(--sp-3);
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-sm);
+}
+#tx-split-remain { color: var(--text-secondary); }
+.tx-split-remain-ok { color: var(--positive, #2e7d32); }
+.tx-split-remain-over { color: #c00; font-weight: 600; }
 
 /* ── statement upload (GoPay / BCA / BNI) ─────────────────────────── */
 .tx-up-hint {

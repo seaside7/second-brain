@@ -116,12 +116,11 @@ class CategorizerTestCase(unittest.TestCase):
         r = self._cat(description='PT BANK NASIONAL INDONESIA', transaction_type='qris')
         self.assertNotEqual(r['group'], 'Food & Dining')
 
-    def test_07d_gojek_ride_is_not_ride_sharing(self):
-        # Ride Sharing category no longer exists - gojek/grab rides fall to Review.
+    def test_07d_gojek_ride_is_ride_hailing(self):
         r = self._cat(description='Gojek - Ride Payment', transaction_type='qris')
-        self.assertEqual(r['nature'], 'needs_review')
-        cats = [c['name'] for c in store.list_categories(self._conn)]
-        self.assertNotIn('Ride Sharing', cats)
+        self.assertEqual(r['nature'], 'expense')
+        self.assertEqual(r['group'], 'Transport')
+        self.assertEqual(r['name'], 'Ride Hailing')
 
     def test_07e_friend_categories_in_taxonomy(self):
         self.assertEqual(categorize._CAT['friend_loan'], ('Loans', 'Friend Loan'))
@@ -242,25 +241,25 @@ class CategorizerTestCase(unittest.TestCase):
         self.assertEqual(r['group'], 'Home')
         self.assertEqual(r['name'], 'Home Maintenance & Repair')
 
-    def test_15_spaylater_va_is_online_credit(self):
+    def test_15_spaylater_va_is_loan_repayment(self):
         r = self._cat(description='VA 12308 SPAYLATER', transaction_type='va_payment')
         self.assertEqual(r['nature'], 'expense')
         self.assertEqual(r['group'], 'Loans')
-        self.assertEqual(r['name'], 'Online Credit')
+        self.assertEqual(r['name'], 'Loan Repayment')
         self.assertEqual(r['confidence'], 'high')
 
-    def test_15b_spinjam_va_is_online_credit(self):
+    def test_15b_spinjam_va_is_loan_repayment(self):
         r = self._cat(description='VA - Spinjam', transaction_type='va_payment')
         self.assertEqual(r['nature'], 'expense')
         self.assertEqual(r['group'], 'Loans')
-        self.assertEqual(r['name'], 'Online Credit')
+        self.assertEqual(r['name'], 'Loan Repayment')
 
-    def test_15c_kredit_pintar_va_is_online_credit(self):
+    def test_15c_kredit_pintar_va_is_loan_repayment(self):
         r = self._cat(description='VA - PT Kredit Pintar Indonesia / Kreditpintar',
                       transaction_type='va_payment')
         self.assertEqual(r['nature'], 'expense')
         self.assertEqual(r['group'], 'Loans')
-        self.assertEqual(r['name'], 'Online Credit')
+        self.assertEqual(r['name'], 'Loan Repayment')
         self.assertEqual(r['confidence'], 'high')
 
     def test_15d_credit_card_bill_payment_is_cc_bill(self):
@@ -272,10 +271,10 @@ class CategorizerTestCase(unittest.TestCase):
         self.assertEqual(r['group'], 'Utilities')
         self.assertEqual(r['name'], 'Credit Card')
 
-    def test_16_pegadaian_va_is_loan_payment(self):
+    def test_16_pegadaian_va_is_loan_repayment(self):
         r = self._cat(description='VA 19008/P Gadai Indo', transaction_type='va_payment')
         self.assertEqual(r['group'], 'Loans')
-        self.assertEqual(r['name'], 'Loan Payment')
+        self.assertEqual(r['name'], 'Loan Repayment')
 
     def test_17_bca_purchase_email_not_own_wallet(self):
         # BCA "Internet Transaction Journal" payment emails all say
@@ -417,7 +416,7 @@ class CategorizerTestCase(unittest.TestCase):
             transaction_type='va_payment', recipient='PT LENTERA DANA NUSANTARA / SPINJAM Bill')
         self.assertEqual(r['nature'], 'expense')
         self.assertEqual(r['group'], 'Loans')
-        self.assertEqual(r['name'], 'Online Credit')
+        self.assertEqual(r['name'], 'Loan Repayment')
 
 
 class BcaJournalParserTestCase(unittest.TestCase):

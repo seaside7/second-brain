@@ -1,2 +1,1 @@
-[dashboard] no auth user 'said' and PSB_AUTH_PASSWORD is unset — nobody can log in. Set it and restart, or create the account directly:
-    PSB_AUTH_PASSWORD='...' python3 -c "import sys;sys.path.insert(0,'dashboard');import auth;auth.create_user('said','<password>')"
+Python was not found; run without arguments to install from the Microsoft Store, or disable this shortcut from Settings > Apps > Advanced app settings > App execution aliases.

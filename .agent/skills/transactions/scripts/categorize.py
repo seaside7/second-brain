@@ -80,20 +80,22 @@ _CAT = {
     'digital':        ('Utilities', 'Digital & Subscriptions'),
     'groceries':      ('Groceries', 'Groceries'),
     'food':            ('Food & Dining', 'Food & Dining'),
-    'transport_fuel': ('Transport', 'Fuel'),
-    'transport_toll': ('Transport', 'Toll'),
+    'transport_fuel':   ('Transport', 'Fuel'),
+    'transport_toll':  ('Transport', 'Toll'),
     'transport_parking': ('Transport', 'Parking'),
+    'ride_hailing':    ('Transport', 'Ride Hailing'),
     'vehicle_service': ('Vehicle', 'Car Service'),
     'home_upkeep':     ('Home', 'Home Maintenance & Repair'),
+    'home_loan':       ('Home', 'Home Installment'),
+    'project_cost':     ('Work', 'Project Cost'),
     'shopping':        ('Shopping', 'Online Shopping'),
-    'leisure':        ('Leisure', 'Leisure'),
+    'leisure':         ('Leisure', 'Leisure'),
+    'padel':            ('Leisure', 'Padel'),
     'health_vitamins': ('Health', 'Vitamins'),
-    'health_medical': ('Health', 'Medical'),
-    'cash':           ('Cash', 'Cash Withdrawal'),
-    'fee':            ('Fees', 'Bank Fee'),
-    'loan_payment':   ('Loans', 'Loan Payment'),
-    'online_credit':  ('Loans', 'Online Credit'),
-    'car_loan':       ('Loans', 'Vehicle Installment'),
+    'health_medical':  ('Health', 'Medical'),
+    'cash':            ('Cash', 'Cash Withdrawal'),
+    'fee':             ('Fees', 'Bank Fee'),
+    'loan_repayment':  ('Loans', 'Loan Repayment'),
     # Manual-only categories (owner assigns by hand; the categorizer never
     # auto-fires them): money received from a friend (income) and money paid
     # back to a friend (expense).
@@ -145,17 +147,24 @@ _TRANSPORT_FUEL = ['pertamina', 'bensin', 'solar', 'spbu', 'shell']
 _TRANSPORT_TOLL = ['tol', 'toll', 'jalan tol', 'flazz', 'e-money', 'emoney',
                    'mandiri e-money']
 _TRANSPORT_PARKING = ['parkir', 'parkmen']
+_RIDE_HAILING = ['gojek', 'grab', 'go-ride', 'grabbike', 'bluebird', 'saki',
+                 'grabcar', 'gocar', 'maxim']
 _VEHICLE_SERVICE = ['bengkel', 'servis', 'service', 'spooring', 'tune-up',
                     'tune up', 'ganti oli', 'kaki-kaki', 'gearbox']
 _HOME_UPKEEP = ['tukang', 'plumber', 'ledeng', 'renovasi',
                 'perbaikan rumah', 'servis ac', 'ac service', 'kulkas',
                 'keran', 'cctv']
+_PROJECT_COST = ['domain', 'hosting', 'server', 'vps', 'aws', 'digitalocean',
+                 'railway', 'vercel', 'netlify', 'cloudflare', 'namecheap',
+                 'github', 'gitlab', 'bitbucket', 'openai', 'anthropic',
+                 'google workspace', 'microsoft 365', 'subscription']
 _MEDICAL = ['apotek', 'pharmacy', 'farmasi', 'klinik', 'dokter', 'rumah sakit',
             'hospital', 'obat', 'puskesmas', 'laboratorium']
 _VITAMINS = ['vitamin', 'suplemen', 'supplement', 'multivitamin']
 _LEISURE = ['netflix', 'spotify', 'youtube', 'steam', 'playstation', 'xbox',
             'game', 'gaming', 'bioskop', 'cinema', 'movie', 'konser', 'concert',
-            'hobi', 'hobby', 'museum', 'bowling', 'golf', 'karaoke']
+            'hobi', 'hobby', 'museum', 'bowling', 'golf', 'karaoke', 'padel',
+            'tenis', 'badminton', 'futsal', 'basket']
 _ATM_CASH = ['tarik tunai', 'withdrawal', 'penarikan tunai']
 _INCOME_HINTS = ['gaji', 'salary', 'payroll', 'invoice', 'honor', 'dana masuk',
                  'transfer masuk', 'terima', 'received', 'freelance', 'upah']
@@ -208,6 +217,8 @@ def _match_cc_merchant(desc: str, row: dict) -> Optional[tuple]:
         return ('groceries', 'high', 'CC charge: retail merchant')
     if any(_has(desc, m) for m in _HOME_UPKEEP):
         return ('home_upkeep', 'high', 'CC charge: home repair')
+    if any(_has(desc, m) for m in _PROJECT_COST):
+        return ('project_cost', 'medium', 'CC charge: project cost')
     if any(_has(desc, m) for m in _MEDICAL):
         return ('health_medical', 'high', 'CC charge: medical / pharmacy')
     if any(_has(desc, m) for m in _VITAMINS):
@@ -228,6 +239,8 @@ def _match_cc_merchant(desc: str, row: dict) -> Optional[tuple]:
         return ('transport_toll', 'high', 'CC charge: toll')
     if any(_has(desc, m) for m in _TRANSPORT_PARKING):
         return ('transport_parking', 'high', 'CC charge: parking')
+    if any(_has(desc, m) for m in _RIDE_HAILING):
+        return ('ride_hailing', 'high', 'CC charge: ride hailing')
     if any(_has(desc, m) for m in _VEHICLE_SERVICE):
         return ('vehicle_service', 'high', 'CC charge: vehicle service')
     if any(_has(desc, m) for m in _ECOMMERCE):
@@ -553,17 +566,16 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
         return hit
 
     # 2.6 VIRTUAL ACCOUNT loan payments - the owner pays down a loan facility
-    #     through a VA. Online credit (SPayLater / GoPay Later / Kredivo) ->
-    #     Online Credit; pawnshop facilities (Pegadaian) -> Loan Payment.
-    #     Never guessed.
+    #     through a VA. All online credit (SPayLater / GoPay Later / Kredivo) and
+    #     pawnshop (Pegadaian) -> Loan Repayment. Never guessed.
     if (direction == 'out' and tx_type == 'va_payment'
             and any(_has(_text(row), m) for m in _VA_ONLINE_CREDIT)):
-        set_cat('online_credit', 'expense', 'high',
+        set_cat('loan_repayment', 'expense', 'high',
                 'VA online credit payment')
         return hit
     if (direction == 'out' and tx_type == 'va_payment'
             and any(_has(_text(row), m) for m in _VA_LOAN_BILLERS)):
-        set_cat('loan_payment', 'expense', 'high',
+        set_cat('loan_repayment', 'expense', 'high',
                 'VA loan facility payment')
         return hit
 
@@ -588,6 +600,11 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
     #     vehicle 'servis' so home services win over Car Service.
     if any(_has(desc, m) for m in _HOME_UPKEEP):
         set_cat('home_upkeep', 'expense', 'high', 'Home repair / tukang')
+        return hit
+
+    # 5b2. PROJECT COST - domain / hosting / SaaS subscriptions for projects.
+    if any(_has(desc, m) for m in _PROJECT_COST):
+        set_cat('project_cost', 'expense', 'medium', 'Project cost')
         return hit
 
     # 5c. HEALTH - medical / pharmacy first, then supplements/vitamins. Before
@@ -619,7 +636,7 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
         set_cat('food', 'expense', 'high', 'Food delivery')
         return hit
 
-    # 7. TRANSPORT (no ride-sharing category - gojek/grab rides fall to Review)
+    # 7. TRANSPORT
     if any(_has(desc, m) for m in _TRANSPORT_FUEL):
         set_cat('transport_fuel', 'expense', 'high', 'Fuel')
         return hit
@@ -628,6 +645,9 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
         return hit
     if any(_has(desc, m) for m in _TRANSPORT_PARKING):
         set_cat('transport_parking', 'expense', 'high', 'Parking')
+        return hit
+    if any(_has(desc, m) for m in _RIDE_HAILING):
+        set_cat('ride_hailing', 'expense', 'high', 'Ride hailing')
         return hit
     if any(_has(desc, m) for m in _VEHICLE_SERVICE):
         set_cat('vehicle_service', 'expense', 'high', 'Vehicle service')

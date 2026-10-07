@@ -194,7 +194,7 @@ class BcaBackfillTest(unittest.TestCase):
         hit = next(c for c, r in zip(cats, rows) if r is sl)
         self.assertEqual(hit['nature'], 'expense')
         self.assertEqual(_q_cat(conn, hit['category_id']),
-                         ('Loans', 'Online Credit'))
+                         ('Loans', 'Loan Repayment'))
         # GoPay wallet withdrawal (money in) -> internal, not income
         wl = bytype['transfer'][1]
         hit = next(c for c, r in zip(cats, rows) if r is wl)

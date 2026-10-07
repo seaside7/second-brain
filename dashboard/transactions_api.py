@@ -42,7 +42,7 @@ try:
     from trips import (create_trip, update_trip, list_trips, get_trip,
                        find_trip_candidates, assign as trip_assign,
                        unassign as trip_unassign)
-    from splits import set_splits, unsplit
+    from splits import set_splits, unsplit, list_splits
     from gmail_sync import sync_gmail
     from scheduler import TransactionScheduler
     from reprocess import reprocess as reprocess_engine
@@ -146,6 +146,9 @@ def route_get(handler) -> None:
                 _handle_rules_list(handler)
             elif _id == 'audit':
                 _handle_audit_list(handler, qs)
+            elif path.startswith('/api/transactions/splits/'):
+                ledger_id = int(path.rsplit('/', 1)[-1])
+                _handle_splits_get(handler, ledger_id)
             else:
                 _err(handler, 404, 'Not found')
         else:
@@ -661,6 +664,20 @@ def _handle_splits_unsplit(handler, ledger_id: int) -> None:
         return
     try:
         result = unsplit(conn, ledger_id=ledger_id, actor='user')
+        _ok(handler, result)
+    finally:
+        conn.close()
+
+
+def _handle_splits_get(handler, ledger_id: int) -> None:
+    conn = _get_db(handler)
+    if not conn:
+        _err(handler, 403, 'Not available in samudera mode')
+        return
+    try:
+        result = list_splits(conn, ledger_id=ledger_id)
+        parent = store.get_ledger(conn, ledger_id)
+        result['parent_amount'] = parent.get('amount', 0) if parent else 0
         _ok(handler, result)
     finally:
         conn.close()

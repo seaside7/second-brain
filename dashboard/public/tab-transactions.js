@@ -269,13 +269,16 @@ const rpSigned = n => {
     const status  = r.review_status === 'review' ? '<span class="tx-badge tx-badge-warn">review</span>' :
                     r.review_status === 'uncategorized' ? '<span class="tx-badge tx-badge-muted">uncategorized</span>' :
                     nature === 'needs_review' ? '<span class="tx-badge tx-badge-muted">review</span>' : '';
+    const splitBtn = r.kind !== 'split'
+      ? `<button class="btn tx-btn-sm tx-btn-split" data-split-id="${r.id}" data-split-amount="${amount}" data-split-desc="${U.esc((r.description || r.merchant || '').slice(0, 60))}" title="Split this amount across categories">Split</button>`
+      : '';
     return `<tr class="tx-tr" data-id="${r.id}">
       <td class="tx-td-date" data-label="Date">${_fmtDate(r.occurred_at || r.created_at)}</td>
       <td class="tx-td-desc" data-label="Description">${_descHtml(r)}</td>
       <td class="tx-td-wallet" data-label="Account">${_walletHtml(r.provider)}</td>
       <td class="tx-td-cat" data-label="Category"><div class="tx-cat-wrap">${_confDot(r)}${_catSelect(r)}</div></td>
       <td class="tx-td-amount ${dir}" data-label="Amount">${sign}${rp(amount)}</td>
-      <td class="tx-td-status" data-label="Status">${status}</td>
+      <td class="tx-td-status" data-label="Status">${status}${splitBtn}</td>
     </tr>`;
   }
 
@@ -403,6 +406,11 @@ const rpSigned = n => {
       sel.addEventListener('focus', () => { sel.dataset.was = sel.value; });
       sel.addEventListener('change', () => _changeCategory(sel));
     });
+    body.querySelectorAll('.tx-btn-split').forEach(b =>
+      b.addEventListener('click', () => _openSplitModal(
+        Number(b.dataset.splitId),
+        Number(b.dataset.splitAmount),
+        b.dataset.splitDesc)));
   }
 
   async function _changeCategory(sel) {
@@ -412,16 +420,16 @@ const rpSigned = n => {
       return;
     }
     const category_id = sel.value ? Number(sel.value) : null;
-    _busy(true);
     try {
       await _post(`/api/transactions/${id}/edit`, { category_id }, 15000);
       toast(category_id ? 'Category updated' : 'Category cleared', true);
-      await refreshView();
+      const catWrap = sel.closest('.tx-cat-wrap');
+      if (catWrap) {
+        catWrap.querySelectorAll('.tx-conf').forEach(d => d.className = 'tx-conf tx-conf-high');
+      }
     } catch (e) {
       toast(e.message, false);
       sel.value = sel.dataset.was || '';
-    } finally {
-      _busy(false);
     }
   }
 
@@ -1065,28 +1073,24 @@ const rpSigned = n => {
   }
 
   async function _reviewConfirm(id, category_id) {
-    _busy(true);
     try {
       await _post(`/api/transactions/${id}/edit`, { category_id }, 15000);
       toast('Confirmed');
-      await refreshView();
+      const row = document.querySelector(`.tx-tr[data-id="${id}"]`);
+      if (row) { row.style.transition = 'opacity .3s'; row.style.opacity = '0'; setTimeout(() => row.remove(), 300); }
     } catch (e) {
       toast(e.message, false);
-    } finally {
-      _busy(false);
     }
   }
 
   async function _reviewSkip(id) {
-    _busy(true);
     try {
       await _post('/api/transactions/review/respond', { id: Number(id), action: 'skip' }, 15000);
       toast('Skipped');
-      await refreshView();
+      const row = document.querySelector(`.tx-tr[data-id="${id}"]`);
+      if (row) { row.style.transition = 'opacity .3s'; row.style.opacity = '0'; setTimeout(() => row.remove(), 300); }
     } catch (e) {
       toast(e.message, false);
-    } finally {
-      _busy(false);
     }
   }
 
@@ -1498,6 +1502,112 @@ const rpSigned = n => {
       </div>`;
     document.body.appendChild(lock);
     return lock;
+  }
+
+  async function _openSplitModal(ledgerId, parentAmount, description) {
+    let splits = [];
+    try {
+      const res = await U.fetchJSON(`/api/transactions/splits/${ledgerId}`);
+      splits = res.splits || [];
+    } catch (_) { /* empty splits */ }
+
+    const card = document.createElement('div');
+    card.className = 'tx-modal-backdrop';
+    const catOpts = _categoryOptions('out');
+
+    function splitRowHtml(allocation = {}, index) {
+      const catId = allocation.category_id || '';
+      const amt = allocation.amount || '';
+      const notes = U.esc(allocation.notes || '');
+      return `<div class="tx-split-row" data-index="${index}">
+        <select class="tx-split-cat" data-index="${index}">${catOpts.replace(`value="${catId}"`, `value="${catId}" selected`)}</select>
+        <input class="tx-split-amt" type="number" min="1" step="1000" placeholder="Amount" value="${amt}">
+        <input class="tx-split-notes" type="text" maxlength="200" placeholder="Notes (optional)" value="${notes}">
+        <button class="btn tx-btn-sm tx-btn-split-remove" data-index="${index}" title="Remove">${Comp.ic('close')}</button>
+      </div>`;
+    }
+
+    function allocatedTotal() {
+      let total = 0;
+      card.querySelectorAll('.tx-split-amt').forEach(i => {
+        total += Number(i.value) || 0;
+      });
+      return total;
+    }
+
+    function remaining() {
+      return parentAmount - allocatedTotal();
+    }
+
+    function renderSplitRows() {
+      const container = card.querySelector('#tx-split-list');
+      container.innerHTML = splits.map((s, i) => splitRowHtml(s, i)).join('');
+      card.querySelectorAll('.tx-btn-split-remove').forEach(b =>
+        b.addEventListener('click', () => {
+          const idx = Number(b.dataset.index);
+          splits.splice(idx, 1);
+          renderSplitRows();
+          updateFooter();
+        }));
+      card.querySelectorAll('.tx-split-amt').forEach(i =>
+        i.addEventListener('input', updateFooter));
+      updateFooter();
+    }
+
+    function updateFooter() {
+      const rem = remaining();
+      const remEl = card.querySelector('#tx-split-remain');
+      const saveBtn = card.querySelector('#tx-split-save');
+      remEl.textContent = `${rp(parentAmount)} total · ${rp(allocatedTotal())} allocated · ${rp(rem)} remaining`;
+      remEl.className = rem === 0 ? 'tx-split-remain-ok' : (rem < 0 ? 'tx-split-remain-over' : 'tx-split-remain');
+      saveBtn.disabled = rem < 0;
+    }
+
+    card.innerHTML = `
+      <div class="tx-modal-card" style="max-width:520px">
+        <h3>Split transaction</h3>
+        <div class="tx-split-desc">${U.esc(description)}</div>
+        <div class="tx-split-list" id="tx-split-list"></div>
+        <button class="btn tx-btn-outline tx-btn-sm" id="tx-split-add">${Comp.ic('plus')} Add split</button>
+        <div class="tx-split-footer">
+          <span id="tx-split-remain">${rp(parentAmount)} total</span>
+          <span>
+            <button class="btn tx-btn-outline" id="tx-split-cancel">Cancel</button>
+            <button class="btn tx-btn-primary" id="tx-split-save">Save</button>
+          </span>
+        </div>
+      </div>`;
+
+    document.body.appendChild(card);
+    card.querySelector('#tx-split-cancel').addEventListener('click', () => card.remove());
+    card.addEventListener('click', e => { if (e.target === card) card.remove(); });
+    card.querySelector('#tx-split-add').addEventListener('click', () => {
+      splits.push({});
+      renderSplitRows();
+    });
+    card.querySelector('#tx-split-save').addEventListener('click', async () => {
+      const allocations = [];
+      let valid = true;
+      card.querySelectorAll('.tx-split-row').forEach(row => {
+        const catId = Number(row.querySelector('.tx-split-cat').value) || 0;
+        const amt = Number(row.querySelector('.tx-split-amt').value) || 0;
+        const notes = row.querySelector('.tx-split-notes').value.trim();
+        if (!catId || !amt) valid = false;
+        allocations.push({ category_id: catId, amount: amt, notes });
+      });
+      if (!valid) { toast('Each split needs a category and amount', false); return; }
+      if (remaining() !== 0) { toast('Allocated amount must equal total', false); return; }
+      try {
+        await _post('/api/transactions/splits/set', { ledger_id: ledgerId, allocations }, 15000);
+        toast('Split saved', true);
+        card.remove();
+        await refreshView();
+      } catch (e) {
+        toast(e.message, false);
+      }
+    });
+
+    renderSplitRows();
   }
 
   function _fileToBase64(file) {
