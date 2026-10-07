@@ -95,7 +95,8 @@ _CAT = {
     'health_medical':  ('Health', 'Medical'),
     'cash':            ('Cash', 'Cash Withdrawal'),
     'fee':             ('Fees', 'Bank Fee'),
-    'loan_repayment':  ('Loans', 'Loan Repayment'),
+    'loan_repayment':  ('Loans', 'Loan Payment'),
+    'pegadaian':      ('Loans', 'Pegadaian'),
     # Manual-only categories (owner assigns by hand; the categorizer never
     # auto-fires them): money received from a friend (income) and money paid
     # back to a friend (expense).
@@ -577,7 +578,7 @@ def _categorize_single(conn: sqlite3.Connection, row: dict) -> dict:
         return hit
     if (direction == 'out' and tx_type == 'va_payment'
             and any(_has(_text(row), m) for m in _VA_LOAN_BILLERS)):
-        set_cat('loan_repayment', 'expense', 'high',
+        set_cat('pegadaian', 'expense', 'high',
                 'VA loan facility payment')
         return hit
 

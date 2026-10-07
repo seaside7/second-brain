@@ -241,25 +241,25 @@ class CategorizerTestCase(unittest.TestCase):
         self.assertEqual(r['group'], 'Home')
         self.assertEqual(r['name'], 'Home Maintenance & Repair')
 
-    def test_15_spaylater_va_is_loan_repayment(self):
+    def test_15_spaylater_va_is_loan_payment(self):
         r = self._cat(description='VA 12308 SPAYLATER', transaction_type='va_payment')
         self.assertEqual(r['nature'], 'expense')
         self.assertEqual(r['group'], 'Loans')
-        self.assertEqual(r['name'], 'Loan Repayment')
+        self.assertEqual(r['name'], 'Loan Payment')
         self.assertEqual(r['confidence'], 'high')
 
-    def test_15b_spinjam_va_is_loan_repayment(self):
+    def test_15b_spinjam_va_is_loan_payment(self):
         r = self._cat(description='VA - Spinjam', transaction_type='va_payment')
         self.assertEqual(r['nature'], 'expense')
         self.assertEqual(r['group'], 'Loans')
-        self.assertEqual(r['name'], 'Loan Repayment')
+        self.assertEqual(r['name'], 'Loan Payment')
 
-    def test_15c_kredit_pintar_va_is_loan_repayment(self):
+    def test_15c_kredit_pintar_va_is_loan_payment(self):
         r = self._cat(description='VA - PT Kredit Pintar Indonesia / Kreditpintar',
                       transaction_type='va_payment')
         self.assertEqual(r['nature'], 'expense')
         self.assertEqual(r['group'], 'Loans')
-        self.assertEqual(r['name'], 'Loan Repayment')
+        self.assertEqual(r['name'], 'Loan Payment')
         self.assertEqual(r['confidence'], 'high')
 
     def test_15d_credit_card_bill_payment_is_cc_bill(self):
@@ -271,10 +271,10 @@ class CategorizerTestCase(unittest.TestCase):
         self.assertEqual(r['group'], 'Utilities')
         self.assertEqual(r['name'], 'Credit Card')
 
-    def test_16_pegadaian_va_is_loan_repayment(self):
+    def test_16_pegadaian_va_is_pegadaian(self):
         r = self._cat(description='VA 19008/P Gadai Indo', transaction_type='va_payment')
         self.assertEqual(r['group'], 'Loans')
-        self.assertEqual(r['name'], 'Loan Repayment')
+        self.assertEqual(r['name'], 'Pegadaian')
 
     def test_17_bca_purchase_email_not_own_wallet(self):
         # BCA "Internet Transaction Journal" payment emails all say
@@ -416,7 +416,7 @@ class CategorizerTestCase(unittest.TestCase):
             transaction_type='va_payment', recipient='PT LENTERA DANA NUSANTARA / SPINJAM Bill')
         self.assertEqual(r['nature'], 'expense')
         self.assertEqual(r['group'], 'Loans')
-        self.assertEqual(r['name'], 'Loan Repayment')
+        self.assertEqual(r['name'], 'Loan Payment')
 
 
 class BcaJournalParserTestCase(unittest.TestCase):
