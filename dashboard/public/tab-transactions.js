@@ -1511,100 +1511,130 @@ const rpSigned = n => {
   }
 
   async function _openSplitModal(ledgerId, parentAmount, description) {
-    let splits = [];
+    let existingSplits = [];
     try {
       const res = await U.fetchJSON(`/api/transactions/splits/${ledgerId}`);
-      splits = res.splits || [];
+      existingSplits = res.splits || [];
     } catch (_) { /* empty splits */ }
 
     const card = document.createElement('div');
     card.className = 'tx-modal-backdrop';
-    const catOpts = _categoryOptions('out');
+    const listEl = document.createElement('div');
+    listEl.className = 'tx-split-list';
 
-    function splitRowHtml(allocation = {}, index) {
-      const catId = allocation.category_id || '';
-      const amt = allocation.amount || '';
-      const notes = U.esc(allocation.notes || '');
-      return `<div class="tx-split-row" data-index="${index}">
-        <select class="tx-split-cat" data-index="${index}">${catOpts.replace(`value="${catId}"`, `value="${catId}" selected`)}</select>
-        <input class="tx-split-amt" type="number" min="1" step="1000" placeholder="Amount" value="${amt}">
-        <input class="tx-split-notes" type="text" maxlength="200" placeholder="Notes (optional)" value="${notes}">
-        <button class="btn tx-btn-sm tx-btn-split-remove" data-index="${index}" title="Remove">${Comp.ic('close')}</button>
+    function buildCatSelect(selectedId, index) {
+      const groups = _catGroups('out', selectedId);
+      let html = '<option value="">— category —</option>';
+      Object.keys(groups).sort().forEach(g => {
+        html += `<optgroup label="${U.esc(g)}">`;
+        html += groups[g].map(c =>
+          `<option value="${c.id}"${c.id === selectedId ? ' selected' : ''}>${U.esc(c.name)}</option>`
+        ).join('');
+        html += '</optgroup>';
+      });
+      return `<select class="tx-split-cat" data-idx="${index}">${html}</select>`;
+    }
+
+    function rowHtml(s, i) {
+      const notes = U.esc(s.notes || '');
+      return `<div class="tx-split-row" data-idx="${i}">
+        ${buildCatSelect(s.category_id || '', i)}
+        <input class="tx-split-amt" type="text" inputmode="numeric" placeholder="Amount" value="${s.amount || ''}" data-idx="${i}">
+        <input class="tx-split-notes" type="text" maxlength="200" placeholder="Notes (optional)" value="${notes}" data-idx="${i}">
+        <button class="btn tx-btn-sm tx-btn-split-remove" data-idx="${i}" title="Remove">${Comp.ic('close')}</button>
       </div>`;
     }
 
     function allocatedTotal() {
       let total = 0;
-      card.querySelectorAll('.tx-split-amt').forEach(i => {
-        total += Number(i.value) || 0;
+      card.querySelectorAll('.tx-split-amt').forEach(el => {
+        total += Number((el.value || '').replace(/\./g, '')) || 0;
       });
       return total;
     }
 
-    function remaining() {
-      return parentAmount - allocatedTotal();
-    }
+    function remaining() { return parentAmount - allocatedTotal(); }
 
-    function renderSplitRows() {
-      const container = card.querySelector('#tx-split-list');
-      container.innerHTML = splits.map((s, i) => splitRowHtml(s, i)).join('');
-      card.querySelectorAll('.tx-btn-split-remove').forEach(b =>
-        b.addEventListener('click', () => {
-          const idx = Number(b.dataset.index);
-          splits.splice(idx, 1);
-          renderSplitRows();
-          updateFooter();
-        }));
-      card.querySelectorAll('.tx-split-amt').forEach(i =>
-        i.addEventListener('input', updateFooter));
-      updateFooter();
-    }
-
-    function updateFooter() {
+    function syncRows() {
+      const rows = listEl.querySelectorAll('.tx-split-row');
+      splits = [];
+      rows.forEach((row, i) => {
+        splits.push({
+          category_id: Number(row.querySelector('.tx-split-cat').value) || 0,
+          amount: Number((row.querySelector('.tx-split-amt').value || '').replace(/\./g, '')) || 0,
+          notes: row.querySelector('.tx-split-notes').value || ''
+        });
+      });
       const rem = remaining();
       const remEl = card.querySelector('#tx-split-remain');
-      const saveBtn = card.querySelector('#tx-split-save');
       remEl.textContent = `${rp(parentAmount)} total · ${rp(allocatedTotal())} allocated · ${rp(rem)} remaining`;
       remEl.className = rem === 0 ? 'tx-split-remain-ok' : (rem < 0 ? 'tx-split-remain-over' : 'tx-split-remain');
-      saveBtn.disabled = rem < 0;
+      card.querySelector('#tx-split-save').disabled = rem < 0;
     }
 
+    function addRow(data = {}) {
+      const i = splits.length;
+      splits.push(data);
+      listEl.insertAdjacentHTML('beforeend', rowHtml(data, i));
+      attachRowListeners(listEl.lastElementChild);
+    }
+
+    function attachRowListeners(row) {
+      row.querySelector('.tx-split-amt').addEventListener('input', e => {
+        let raw = e.target.value.replace(/\./g, '');
+        if (!/^\d*$/.test(raw)) { e.target.value = raw; return; }
+        if (raw) {
+          const num = Number(raw);
+          e.target.value = num.toLocaleString('id-ID');
+        }
+        syncRows();
+      });
+      row.querySelector('.tx-split-cat').addEventListener('change', syncRows);
+      row.querySelector('.tx-split-notes').addEventListener('input', syncRows);
+      row.querySelector('.tx-btn-split-remove').addEventListener('click', () => {
+        const idx = Number(row.dataset.idx);
+        splits.splice(idx, 1);
+        syncRows();
+        renderAll();
+      });
+    }
+
+    function renderAll() {
+      listEl.innerHTML = splits.map((s, i) => rowHtml(s, i)).join('');
+      listEl.querySelectorAll('.tx-split-row').forEach(attachRowListeners);
+      syncRows();
+    }
+
+    const splits = [...existingSplits];
+
     card.innerHTML = `
-      <div class="tx-modal-card" style="max-width:520px">
+      <div class="tx-modal-card tx-modal-split">
         <h3>Split transaction</h3>
         <div class="tx-split-desc">${U.esc(description)}</div>
         <div class="tx-split-list" id="tx-split-list"></div>
         <button class="btn tx-btn-outline tx-btn-sm" id="tx-split-add">${Comp.ic('plus')} Add split</button>
         <div class="tx-split-footer">
           <span id="tx-split-remain">${rp(parentAmount)} total</span>
-          <span>
+          <div class="tx-split-actions">
             <button class="btn tx-btn-outline" id="tx-split-cancel">Cancel</button>
-            <button class="btn tx-btn-primary" id="tx-split-save">Save</button>
-          </span>
+            <button class="btn tx-btn-primary" id="tx-split-save">Save split</button>
+          </div>
         </div>
       </div>`;
 
+    card.querySelector('.tx-modal-card').appendChild(listEl);
     document.body.appendChild(card);
+
     card.querySelector('#tx-split-cancel').addEventListener('click', () => card.remove());
     card.addEventListener('click', e => { if (e.target === card) card.remove(); });
-    card.querySelector('#tx-split-add').addEventListener('click', () => {
-      splits.push({});
-      renderSplitRows();
-    });
+    card.querySelector('#tx-split-add').addEventListener('click', () => addRow());
     card.querySelector('#tx-split-save').addEventListener('click', async () => {
-      const allocations = [];
-      let valid = true;
-      card.querySelectorAll('.tx-split-row').forEach(row => {
-        const catId = Number(row.querySelector('.tx-split-cat').value) || 0;
-        const amt = Number(row.querySelector('.tx-split-amt').value) || 0;
-        const notes = row.querySelector('.tx-split-notes').value.trim();
-        if (!catId || !amt) valid = false;
-        allocations.push({ category_id: catId, amount: amt, notes });
-      });
+      syncRows();
+      const valid = splits.every(s => s.category_id && s.amount > 0);
       if (!valid) { toast('Each split needs a category and amount', false); return; }
       if (remaining() !== 0) { toast('Allocated amount must equal total', false); return; }
       try {
-        await _post('/api/transactions/splits/set', { ledger_id: ledgerId, allocations }, 15000);
+        await _post('/api/transactions/splits/set', { ledger_id: ledgerId, allocations: splits }, 15000);
         toast('Split saved', true);
         card.remove();
         await refreshView();
@@ -1613,7 +1643,7 @@ const rpSigned = n => {
       }
     });
 
-    renderSplitRows();
+    renderAll();
   }
 
   function _fileToBase64(file) {
