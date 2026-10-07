@@ -381,7 +381,7 @@ def list_ledger(conn: sqlite3.Connection, *,
         "ORDER BY e.occurred_at DESC, l.created_at DESC LIMIT ? OFFSET ?")
 
     rows = [dict(r) for r in conn.execute(ledger_sql, p_l).fetchall()]
-    rows += [dict(r) for r in conn.execute(split_sql, p_s).fetchall()]
+    rows += [dict(r) for r in conn.execute(split_sql, p_sp).fetchall()]
     rows.sort(key=lambda r: r.get('occurred_at') or '', reverse=True)
     return rows[:limit]
 
