@@ -4032,6 +4032,64 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
   .ov-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* ── multi-select category dropdown ──────────────────────────────────── */
+.tx-ms-wrap { position: relative; display: inline-block; }
+.tx-ms-toggle {
+  background: var(--bg-input); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 5px 10px; font-size: var(--fs-sm); cursor: pointer; min-width: 120px; text-align: left;
+}
+.tx-ms-toggle:hover { border-color: var(--accent); }
+.tx-ms-dropdown {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 200;
+  background: var(--surface-opaque, var(--bg-card));
+  border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  width: 260px; max-height: 380px; display: flex; flex-direction: column;
+}
+.tx-ms-search-wrap { padding: 8px; border-bottom: 1px solid var(--border); }
+.tx-ms-search {
+  width: 100%; background: var(--bg-input); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 5px 8px; font-size: var(--fs-sm); box-sizing: border-box;
+}
+.tx-ms-search:focus { border-color: var(--accent); outline: none; }
+.tx-ms-list { overflow-y: auto; flex: 1; padding: 6px 0; }
+.tx-ms-list label { display: flex; align-items: center; gap: 7px; padding: 4px 10px; cursor: pointer; font-size: var(--fs-sm); color: var(--text-primary); }
+.tx-ms-list label:hover { background: var(--bg-hover); }
+.tx-ms-all { border-bottom: 1px solid var(--border); padding-bottom: 6px !important; margin-bottom: 2px; font-weight: 600; }
+.tx-ms-group { border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,.06)); }
+.tx-ms-group:last-child { border-bottom: none; }
+.tx-ms-group-label {
+  display: flex; align-items: center; gap: 7px; padding: 5px 10px;
+  cursor: pointer; font-size: var(--fs-sm); font-weight: 600; color: var(--text-primary);
+  user-select: none;
+}
+.tx-ms-group-label:hover { background: var(--bg-hover); }
+.tx-ms-gname { flex: 1; }
+.tx-ms-group-label input[type="checkbox"] { flex-shrink: 0; accent-color: var(--accent); }
+.tx-ms-group-label.is-indeterminate .tx-ms-gname { color: var(--accent); font-style: italic; }
+.tx-ms-children { padding-left: 22px; }
+.tx-ms-child {
+  display: flex; align-items: center; gap: 7px; padding: 3px 10px;
+  cursor: pointer; font-size: var(--fs-xs); color: var(--text-secondary);
+}
+.tx-ms-child:hover { background: var(--bg-hover); color: var(--text-primary); }
+.tx-ms-child.is-checked { color: var(--text-primary); }
+.tx-ms-child input[type="checkbox"] { flex-shrink: 0; accent-color: var(--accent); }
+.tx-ms-chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.tx-cat-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  background: var(--accent); color: #fff; border-radius: 99px;
+  padding: 2px 6px 2px 8px; font-size: var(--fs-xs); font-weight: 500;
+}
+.tx-cat-chip-x {
+  background: none; border: none; color: inherit; cursor: pointer;
+  padding: 0; line-height: 1; font-size: 13px; opacity: .8;
+}
+.tx-cat-chip-x:hover { opacity: 1; }
+
+
 /* ═══════════════════════════════════════════
    TRADING BRAIN TAB (📈)
    ═══════════════════════════════════════════ */

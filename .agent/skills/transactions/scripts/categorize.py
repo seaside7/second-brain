@@ -119,7 +119,8 @@ _CAT = {
 
 # Billers: keyword -> taxonomy key. Order matters (most specific first).
 _BILLERS = [
-    ('token listrik', 'bills_elec'), ('pln', 'bills_elec'),
+    ('token listrik', 'bills_elec'), ('pln prepaid', 'bills_elec'),
+    ('pln', 'bills_elec'),
     ('indihome', 'bills_internet'), ('first media', 'bills_internet'),
     ('biznet', 'bills_internet'),
     ('telkomsel', 'bills_phone'), ('indosat', 'bills_phone'),

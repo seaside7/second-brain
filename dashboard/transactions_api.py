@@ -262,7 +262,8 @@ def _handle_list(handler, qs: dict) -> None:
         limit = int(qs.get('limit', ['200'])[0])
         offset = int(qs.get('offset', ['0'])[0])
         from_date, to_date = _range_from_qs(qs)
-        cat = qs.get('category', [None])[0]
+        cat_param = qs.get('category', [None])[0]
+        cat_ids = [int(x) for x in cat_param.split(',') if x.strip()] if cat_param else None
         trip = qs.get('trip', [None])[0]
         trip_id = int(trip) if trip and trip.isdigit() else None
         rows = list_ledger(conn,
@@ -270,14 +271,14 @@ def _handle_list(handler, qs: dict) -> None:
             review_status=qs.get('review', [None])[0],
             txn_status=qs.get('status', [None])[0],
             account_id=int(qs['account'][0]) if 'account' in qs else None,
-            category_id=int(cat) if cat else None,
+            category_ids=cat_ids,
             trip_id=trip_id,
             from_date=from_date,
             to_date=to_date,
             search=qs.get('q', [None])[0],
             limit=min(limit, 500),
             offset=offset)
-        total = count_ledger(conn, category_id=int(cat) if cat else None,
+        total = count_ledger(conn, category_ids=cat_ids,
                              trip_id=trip_id,
                              from_date=from_date, to_date=to_date)
         _ok(handler, {'rows': rows, 'total': total, 'limit': limit, 'offset': offset})

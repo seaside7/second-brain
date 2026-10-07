@@ -144,9 +144,9 @@ class CategorizerTestCase(unittest.TestCase):
                                                    food_id, 'out'), 'expense')
         self.assertEqual(store.nature_for_category(self._conn, 'needs_review',
                                                    food_id, 'in'), 'income')
-        # No direction known -> stays needs_review.
+        # No direction known -> defaults to expense (owner picked a spend category).
         self.assertEqual(store.nature_for_category(self._conn, 'needs_review',
-                                                   food_id), 'needs_review')
+                                                   food_id), 'expense')
 
     def test_07h_transfer_categories_stay_neutral(self):
         topup = store.get_or_create_category(self._conn, 'Top Up (3rd party)',

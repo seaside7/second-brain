@@ -206,7 +206,7 @@ def add_ledger_row(conn: sqlite3.Connection, ext_id: int, *,
                     account_id: int | None = None,
                     amount: int = 0, direction: str = 'out',
                     nature: str = 'needs_review',
-                    category_id: int | None = None,
+                 category_ids: list[int] | None = None,
                     notes: str = '', confidence: str = 'none',
                     confidence_reason: str = '',
                     evidence_json: str = '{}',
@@ -277,7 +277,7 @@ def add_ledger_row_ext(conn: sqlite3.Connection, ext_id: int, *,
                        account_id: int | None = None,
                        amount: int = 0, direction: str = 'out',
                        nature: str = 'needs_review',
-                       category_id: int | None = None,
+                category_ids: list[int] | None = None,
                        notes: str = '', confidence: str = 'none',
                        confidence_reason: str = '',
                        evidence_json: str = '{}',
@@ -322,8 +322,10 @@ def list_ledger(conn: sqlite3.Connection, *,
             c.append("l.txn_status=?"); p.append(txn_status)
         if account_id:
             c.append("l.account_id=?"); p.append(account_id)
-        if category_id:
-            c.append(f"{with_cat}=?"); p.append(category_id)
+        if category_ids:
+            cats_esc = ','.join('?' * len(category_ids))
+            c.append(f"{with_cat} IN ({cats_esc})")
+            p.extend(category_ids)
         if trip_id is not None:
             c.append("l.trip_id=?"); p.append(trip_id)
         if from_date:
@@ -402,8 +404,10 @@ def count_ledger(conn: sqlite3.Connection, *,
         conds.append("l.txn_status=?"); params.append(txn_status)
     if review_status:
         conds.append("l.review_status=?"); params.append(review_status)
-    if category_id:
-        conds.append("l.category_id=?"); params.append(category_id)
+    if category_ids:
+        cats_esc = ','.join('?' * len(category_ids))
+        conds.append(f"l.category_id IN ({cats_esc})")
+        params.extend(category_ids)
     if trip_id is not None:
         conds.append("l.trip_id=?"); params.append(trip_id)
     if from_date:
@@ -694,8 +698,8 @@ def nature_for_category(conn: sqlite3.Connection, current_nature: str,
 
     # Owner picked a normal category: resolve by money direction.
     if current_nature in ('needs_review',):
-        return {'in': 'income', 'out': 'expense'}.get(direction or '',
-                                                      current_nature)
+        return {'in': 'income', 'out': 'expense'}.get(direction or 'out',
+                                                      'expense')
     return current_nature
 
 def get_or_create_category(conn: sqlite3.Connection, name: str,

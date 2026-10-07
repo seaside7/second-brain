@@ -75,7 +75,8 @@ const TransactionsTab = (() => {
   let _ovFees = true;        // fees count as spend
   let _ovTransfers = false;  // person-transfers count as spend
   /* all-view drill-down state (set by chart clicks) */
-  let _allCat = '';          // category id filter, '' = all
+  let _allCat = '';          // legacy single-category filter (string, '' = all)
+  let _allCatIds = [];       // selected category id filters (array of strings)
   let _allTrip = '';         // trip id filter, '' = all
   let _allTrips = [];        // cached trips for the dropdown
   /* transfers-view state */
@@ -118,7 +119,7 @@ const TransactionsTab = (() => {
     _period = 'custom';
     _from = from || '';
     _to = to || '';
-    _allCat = categoryId ? String(categoryId) : '';
+    _allCatIds = categoryId ? [String(categoryId)] : [];
     _allPage = 0;
     _activeView = 'all';
     location.hash = '#transactions/all';
@@ -242,6 +243,237 @@ const rpSigned = n => {
       (groups[g] = groups[g] || []).push(c);
     });
     return groups;
+  }
+
+  /* Build grouped category data for the multi-select dropdown. */
+  function _catGroupedForFilter() {
+    const grouped = {};
+    (_categories || []).forEach(c => {
+      const g = c.group || 'Other';
+      (grouped[g] = grouped[g] || []).push(c);
+    });
+    return Object.keys(grouped).sort().map(g => ({
+      group: g,
+      cats: grouped[g].sort((a, b) => a.name.localeCompare(b.name))
+    }));
+  }
+
+  /* Multi-select category dropdown. Returns HTML string.
+     selectedIds: array of selected category id strings.
+     onChange: callback(selectedIds: string[]) called when selection changes. */
+  function _catMultiSelect(selectedIds, onChange) {
+    const sel = new Set(selectedIds.map(String));
+    const groups = _catGroupedForFilter();
+
+    const allCatIds = (_categories || []).map(c => String(c.id));
+    const allChecked = allCatIds.length > 0 && allCatIds.every(id => sel.has(id));
+    const someChecked = !allChecked && allCatIds.some(id => sel.has(id));
+
+    const chipHtml = selectedIds.length > 0
+      ? selectedIds.map(id => {
+          const cat = (_categories || []).find(c => String(c.id) === String(id));
+          const label = cat ? cat.name : id;
+          return `<span class="tx-cat-chip" data-id="${id}">${U.esc(label)}<button class="tx-cat-chip-x" data-id="${id}">&times;</button></span>`;
+        }).join('')
+      : '';
+
+    const groupHtml = groups.map(({ group: g, cats }) => {
+      const gCatIds = cats.map(c => String(c.id));
+      const gAllChecked = gCatIds.length > 0 && gCatIds.every(id => sel.has(id));
+      const gSomeChecked = !gAllChecked && gCatIds.some(id => sel.has(id));
+
+      const childrenHtml = cats.map(c => {
+        const checked = sel.has(String(c.id)) ? 'checked' : '';
+        return `<label class="tx-ms-child${checked ? ' is-checked' : ''}"><input type="checkbox" value="${c.id}" ${checked}>${U.esc(c.name)}</label>`;
+      }).join('');
+
+      return `<div class="tx-ms-group" data-g="${U.esc(g)}">
+        <label class="tx-ms-group-label${gAllChecked ? ' is-checked' : gSomeChecked ? ' is-indeterminate' : ''}">
+          <input type="checkbox" data-g="${U.esc(g)}" ${gAllChecked ? 'checked' : ''} ${gSomeChecked ? 'data-some="1"' : ''}>
+          <span class="tx-ms-gname">${U.esc(g)}</span>
+        </label>
+        <div class="tx-ms-children">${childrenHtml}</div>
+      </div>`;
+    }).join('');
+
+    const totalChecked = sel.size;
+    const btnLabel = totalChecked === 0 ? 'All categories' : `${totalChecked} selected`;
+
+    return `<div class="tx-ms-wrap">
+      <button class="tx-ms-toggle btn tx-btn-sm" type="button" id="tx-ms-toggle">${btnLabel}</button>
+      <div class="tx-ms-dropdown" id="tx-ms-dropdown" hidden>
+        <div class="tx-ms-search-wrap">
+          <input type="text" class="tx-ms-search" id="tx-ms-search" placeholder="Search categories..." autocomplete="off">
+        </div>
+        <div class="tx-ms-list" id="tx-ms-list">
+          <label class="tx-ms-all${allChecked ? ' is-checked' : someChecked ? ' is-indeterminate' : ''}">
+            <input type="checkbox" id="tx-ms-all" ${allChecked ? 'checked' : ''} ${someChecked ? 'data-some="1"' : ''}>
+            <span>All categories</span>
+          </label>
+          ${groupHtml}
+        </div>
+      </div>
+    </div>
+    <span class="tx-ms-chips">${chipHtml}</span>`;
+  }
+
+  function _applyCatMultiSelect(selectedIds) {
+    _allCatIds = selectedIds;
+    _allPage = 0;
+    refreshView();
+  }
+
+  function _initCatMultiSelectEvents(el) {
+    const wrap = el.querySelector('.tx-ms-wrap');
+    if (!wrap) return;
+
+    const toggle = wrap.querySelector('#tx-ms-toggle');
+    const dropdown = wrap.querySelector('#tx-ms-dropdown');
+    const searchInp = wrap.querySelector('#tx-ms-search');
+    const list = wrap.querySelector('#tx-ms-list');
+
+    toggle.addEventListener('click', () => {
+      const hidden = dropdown.hidden;
+      dropdown.hidden = !hidden;
+      if (!hidden) return;
+      searchInp.value = '';
+      searchInp.focus();
+      list.querySelectorAll('[data-g]').forEach(item => {
+        item.closest('.tx-ms-group').style.display = '';
+      });
+      list.querySelectorAll('.tx-ms-group').forEach(g => g.style.display = '');
+    });
+
+    document.addEventListener('click', e => {
+      if (!wrap.contains(e.target)) {
+        dropdown.hidden = true;
+      }
+    });
+
+    searchInp.addEventListener('input', () => {
+      const q = searchInp.value.toLowerCase().trim();
+      list.querySelectorAll('.tx-ms-group').forEach(g => {
+        const label = g.querySelector('.tx-ms-gname').textContent.toLowerCase();
+        const kids = [...g.querySelectorAll('.tx-ms-child')];
+        const match = label.includes(q) || kids.some(k => k.textContent.toLowerCase().includes(q));
+        g.style.display = match ? '' : 'none';
+      });
+    });
+
+    list.addEventListener('change', e => {
+      const target = e.target;
+      if (!target.matches('input[type="checkbox"]')) return;
+      const gName = target.dataset.g;
+
+      if (gName) {
+        const isG = target.closest('.tx-ms-group-label');
+        const groupDiv = target.closest('.tx-ms-group');
+        const childChecks = [...groupDiv.querySelectorAll('.tx-ms-child input')];
+        const childIds = childChecks.map(inp => String(inp.value));
+
+        let newSel;
+        if (isG) {
+          const checked = target.checked;
+          newSel = _allCatIds.filter(id => !childIds.includes(String(id)));
+          if (checked) newSel = [...new Set([...newSel, ...childIds])];
+        } else {
+          const clickedId = target.value;
+          newSel = childChecks.every(inp => inp.checked)
+            ? [...new Set([..._allCatIds, ...childIds])]
+            : _allCatIds.filter(id => !childIds.includes(String(id)));
+          if (target.checked) newSel = [...new Set([...newSel, clickedId])];
+          else newSel = newSel.filter(id => String(id) !== String(clickedId));
+        }
+
+        _allCatIds = newSel;
+        refreshCatMsDropdown(el, new Set(newSel.map(String)));
+        _applyCatMultiSelect(newSel);
+        return;
+      }
+
+      if (target.id === 'tx-ms-all') {
+        _allCatIds = target.checked ? (_categories || []).map(c => String(c.id)) : [];
+        refreshCatMsDropdown(el, new Set(_allCatIds));
+        _applyCatMultiSelect(_allCatIds);
+        return;
+      }
+
+      const childInp = target.closest('.tx-ms-child');
+      if (childInp) {
+        const catId = String(target.value);
+        _allCatIds = target.checked
+          ? [...new Set([..._allCatIds, catId])]
+          : _allCatIds.filter(id => String(id) !== catId);
+
+        const groupDiv = childInp.closest('.tx-ms-group');
+        refreshCatMsDropdown(el, new Set(_allCatIds.map(String)));
+        _applyCatMultiSelect(_allCatIds);
+      }
+    });
+
+    const chips = el.querySelector('.tx-ms-chips');
+    if (chips) {
+      chips.addEventListener('click', e => {
+        const xBtn = e.target.closest('.tx-cat-chip-x');
+        if (!xBtn) return;
+        const id = xBtn.dataset.id;
+        _allCatIds = _allCatIds.filter(i => String(i) !== String(id));
+        refreshCatMsDropdown(el, new Set(_allCatIds.map(String)));
+        _applyCatMultiSelect(_allCatIds);
+      });
+    }
+  }
+
+  function refreshCatMsDropdown(el, sel) {
+    const wrap = el.querySelector('.tx-ms-wrap');
+    if (!wrap) return;
+    const allIds = (_categories || []).map(c => String(c.id));
+    const allChecked = allIds.length > 0 && allIds.every(id => sel.has(id));
+    const someChecked = !allChecked && allIds.some(id => sel.has(id));
+
+    const allCb = wrap.querySelector('#tx-ms-all');
+    if (allCb) {
+      allCb.checked = allChecked;
+      allCb.indeterminate = someChecked;
+      allCb.closest('label').classList.toggle('is-checked', allChecked);
+      allCb.closest('label').classList.toggle('is-indeterminate', someChecked);
+    }
+
+    wrap.querySelectorAll('.tx-ms-group').forEach(g => {
+      const gCatIds = [...g.querySelectorAll('.tx-ms-child input')].map(inp => String(inp.value));
+      const gAllChecked = gCatIds.length > 0 && gCatIds.every(id => sel.has(id));
+      const gSomeChecked = !gAllChecked && gCatIds.some(id => sel.has(id));
+
+      const gLabel = g.querySelector('.tx-ms-group-label');
+      const gCb = g.querySelector('input[data-g]');
+      if (gCb) {
+        gCb.checked = gAllChecked;
+        gCb.indeterminate = gSomeChecked;
+        gLabel.classList.toggle('is-checked', gAllChecked);
+        gLabel.classList.toggle('is-indeterminate', gSomeChecked);
+      }
+
+      g.querySelectorAll('.tx-ms-child').forEach(child => {
+        const cb = child.querySelector('input');
+        const checked = sel.has(String(cb.value));
+        cb.checked = checked;
+        child.classList.toggle('is-checked', checked);
+      });
+    });
+
+    const totalChecked = sel.size;
+    const btnLabel = totalChecked === 0 ? 'All categories' : `${totalChecked} selected`;
+    wrap.querySelector('#tx-ms-toggle').textContent = btnLabel;
+
+    const chips = wrap.nextElementSibling;
+    if (chips && chips.classList.contains('tx-ms-chips')) {
+      const chipHtml = _allCatIds.map(id => {
+        const cat = (_categories || []).find(c => String(c.id) === String(id));
+        const label = cat ? cat.name : id;
+        return `<span class="tx-cat-chip" data-id="${id}">${U.esc(label)}<button class="tx-cat-chip-x" data-id="${id}">&times;</button></span>`;
+      }).join('');
+      chips.innerHTML = chipHtml;
+    }
   }
 
   function _catSelect(r) {
@@ -724,7 +956,7 @@ const rpSigned = n => {
   /* ── all transactions ───────────────────────────────────────────── */
   async function _renderAll(el) {
     const size = _allPageSize;
-    const catQ = _allCat ? `&category=${encodeURIComponent(_allCat)}` : '';
+    const catQ = _allCatIds.length ? `&category=${_allCatIds.map(String).join(',')}` : '';
     const tripQ = _allTrip ? `&trip=${encodeURIComponent(_allTrip)}` : '';
     let d = await U.fetchJSON(`/api/transactions/list?limit=${size}&offset=${_allPage * size}&${_rangeQS()}${catQ}${tripQ}`);
     const total = d.total || 0;
@@ -759,12 +991,8 @@ const rpSigned = n => {
               ${_allTrips.map(t =>
                 `<option value="${t.id}" ${String(t.id) === String(_allTrip) ? 'selected' : ''}>${U.esc(t.name)}</option>`).join('')}
             </select>
-            <select id="tx-all-cat" class="tx-select" title="Filter by category">
-              <option value="">All categories</option>
-              ${(_categories || []).map(c =>
-                `<option value="${c.id}" ${String(c.id) === String(_allCat) ? 'selected' : ''}>${U.esc(c.name)}</option>`).join('')}
-            </select>
-            ${_allCat || _allTrip || (_from && _to && _period === 'custom') ? '<button class="btn tx-btn-sm" id="tx-all-clear">Clear</button>' : ''}
+            ${_catMultiSelect(_allCatIds, _applyCatMultiSelect)}
+            ${_allCatIds.length || _allTrip || (_from && _to && _period === 'custom') ? '<button class="btn tx-btn-sm" id="tx-all-clear">Clear</button>' : ''}
           </span>
         </div>
         ${pages > 1 ? `<span class="tx-pager-info">showing ${_allPage * size + 1}–${Math.min((_allPage + 1) * size, total)}</span>` : ''}
@@ -772,17 +1000,15 @@ const rpSigned = n => {
         ${pager}
       </div>
     `;
-    el.querySelector('#tx-all-cat').addEventListener('change', e => {
-      _allCat = e.target.value; _allPage = 0; refreshView();
-    });
     const tripSel = el.querySelector('#tx-all-trip');
     if (tripSel) tripSel.addEventListener('change', e => {
       _allTrip = e.target.value; _allPage = 0; refreshView();
     });
     const clr = el.querySelector('#tx-all-clear');
     if (clr) clr.addEventListener('click', () => {
-      _allCat = ''; _allTrip = ''; _allPage = 0; refreshView();
+      _allCatIds = []; _allTrip = ''; _allPage = 0; refreshView();
     });
+    _initCatMultiSelectEvents(el);
     if (pages > 1) {
       el.querySelectorAll('[data-pg]').forEach(b => b.addEventListener('click', () => {
         if (b.dataset.pg === 'prev' && _allPage > 0) { _allPage--; refreshView(); }
@@ -1111,6 +1337,15 @@ const rpSigned = n => {
         Number(b.dataset.splitId),
         Number(b.dataset.splitAmount),
         b.dataset.splitDesc)));
+    el.querySelectorAll('.tx-cat').forEach(sel =>
+      sel.addEventListener('change', () => {
+        _changeCategory(sel);
+        const row = sel.closest('.tx-tr');
+        if (row) {
+          const btn = row.querySelector('.tx-btn-ok');
+          if (btn) btn.dataset.cat = sel.value;
+        }
+      }));
   }
 
   async function _reviewConfirm(id, category_id) {
