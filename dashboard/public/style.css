@@ -3992,10 +3992,11 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
 }
 .ov-chip:hover { background: var(--bg-hover); }
 .ov-chip.is-active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-.ov-filterbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
-.ov-filterbar-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.ov-filterbar-right { display: flex; align-items: center; gap: 6px; }
-.ov-cat-groups { display: flex; flex-direction: column; gap: 4px; }
+.ov-filterbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.ov-filterbar-left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ov-filterbar-right { display: flex; align-items: center; gap: 4px; }
+.ov-cat-strip { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 10px; }
+.ov-cat-group-label { font-size: var(--fs-xs); color: var(--text-muted); font-weight: 500; padding: 0 4px; white-space: nowrap; border-right: 1px solid var(--border); margin-right: 2px; }
 .ovg { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .ovg-hdr { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: var(--bg-hover); cursor: pointer; user-select: none; }
 .ovg-hdr:hover { background: var(--bg-hover2, color-mix(in srgb, var(--bg-hover) 70%, var(--border))); }
