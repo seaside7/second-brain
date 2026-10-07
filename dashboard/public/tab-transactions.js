@@ -1637,10 +1637,13 @@ const rpSigned = n => {
         await _post('/api/transactions/splits/set', { ledger_id: ledgerId, allocations: splits }, 15000);
         toast('Split saved', true);
         card.remove();
-        await refreshView();
       } catch (e) {
         toast(e.message, false);
+        return;
       }
+      try {
+        await refreshView();
+      } catch (_) { /* refresh may fail if no active tab */ }
     });
 
     renderAll();

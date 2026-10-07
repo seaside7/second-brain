@@ -119,6 +119,10 @@ def set_splits(conn=None, *, ledger_id: int,
                 "VALUES(?,?,?,?,?)",
                 (ledger_id, n['category_id'], n['trip_id'], n['amount'],
                  n['notes']))
+        conn.execute(
+            "UPDATE ledger_txns SET review_status='ok', txn_status='confirmed' "
+            "WHERE id=?",
+            (ledger_id,))
         conn.commit()
     except Exception:
         conn.rollback()
