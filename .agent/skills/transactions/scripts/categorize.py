@@ -109,6 +109,7 @@ _CAT = {
     # match would sweep in unrelated merchants.
     'adeeva':         ('Family', 'Adeeva'),
     'dinda':          ('Family', 'Dinda'),
+    'savings':        ('Transfers', 'Savings'),
     'uncategorized':  ('Uncategorized', 'Uncategorized'),
 }
 
