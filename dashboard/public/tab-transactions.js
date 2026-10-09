@@ -329,6 +329,10 @@ const rpSigned = n => {
     if (!wrap) return;
     const dropdown = wrap.querySelector('#tx-ms-dropdown');
     if (!dropdown) return;
+    // Only respond when the click is on the toggle button itself,
+    // never when it's inside the dropdown.
+    const toggle = wrap.querySelector('#tx-ms-toggle');
+    if (!toggle || !toggle.contains(e.target)) return;
     const hidden = dropdown.hidden;
     dropdown.hidden = !hidden;
     if (hidden) {
@@ -432,7 +436,7 @@ const rpSigned = n => {
       if (e.target.id === 'tx-ms-toggle' || e.target.closest('#tx-ms-toggle')) {
         _catMsHandleToggle(e);
       }
-    }, true);
+    });
     document.addEventListener('input', e => {
       if (e.target.id === 'tx-ms-search') _catMsHandleSearchInput(e);
     });
