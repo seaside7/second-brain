@@ -273,7 +273,7 @@ const rpSigned = n => {
       ? selectedIds.map(id => {
           const cat = (_categories || []).find(c => String(c.id) === String(id));
           const label = cat ? cat.name : id;
-          return `<span class="tx-cat-chip" data-id="${id}">${U.esc(label)}<button class="tx-cat-chip-x" data-id="${id}">&times;</button></span>`;
+          return `<span class="tx-cat-chip" data-id="${id}">${U.esc(label)}<button class="tx-cat-chip-x" data-id="${id}" onclick="event.stopPropagation();window.__txCatMsChipX(event)">&times;</button></span>`;
         }).join('')
       : '';
 
@@ -300,7 +300,7 @@ const rpSigned = n => {
     const btnLabel = totalChecked === 0 ? 'All categories' : `${totalChecked} selected`;
 
     return `<div class="tx-ms-wrap">
-      <button class="tx-ms-toggle btn tx-btn-sm" type="button" id="tx-ms-toggle">${btnLabel}</button>
+      <button class="tx-ms-toggle btn tx-btn-sm" type="button" id="tx-ms-toggle" onclick="event.stopPropagation();window.__txCatMsToggle(event)">${btnLabel}</button>
       <div class="tx-ms-dropdown" id="tx-ms-dropdown">
         <div class="tx-ms-search-wrap">
           <input type="text" class="tx-ms-search" id="tx-ms-search" placeholder="Search categories..." autocomplete="off">
@@ -322,6 +322,76 @@ const rpSigned = n => {
     _allPage = 0;
     refreshView();
   }
+
+  window.__txCatMsToggle = function(e) {
+    const wrap = document.getElementById('tx-ms-wrap');
+    if (!wrap) return;
+    const dropdown = wrap.querySelector('#tx-ms-dropdown');
+    if (!dropdown) return;
+    const toggle = wrap.querySelector('#tx-ms-toggle');
+    if (!toggle || !toggle.contains(e.target)) return;
+    const isOpen = dropdown.classList.contains('is-open');
+    if (!isOpen) {
+      dropdown.classList.add('is-open');
+      const searchInp = wrap.querySelector('#tx-ms-search');
+      if (searchInp) { searchInp.value = ''; searchInp.focus(); }
+      wrap.querySelectorAll('.tx-ms-group').forEach(g => g.style.display = '');
+    } else {
+      dropdown.classList.remove('is-open');
+    }
+  };
+
+  window.__txCatMsDocClick = function(e) {
+    const wrap = document.getElementById('tx-ms-wrap');
+    if (!wrap) return;
+    const dropdown = wrap.querySelector('#tx-ms-dropdown');
+    if (!dropdown || !dropdown.classList.contains('is-open')) return;
+    if (wrap.contains(e.target)) return;
+    dropdown.classList.remove('is-open');
+  };
+
+  window.__txCatMsChipX = function(e) {
+    const xBtn = e.target.closest('.tx-cat-chip-x');
+    if (!xBtn) return;
+    const id = xBtn.dataset.id;
+    _allCatIds = _allCatIds.filter(i => String(i) !== String(id));
+    const el = document.querySelector('.tx-body');
+    if (el) {
+      const wrap = el.querySelector('.tx-ms-wrap');
+      if (wrap) {
+        const sel = new Set(_allCatIds.map(String));
+        const allIds = (_categories || []).map(c => String(c.id));
+        const allChecked = allIds.length > 0 && allIds.every(cid => sel.has(cid));
+        const someChecked = !allChecked && allIds.some(cid => sel.has(cid));
+        const allCb = wrap.querySelector('#tx-ms-all');
+        if (allCb) { allCb.checked = allChecked; allCb.indeterminate = someChecked; }
+        wrap.querySelectorAll('.tx-ms-group').forEach(g => {
+          const gCatIds = [...g.querySelectorAll('.tx-ms-child input')].map(inp => String(inp.value));
+          const gAllChecked = gCatIds.length > 0 && gCatIds.every(cid => sel.has(cid));
+          const gSomeChecked = !gAllChecked && gCatIds.some(cid => sel.has(cid));
+          const gCb = g.querySelector('input[data-g]');
+          if (gCb) { gCb.checked = gAllChecked; gCb.indeterminate = gSomeChecked; }
+          g.querySelectorAll('.tx-ms-child').forEach(child => {
+            const cb = child.querySelector('input');
+            const checked = sel.has(String(cb.value));
+            cb.checked = checked;
+          });
+        });
+        const btnLabel = _allCatIds.length === 0 ? 'All categories' : `${_allCatIds.length} selected`;
+        const toggle = wrap.querySelector('#tx-ms-toggle');
+        if (toggle) toggle.textContent = btnLabel;
+        const chips = wrap.nextElementSibling;
+        if (chips && chips.classList.contains('tx-ms-chips')) {
+          chips.innerHTML = _allCatIds.map(cid => {
+            const cat = (_categories || []).find(c => String(c.id) === String(cid));
+            const label = cat ? cat.name : cid;
+            return `<span class="tx-cat-chip" data-id="${cid}">${label}<button class="tx-cat-chip-x" data-id="${cid}" onclick="event.stopPropagation();window.__txCatMsChipX(event)">&times;</button></span>`;
+          }).join('');
+        }
+      }
+    }
+    _allCatIds = []; _allPage = 0; refreshView();
+  };
 
   // Delegated event handlers — attached once to document, never re-initialized.
   function _catMsHandleToggle(e) {
@@ -416,34 +486,113 @@ const rpSigned = n => {
     }
   }
 
-  function _catMsHandleChipsClick(e) {
-    const xBtn = e.target.closest('.tx-cat-chip-x');
-    if (!xBtn) return;
-    const id = xBtn.dataset.id;
-    _allCatIds = _allCatIds.filter(i => String(i) !== String(id));
-    const el = document.querySelector('.tx-body');
-    if (el) refreshCatMsDropdownEl(el, new Set(_allCatIds.map(String)));
-    _applyCatMultiSelect(_allCatIds);
-  }
-
   // Attach delegation listeners once (idempotent — each checks if already registered).
   let _catMsDelegated = false;
   function _initCatMsDelegation() {
     if (_catMsDelegated) return;
     _catMsDelegated = true;
-    document.addEventListener('click', _catMsHandleDocClick);
     document.addEventListener('click', e => {
-      if (e.target.id === 'tx-ms-toggle' || e.target.closest('#tx-ms-toggle')) {
-        _catMsHandleToggle(e);
-      }
+      if (e.target.id === 'tx-ms-toggle' || e.target.closest('#tx-ms-toggle')) return;
+      if (e.target.closest('.tx-ms-chips')) return;
+      const wrap = document.getElementById('tx-ms-wrap');
+      if (!wrap) return;
+      const dropdown = wrap.querySelector('#tx-ms-dropdown');
+      if (!dropdown || !dropdown.classList.contains('is-open')) return;
+      if (wrap.contains(e.target)) return;
+      dropdown.classList.remove('is-open');
     });
     document.addEventListener('input', e => {
-      if (e.target.id === 'tx-ms-search') _catMsHandleSearchInput(e);
+      if (e.target.id === 'tx-ms-search') {
+        const wrap = document.getElementById('tx-ms-wrap');
+        if (!wrap) return;
+        const q = e.target.value.toLowerCase().trim();
+        wrap.querySelectorAll('.tx-ms-group').forEach(g => {
+          const label = g.querySelector('.tx-ms-gname')?.textContent.toLowerCase() || '';
+          const kids = [...g.querySelectorAll('.tx-ms-child')];
+          const match = label.includes(q) || kids.some(k => k.textContent.toLowerCase().includes(q));
+          g.style.display = match ? '' : 'none';
+        });
+      }
     });
-    document.addEventListener('change', _catMsHandleListChange);
-    document.addEventListener('click', e => {
-      if (e.target.closest('.tx-ms-chips')) _catMsHandleChipsClick(e);
+    document.addEventListener('change', e => {
+      const target = e.target;
+      if (!target.matches('input[type="checkbox"]')) return;
+      const list = document.getElementById('tx-ms-list');
+      if (!list) return;
+
+      const gName = target.dataset.g;
+
+      if (gName) {
+        const groupDiv = target.closest('.tx-ms-group');
+        if (!groupDiv) return;
+        const childChecks = [...groupDiv.querySelectorAll('.tx-ms-child input')];
+        const childIds = childChecks.map(inp => String(inp.value));
+
+        let newSel;
+        if (target.closest('.tx-ms-group-label')) {
+          const checked = target.checked;
+          newSel = _allCatIds.filter(id => !childIds.includes(String(id)));
+          if (checked) newSel = [...new Set([...newSel, ...childIds])];
+        } else {
+          const clickedId = target.value;
+          newSel = childChecks.every(inp => inp.checked)
+            ? [...new Set([..._allCatIds, ...childIds])]
+            : _allCatIds.filter(id => !childIds.includes(String(id)));
+          if (target.checked) newSel = [...new Set([...newSel, clickedId])];
+          else newSel = newSel.filter(id => String(id) !== String(clickedId));
+        }
+
+        _allCatIds = newSel;
+        _refreshCatMsDropdownUI(new Set(newSel.map(String)));
+        _allPage = 0; refreshView();
+        return;
+      }
+
+      if (target.id === 'tx-ms-all') {
+        _allCatIds = target.checked ? (_categories || []).map(c => String(c.id)) : [];
+        _refreshCatMsDropdownUI(new Set(_allCatIds));
+        _allPage = 0; refreshView();
+        return;
+      }
+
+      const childInp = target.closest('.tx-ms-child');
+      if (childInp) {
+        const catId = String(target.value);
+        _allCatIds = target.checked
+          ? [...new Set([..._allCatIds, catId])]
+          : _allCatIds.filter(id => String(id) !== catId);
+
+        _refreshCatMsDropdownUI(new Set(_allCatIds.map(String)));
+        _allPage = 0; refreshView();
+      }
     });
+  }
+
+  function _refreshCatMsDropdownUI(sel) {
+    const wrap = document.getElementById('tx-ms-wrap');
+    if (!wrap) return;
+    const allIds = (_categories || []).map(c => String(c.id));
+    const allChecked = allIds.length > 0 && allIds.every(id => sel.has(id));
+    const someChecked = !allChecked && allIds.some(id => sel.has(id));
+
+    const allCb = wrap.querySelector('#tx-ms-all');
+    if (allCb) { allCb.checked = allChecked; allCb.indeterminate = someChecked; }
+
+    wrap.querySelectorAll('.tx-ms-group').forEach(g => {
+      const gCatIds = [...g.querySelectorAll('.tx-ms-child input')].map(inp => String(inp.value));
+      const gAllChecked = gCatIds.length > 0 && gCatIds.every(id => sel.has(id));
+      const gSomeChecked = !gAllChecked && gCatIds.some(id => sel.has(id));
+      const gCb = g.querySelector('input[data-g]');
+      if (gCb) { gCb.checked = gAllChecked; gCb.indeterminate = gSomeChecked; }
+      g.querySelectorAll('.tx-ms-child').forEach(child => {
+        const cb = child.querySelector('input');
+        cb.checked = sel.has(String(cb.value));
+      });
+    });
+
+    const btnLabel = sel.size === 0 ? 'All categories' : `${sel.size} selected`;
+    const toggle = wrap.querySelector('#tx-ms-toggle');
+    if (toggle) toggle.textContent = btnLabel;
   }
 
   // Refresh dropdown UI without re-rendering the whole view.
@@ -453,65 +602,29 @@ const rpSigned = n => {
     refreshCatMsDropdownInDoc(wrap, sel);
   }
 
-  function refreshCatMsDropdownDoc(sel) {
-    const wrap = document.getElementById('tx-ms-wrap');
-    if (!wrap) return;
-    refreshCatMsDropdownInDoc(wrap, sel);
-  }
-
-  function refreshCatMsDropdownInDoc(wrap, sel) {
-    const allIds = (_categories || []).map(c => String(c.id));
-    const allChecked = allIds.length > 0 && allIds.every(id => sel.has(id));
-    const someChecked = !allChecked && allIds.some(id => sel.has(id));
-
-    const allCb = wrap.querySelector('#tx-ms-all');
-    if (allCb) {
-      allCb.checked = allChecked;
-      allCb.indeterminate = someChecked;
-      allCb.closest('label').classList.toggle('is-checked', allChecked);
-      allCb.closest('label').classList.toggle('is-indeterminate', someChecked);
-    }
-
-    wrap.querySelectorAll('.tx-ms-group').forEach(g => {
-      const gCatIds = [...g.querySelectorAll('.tx-ms-child input')].map(inp => String(inp.value));
-      const gAllChecked = gCatIds.length > 0 && gCatIds.every(id => sel.has(id));
-      const gSomeChecked = !gAllChecked && gCatIds.some(id => sel.has(id));
-
-      const gLabel = g.querySelector('.tx-ms-group-label');
-      const gCb = g.querySelector('input[data-g]');
-      if (gCb) {
-        gCb.checked = gAllChecked;
-        gCb.indeterminate = gSomeChecked;
-        gLabel.classList.toggle('is-checked', gAllChecked);
-        gLabel.classList.toggle('is-indeterminate', gSomeChecked);
-      }
-
-      g.querySelectorAll('.tx-ms-child').forEach(child => {
-        const cb = child.querySelector('input');
-        const checked = sel.has(String(cb.value));
-        cb.checked = checked;
-        child.classList.toggle('is-checked', checked);
-      });
-    });
-
-    const totalChecked = sel.size;
-    const btnLabel = totalChecked === 0 ? 'All categories' : `${totalChecked} selected`;
-    const toggle = wrap.querySelector('#tx-ms-toggle');
-    if (toggle) toggle.textContent = btnLabel;
-
-    const chips = wrap.nextElementSibling;
-    if (chips && chips.classList.contains('tx-ms-chips')) {
-      chips.innerHTML = _allCatIds.map(id => {
-        const cat = (_categories || []).find(c => String(c.id) === String(id));
-        const label = cat ? cat.name : id;
-        return `<span class="tx-cat-chip" data-id="${id}">${U.esc(label)}<button class="tx-cat-chip-x" data-id="${id}">&times;</button></span>`;
-      }).join('');
-    }
-  }
-
   function _initCatMultiSelectEvents(el) {
     _initCatMsDelegation();
-    refreshCatMsDropdownEl(el, new Set(_allCatIds.map(String)));
+    _refreshCatMsDropdownUI(new Set(_allCatIds.map(String)));
+    const wrap = el.querySelector('.tx-ms-wrap');
+    if (wrap) {
+      const toggle = wrap.querySelector('#tx-ms-toggle');
+      if (toggle) {
+        toggle.addEventListener('click', function(e) {
+          e.stopPropagation();
+          const dropdown = wrap.querySelector('#tx-ms-dropdown');
+          if (!dropdown) return;
+          const isOpen = dropdown.classList.contains('is-open');
+          if (!isOpen) {
+            dropdown.classList.add('is-open');
+            const searchInp = wrap.querySelector('#tx-ms-search');
+            if (searchInp) { searchInp.value = ''; searchInp.focus(); }
+            wrap.querySelectorAll('.tx-ms-group').forEach(g => g.style.display = '');
+          } else {
+            dropdown.classList.remove('is-open');
+          }
+        });
+      }
+    }
   }
 
   function _catSelect(r) {
