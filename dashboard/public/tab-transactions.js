@@ -432,7 +432,7 @@ const rpSigned = n => {
       if (e.target.id === 'tx-ms-toggle' || e.target.closest('#tx-ms-toggle')) {
         _catMsHandleToggle(e);
       }
-    });
+    }, true);
     document.addEventListener('input', e => {
       if (e.target.id === 'tx-ms-search') _catMsHandleSearchInput(e);
     });
