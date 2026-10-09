@@ -301,7 +301,7 @@ const rpSigned = n => {
 
     return `<div class="tx-ms-wrap">
       <button class="tx-ms-toggle btn tx-btn-sm" type="button" id="tx-ms-toggle">${btnLabel}</button>
-      <div class="tx-ms-dropdown" id="tx-ms-dropdown" hidden>
+      <div class="tx-ms-dropdown" id="tx-ms-dropdown">
         <div class="tx-ms-search-wrap">
           <input type="text" class="tx-ms-search" id="tx-ms-search" placeholder="Search categories..." autocomplete="off">
         </div>
@@ -329,16 +329,16 @@ const rpSigned = n => {
     if (!wrap) return;
     const dropdown = wrap.querySelector('#tx-ms-dropdown');
     if (!dropdown) return;
-    // Only respond when the click is on the toggle button itself,
-    // never when it's inside the dropdown.
     const toggle = wrap.querySelector('#tx-ms-toggle');
     if (!toggle || !toggle.contains(e.target)) return;
-    const hidden = dropdown.hidden;
-    dropdown.hidden = !hidden;
-    if (hidden) {
+    const isOpen = dropdown.classList.contains('is-open');
+    if (!isOpen) {
+      dropdown.classList.add('is-open');
       const searchInp = wrap.querySelector('#tx-ms-search');
       if (searchInp) { searchInp.value = ''; searchInp.focus(); }
       wrap.querySelectorAll('.tx-ms-group').forEach(g => g.style.display = '');
+    } else {
+      dropdown.classList.remove('is-open');
     }
   }
 
@@ -346,9 +346,9 @@ const rpSigned = n => {
     const wrap = document.getElementById('tx-ms-wrap');
     if (!wrap) return;
     const dropdown = wrap.querySelector('#tx-ms-dropdown');
-    if (!dropdown || dropdown.hidden) return;
+    if (!dropdown || !dropdown.classList.contains('is-open')) return;
     if (wrap.contains(e.target)) return;
-    dropdown.hidden = true;
+    dropdown.classList.remove('is-open');
   }
 
   function _catMsHandleSearchInput(e) {
