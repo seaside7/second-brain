@@ -1086,43 +1086,17 @@ const rpSigned = n => {
   }
 
   /* MoM table: current vs previous per category. Click a row to drill down.
-     Uses bucket data to get per-month from/to dates for accurate drill-down. */
+     Uses the actual query period dates so drill-down matches the salary cycle exactly. */
   function _ovMomTable(mom, colorOf, d) {
     if (!mom.length) return '<div class="tx-empty">No spend in this range.</div>';
-    const buckets = d.buckets || [];
-    const granularity = d.granularity || 'month';
-
-    // Build a map of category_id -> {current, previous, delta, pct, bucket}
-    // For granularity=month: use the last bucket (most recent month) for drill-down dates.
-    const lastBucket = d.last_bucket || '';
-    const bucketMap = {};
-    for (const b of buckets) {
-      for (const [catId, amt] of Object.entries(b.by_category || {})) {
-        if (!bucketMap[catId]) {
-          bucketMap[catId] = { bucket: b.key };
-        }
-      }
-    }
-
-    // Derive from/to from bucket key and granularity.
-    function bucketDates(key) {
-      if (!key) return { f: '', t: '' };
-      if (granularity === 'month') {
-        const [y, m] = key.split('-').map(Number);
-        const lastDay = new Date(y, m, 0).getDate();
-        return { f: `${y}-${String(m).padStart(2,'0')}-01`, t: `${y}-${String(m).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}` };
-      }
-      // For day granularity, key is already YYYY-MM-DD
-      return { f: key, t: key };
-    }
-
-    const { f: lastF, t: lastT } = bucketDates(lastBucket);
+    // Use the actual query period dates — not bucket boundaries.
+    // This ensures drill-down matches the salary cycle (25th–24th) exactly.
+    const drillF = (d.from_date || '').slice(0, 10);
+    const drillT = (d.to_date || '').slice(0, 10);
 
     const rows = mom.map(m => {
       const pct = m.pct == null ? 'new' : `${m.pct > 0 ? '+' : ''}${m.pct}%`;
       const cls = m.delta > 0 ? 'tx-neg' : m.delta < 0 ? 'tx-pos' : '';
-      // Use last bucket dates for drill-down so clicking goes to the most recent month.
-      const drillF = lastF, drillT = lastT;
       return `<tr class="ov-mom-row" data-drill data-from="${drillF}" data-to="${drillT}" data-cat="${m.category_id}" title="Drill to ${U.esc(m.name)}">` +
         `<td><span class="ov-dot" style="background:${_ovColor(colorOf(m.category_id))}"></span> ${U.esc(m.name)}</td>` +
         `<td class="tx-num">${rp(m.current)}</td>` +
