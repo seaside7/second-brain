@@ -242,10 +242,13 @@ def analytics(conn: sqlite3.Connection, *,
     totals['spend'] = sum(b['spend'] for b in buckets.values())
     totals['count'] = sum(b['count'] for b in buckets.values())
 
+    bucket_keys = sorted(buckets.keys())
     return {
         'granularity': granularity,
         'from_date': from_date, 'to_date': to_date,
         'cmp_from': cmp_from, 'cmp_to': cmp_to,
+        'first_bucket': bucket_keys[0] if bucket_keys else None,
+        'last_bucket': bucket_keys[-1] if bucket_keys else None,
         'buckets': list(buckets.values()),
         'categories': categories,
         'mom': mom,
