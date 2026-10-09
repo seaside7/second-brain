@@ -1461,6 +1461,7 @@ const rpSigned = n => {
       <tr class="tx-tr" data-id="${r.id}">
         <td class="tx-td-date" data-label="Date">${_fmtDate(r.occurred_at || r.created_at)}</td>
         <td class="tx-td-desc" data-label="Description">${_descHtml(r)}</td>
+        <td class="tx-td-notes" data-label="Notes">${U.esc(r.notes || '')}</td>
         <td class="tx-td-wallet" data-label="Account">${_walletHtml(r.provider)}</td>
         <td class="tx-td-cat" data-label="Category"><div class="tx-cat-wrap">${_confDot(r)}${_catSelect(r)}</div></td>
         <td class="tx-td-amount ${r.direction === 'in' ? 'tx-pos' : 'tx-neg'}" data-label="Amount">${r.direction === 'in' ? '+' : '−'}${rp(r.amount)}</td>
