@@ -3673,8 +3673,9 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
 .tx-table { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: var(--fs-sm); }
 .tx-col-date    { width: 14%; }
 .tx-col-desc    { width: 25%; }
+.tx-col-notes   { width: 15%; }
 .tx-col-account { width: 9%; }
-.tx-col-cat     { width: 21%; }
+.tx-col-cat     { width: 16%; }
 .tx-col-amount  { width: 15%; }
 .tx-col-status  { width: 16%; }
 .tx-table thead th {
@@ -3687,6 +3688,8 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
 .tx-table td { padding: 9px 12px; border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,.06)); vertical-align: top; }
 .tx-table tbody tr:last-child td { border-bottom: none; }
 .tx-table tbody tr:hover td { background: var(--bg-hover); }
+.tx-td-notes { color: var(--text-muted); font-size: var(--fs-xs); word-break: break-word; }
+.tx-th-notes { color: var(--text-muted); }
 
 .tx-th-amount, .tx-td-amount { text-align: right; }
 .tx-th-status, .tx-td-status { text-align: right; }

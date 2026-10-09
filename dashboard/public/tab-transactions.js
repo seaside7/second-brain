@@ -197,12 +197,14 @@ const rpSigned = n => {
     if (!rows.length) return '<div class="tx-empty">No transactions yet. Upload a GoPay PDF or sync Gmail to start.</div>';
     return `<div class="tx-table-wrap"><table class="tx-table">
       <colgroup>
-        <col class="tx-col-date"><col class="tx-col-desc"><col class="tx-col-account">
-        <col class="tx-col-cat"><col class="tx-col-amount"><col class="tx-col-status">
+        <col class="tx-col-date"><col class="tx-col-desc"><col class="tx-col-notes">
+        <col class="tx-col-account"><col class="tx-col-cat"><col class="tx-col-amount">
+        <col class="tx-col-status">
       </colgroup>
       <thead><tr>
         <th class="tx-th-date">Date</th>
         <th class="tx-th-desc">Description</th>
+        <th class="tx-th-notes">Notes</th>
         <th class="tx-th-wallet">Account</th>
         <th class="tx-th-cat">Category</th>
         <th class="tx-th-amount">Amount</th>
@@ -658,6 +660,7 @@ const rpSigned = n => {
     return `<tr class="tx-tr" data-id="${r.id}">
       <td class="tx-td-date" data-label="Date">${_fmtDate(r.occurred_at || r.created_at)}</td>
       <td class="tx-td-desc" data-label="Description">${_descHtml(r)}</td>
+      <td class="tx-td-notes" data-label="Notes">${U.esc(r.notes || '')}</td>
       <td class="tx-td-wallet" data-label="Account">${_walletHtml(r.provider)}</td>
       <td class="tx-td-cat" data-label="Category"><div class="tx-cat-wrap">${_confDot(r)}${_catSelect(r)}</div></td>
       <td class="tx-td-amount ${dir}" data-label="Amount">${sign}${rp(amount)}</td>
@@ -1471,11 +1474,13 @@ const rpSigned = n => {
       <div class="tx-card"><h3 class="tx-card-title">Review Queue (${d.count || 0})</h3>
         ${d.rows && d.rows.length
           ? `<div class="tx-table-wrap"><table class="tx-table"><colgroup>
-               <col class="tx-col-date"><col class="tx-col-desc"><col class="tx-col-account">
-               <col class="tx-col-cat"><col class="tx-col-amount"><col class="tx-col-status">
+               <col class="tx-col-date"><col class="tx-col-desc"><col class="tx-col-notes">
+               <col class="tx-col-account"><col class="tx-col-cat"><col class="tx-col-amount">
+               <col class="tx-col-status">
              </colgroup><thead><tr>
                <th class="tx-th-date">Date</th>
                <th class="tx-th-desc">Description</th>
+               <th class="tx-th-notes">Notes</th>
                <th class="tx-th-wallet">Account</th>
                <th class="tx-th-cat">Category</th>
                <th class="tx-th-amount">Amount</th>
