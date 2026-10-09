@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import calendar
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
 import store
@@ -144,7 +144,8 @@ def analytics(conn: sqlite3.Connection, *,
         if f:
             conds.append("e.occurred_at >= ?"); params.append(f)
         if t:
-            conds.append("e.occurred_at <= ?"); params.append(t)
+            next_day = (date.fromisoformat(t[:10]) + timedelta(days=1)).isoformat()
+            conds.append("e.occurred_at < ?"); params.append(next_day)
         if category_ids:
             conds.append(f"l.category_id IN ({','.join('?' * len(category_ids))})")
             params += list(category_ids)
@@ -152,6 +153,7 @@ def analytics(conn: sqlite3.Connection, *,
             conds.append(f"e.provider IN ({','.join('?' * len(providers))})")
             params += list(providers)
         where = "WHERE " + " AND ".join(conds)
+        where += " AND l.id NOT IN (SELECT parent_ledger_id FROM txn_splits)"
         base_cols = (
             f"SELECT substr(e.occurred_at, 1, {cut}) AS bucket, "
             "       l.category_id AS category_id, "
@@ -182,7 +184,8 @@ def analytics(conn: sqlite3.Connection, *,
         if f:
             split_cols += " AND e.occurred_at >= ?"; sp.append(f)
         if t:
-            split_cols += " AND e.occurred_at <= ?"; sp.append(t)
+            next_day = (date.fromisoformat(t[:10]) + timedelta(days=1)).isoformat()
+            split_cols += " AND e.occurred_at < ?"; sp.append(next_day)
         if category_ids:
             split_cols += f" AND s.category_id IN ({','.join('?' * len(category_ids))})"
             sp += list(category_ids)

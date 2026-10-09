@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
 import schema
@@ -332,7 +332,8 @@ def list_ledger(conn: sqlite3.Connection, *,
         if from_date:
             c.append("e.occurred_at>=?"); p.append(from_date)
         if to_date:
-            c.append("e.occurred_at<=?"); p.append(to_date)
+            boundary = (date.fromisoformat(to_date) + timedelta(days=1)).isoformat()
+            c.append("e.occurred_at<?"); p.append(boundary)
         if search:
             c.append("(l.notes LIKE ? OR e.description LIKE ? OR e.merchant LIKE ?)")
             s = f'%{search}%'; p.extend([s, s, s])
