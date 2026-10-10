@@ -3677,21 +3677,21 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
 .tx-col-cat     { width: 16%; }
 .tx-col-amount  { width: 15%; }
 .tx-col-notes   { width: 15%; }
-.tx-col-status  { width: 16%; }
+.tx-col-status  { width: 18%; }
 .tx-table thead th {
   position: sticky; top: 0; z-index: 1; background: var(--bg-card);
   text-align: left; font-size: var(--fs-xs); font-weight: 600;
   text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted);
-  padding: 10px 12px 8px; border-bottom: 1px solid var(--border);
+  padding: 10px 14px 8px; border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
-.tx-table td { padding: 9px 12px; border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,.06)); vertical-align: top; }
+.tx-table td { padding: 10px 14px; border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,.06)); vertical-align: top; }
 .tx-table tbody tr:last-child td { border-bottom: none; }
 .tx-table tbody tr:hover td { background: var(--bg-hover); }
-.tx-td-notes { padding: 5px 12px; }
+.tx-td-notes { padding: 8px 14px; }
 .tx-notes-input {
   width: 100%; background: transparent; border: 1px solid var(--border);
-  border-radius: 4px; padding: 3px 8px; font-size: var(--fs-xs);
+  border-radius: 4px; padding: 4px 10px; font-size: var(--fs-xs);
   color: var(--text); font-family: inherit;
 }
 .tx-notes-input:focus { outline: none; border-color: var(--accent); background: var(--bg-hover); }
