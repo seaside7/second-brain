@@ -332,7 +332,7 @@ def list_ledger(conn: sqlite3.Connection, *,
         if from_date:
             c.append("e.occurred_at>=?"); p.append(from_date)
         if to_date:
-            boundary = (date.fromisoformat(to_date) + timedelta(days=1)).isoformat()
+            boundary = (date.fromisoformat(to_date[:10]) + timedelta(days=1)).isoformat()
             c.append("e.occurred_at<?"); p.append(boundary)
         if search:
             c.append("(l.notes LIKE ? OR e.description LIKE ? OR e.merchant LIKE ?)")
