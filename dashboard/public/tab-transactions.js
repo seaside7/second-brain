@@ -197,17 +197,17 @@ const rpSigned = n => {
     if (!rows.length) return '<div class="tx-empty">No transactions yet. Upload a GoPay PDF or sync Gmail to start.</div>';
     return `<div class="tx-table-wrap"><table class="tx-table">
       <colgroup>
-        <col class="tx-col-date"><col class="tx-col-desc"><col class="tx-col-notes">
-        <col class="tx-col-account"><col class="tx-col-cat"><col class="tx-col-amount">
+        <col class="tx-col-date"><col class="tx-col-desc"><col class="tx-col-account">
+        <col class="tx-col-cat"><col class="tx-col-amount"><col class="tx-col-notes">
         <col class="tx-col-status">
       </colgroup>
       <thead><tr>
         <th class="tx-th-date">Date</th>
         <th class="tx-th-desc">Description</th>
-        <th class="tx-th-notes">Notes</th>
         <th class="tx-th-wallet">Account</th>
         <th class="tx-th-cat">Category</th>
         <th class="tx-th-amount">Amount</th>
+        <th class="tx-th-notes">Notes</th>
         <th class="tx-th-status">Status</th>
       </tr></thead>
       <tbody>${rows.map(r => _txTableRow(r)).join('')}</tbody>
@@ -660,10 +660,10 @@ const rpSigned = n => {
     return `<tr class="tx-tr" data-id="${r.id}">
       <td class="tx-td-date" data-label="Date">${_fmtDate(r.occurred_at || r.created_at)}</td>
       <td class="tx-td-desc" data-label="Description">${_descHtml(r)}</td>
-      <td class="tx-td-notes" data-label="Notes">${U.esc(r.notes || '')}</td>
       <td class="tx-td-wallet" data-label="Account">${_walletHtml(r.provider)}</td>
       <td class="tx-td-cat" data-label="Category"><div class="tx-cat-wrap">${_confDot(r)}${_catSelect(r)}</div></td>
       <td class="tx-td-amount ${dir}" data-label="Amount">${sign}${rp(amount)}</td>
+      <td class="tx-td-notes" data-label="Notes"><input type="text" class="tx-notes-input" data-id="${r.id}" value="${U.esc(r.notes || '')}" placeholder="Add note..."></td>
       <td class="tx-td-status" data-label="Status">${status}${splitBtn}</td>
     </tr>`;
   }
@@ -797,6 +797,20 @@ const rpSigned = n => {
         Number(b.dataset.splitId),
         Number(b.dataset.splitAmount),
         b.dataset.splitDesc)));
+    body.querySelectorAll('.tx-notes-input').forEach(inp => {
+      inp.addEventListener('blur', () => _saveNotes(inp));
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } });
+    });
+  }
+
+  async function _saveNotes(inp) {
+    const id = Number(inp.dataset.id);
+    const notes = inp.value;
+    try {
+      await _post(`/api/transactions/${id}/edit`, { notes }, 10000);
+    } catch (e) {
+      toast(e.message, false);
+    }
   }
 
   async function _changeCategory(sel) {
@@ -1461,10 +1475,10 @@ const rpSigned = n => {
       <tr class="tx-tr" data-id="${r.id}">
         <td class="tx-td-date" data-label="Date">${_fmtDate(r.occurred_at || r.created_at)}</td>
         <td class="tx-td-desc" data-label="Description">${_descHtml(r)}</td>
-        <td class="tx-td-notes" data-label="Notes">${U.esc(r.notes || '')}</td>
         <td class="tx-td-wallet" data-label="Account">${_walletHtml(r.provider)}</td>
         <td class="tx-td-cat" data-label="Category"><div class="tx-cat-wrap">${_confDot(r)}${_catSelect(r)}</div></td>
         <td class="tx-td-amount ${r.direction === 'in' ? 'tx-pos' : 'tx-neg'}" data-label="Amount">${r.direction === 'in' ? '+' : '−'}${rp(r.amount)}</td>
+        <td class="tx-td-notes" data-label="Notes"><input type="text" class="tx-notes-input" data-id="${r.id}" value="${U.esc(r.notes || '')}" placeholder="Add note..."></td>
         <td class="tx-td-status tx-review-actions" data-label="Status"><span class="tx-status-inner">
           ${r.category_id ? `<button class="btn tx-btn-sm tx-btn-ok" data-id="${r.id}" data-cat="${r.category_id}" title="Confirm with the current category">Confirm</button>` : ''}
           <button class="btn tx-btn-sm tx-btn-split" data-split-id="${r.id}" data-split-amount="${r.amount}" data-split-desc="${U.esc((r.description || r.merchant || '').slice(0, 60))}" title="Split this amount across categories">Split</button>
@@ -1475,16 +1489,16 @@ const rpSigned = n => {
       <div class="tx-card"><h3 class="tx-card-title">Review Queue (${d.count || 0})</h3>
         ${d.rows && d.rows.length
           ? `<div class="tx-table-wrap"><table class="tx-table"><colgroup>
-               <col class="tx-col-date"><col class="tx-col-desc"><col class="tx-col-notes">
-               <col class="tx-col-account"><col class="tx-col-cat"><col class="tx-col-amount">
+               <col class="tx-col-date"><col class="tx-col-desc"><col class="tx-col-account">
+               <col class="tx-col-cat"><col class="tx-col-amount"><col class="tx-col-notes">
                <col class="tx-col-status">
              </colgroup><thead><tr>
                <th class="tx-th-date">Date</th>
                <th class="tx-th-desc">Description</th>
-               <th class="tx-th-notes">Notes</th>
                <th class="tx-th-wallet">Account</th>
                <th class="tx-th-cat">Category</th>
                <th class="tx-th-amount">Amount</th>
+               <th class="tx-th-notes">Notes</th>
                <th class="tx-th-status">Status</th>
              </tr></thead><tbody>${rows}</tbody></table></div>`
           : '<div class="tx-empty">All clear! No transactions need review.</div>'}
