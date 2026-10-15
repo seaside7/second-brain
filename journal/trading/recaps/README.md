@@ -29,4 +29,5 @@ Whenever the user asks for a trading summary/check (e.g. "check my trading", "gi
 | 2026-10-07.md | Wed | First real live loss (-$63.19): swing gate blind in the live loop, fixed (closed candles) |
 | 2026-10-08.md | Thu | No trade: BB width never reached the 0.015 floor (quiet market) |
 | 2026-10-13.md | Tue | Second live loss (-$63.61): normal stop on a downtrend day, gate worked (wick swing low) |
+| 2026-10-15.md | Thu | No trade (gate blocked breakdowns); Bybit equity fell to $377 without a trade (likely transfer) |
 
