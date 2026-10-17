@@ -31,4 +31,5 @@ Whenever the user asks for a trading summary/check (e.g. "check my trading", "gi
 | 2026-10-13.md | Tue | Second live loss (-$63.61): normal stop on a downtrend day, gate worked (wick swing low) |
 | 2026-10-15.md | Thu | No trade (gate blocked breakdowns); Bybit equity fell to $377 without a trade (likely transfer) |
 | 2026-10-16.md | Fri | MANUAL short 5,678 ASTER @0.7042 (TP 0.6964 / SL 0.7100), owner-authorized, outside the strategy |
+| 2026-10-17.md | Sat | Third manual short stopped out (-$40.95); manual LONG 8,520 ASTER @0.70406 (SL 0.6990 / TP 0.7103) |
 
