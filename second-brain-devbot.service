@@ -1,0 +1,18 @@
+[Unit]
+Description=Second Brain - Telegram dev bot (project picker, pull, chat, screenshots, tests)
+After=network-online.target second-brain-dashboard.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/projects/second-brain
+ExecStart=/usr/bin/python3 -m devbot.telegram_dev_bot
+Restart=always
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=append:/home/ubuntu/projects/second-brain/dashboard/logs/devbot.log
+StandardError=append:/home/ubuntu/projects/second-brain/dashboard/logs/devbot.log
+
+[Install]
+WantedBy=multi-user.target
