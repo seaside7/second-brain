@@ -94,3 +94,5 @@ Bridge doc for the trading domain. **Strategy/backtest detail lives in the tradi
 - `2026-10-21 | owner: build the Telegram dev bot myself (not OpenCode) | built Phase 1-3 in one go: picker, pull+briefing, chat, FE screenshots, BE tests, approve=commit+push behind a button; deploy waits for the new bot token | changed: second-brain devbot/, second-brain-devbot.service, tests/test_devbot.py (27)`
 
 - 2026-10-22 | "can you see the log why sometime the order rejected" then "yes ... push and deploy" | Keep and show the Bybit rejection text, warn on thin margin (soft, < 1.5x), hide bot token in errors, survive Telegram outages | trading-brain e3303d6: `src/notify/manual_trade.py`, `src/notify/telegram_bot.py`, `tests/test_order_errors.py`, `docs/TELEGRAM_MANUAL_RISK.md`
+
+- 2026-10-22 | "learn my trade from 20", "other strategy combining BB touch", "put brief in Downloads", "push, so I can move" | Analysis only, no live change: manual review, sideways fixed-TP idea rejected, RSI is the only filter worth a dry test | `docs/trading/LLM_BRIEF_2026-10-22.md`, trading-brain BACKTEST_LOG 2026-10-22 + `scripts/research_2026-10-22/`
