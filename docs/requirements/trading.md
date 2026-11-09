@@ -134,3 +134,5 @@ Bridge doc for the trading domain. **Strategy/backtest detail lives in the tradi
 - 2026-11-09 | Hilangkan batas trade harian manual | MANUAL_MAX_TRADES_PER_DAY=0 = tanpa batas (sebelumnya 10); bot strategi tetap 1 entry/hari | trading-brain src/notify/manual_trade.py, assistant.py (8c97272), VPS .env
 
 - 2026-11-09 | Target profit bersih $20 + kalkulator TP | MANUAL_TARGET_USD=20, MANUAL_TARGET_MIN=60, MANUAL_TARGET_TRAIL_USD=10: <60 menit dan bersih >= $20 = stop dikunci min $20 lalu naik (puncak - $10); >=60 menit dan bersih >= $20 = tutup market; menggantikan give-back exit. "tp di X profit bersih berapa" dijawab kode | trading-brain src/risk/profit_target.py, live_executor.py, assistant.py (afd13cc), VPS .env
+
+- 2026-11-09 | Pesan TUTUP pakai nama koin asli; alert BB hanya exceed | catatan trade menyimpan symbol; BB_ALERT_KINDS default close (touch/near mati, bisa dinyalakan: touch,near,close) | trading-brain live_executor.py, telegram_bot.py
