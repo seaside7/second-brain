@@ -136,3 +136,5 @@ Bridge doc for the trading domain. **Strategy/backtest detail lives in the tradi
 - 2026-11-09 | Target profit bersih $20 + kalkulator TP | MANUAL_TARGET_USD=20, MANUAL_TARGET_MIN=60, MANUAL_TARGET_TRAIL_USD=10: <60 menit dan bersih >= $20 = stop dikunci min $20 lalu naik (puncak - $10); >=60 menit dan bersih >= $20 = tutup market; menggantikan give-back exit. "tp di X profit bersih berapa" dijawab kode | trading-brain src/risk/profit_target.py, live_executor.py, assistant.py (afd13cc), VPS .env
 
 - 2026-11-09 | Pesan TUTUP pakai nama koin asli; alert BB hanya exceed | catatan trade menyimpan symbol; BB_ALERT_KINDS default close (touch/near mati, bisa dinyalakan: touch,near,close) | trading-brain live_executor.py, telegram_bot.py
+
+- 2026-11-09 | Tambah DOGE ke alert BB (exceed) | BB_ALERT_SYMBOLS += DOGEUSDT, BB_ALERT_SIDE_DOGEUSDT=BOTH (VPS .env saja, tanpa perubahan kode) | VPS .env
