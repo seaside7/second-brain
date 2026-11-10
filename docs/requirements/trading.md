@@ -138,3 +138,5 @@ Bridge doc for the trading domain. **Strategy/backtest detail lives in the tradi
 - 2026-11-09 | Pesan TUTUP pakai nama koin asli; alert BB hanya exceed | catatan trade menyimpan symbol; BB_ALERT_KINDS default close (touch/near mati, bisa dinyalakan: touch,near,close) | trading-brain live_executor.py, telegram_bot.py
 
 - 2026-11-09 | Tambah DOGE ke alert BB (exceed) | BB_ALERT_SYMBOLS += DOGEUSDT, BB_ALERT_SIDE_DOGEUSDT=BOTH (VPS .env saja, tanpa perubahan kode) | VPS .env
+
+- 2026-11-10 | TP manual boleh | "pasang tp di X" / "hapus tp" = kartu Ya/Batal (bersih setelah fee, stop tetap), dijawab kode tanpa LLM; stop update (ratchet, profit lock, geser stop) membawa TP supaya tidak terhapus; prompt LLM tidak lagi melarang TP manual. Bot strategi tetap tanpa TP | trading-brain manual_trade.py prepare_tp, live_executor.py _tp_arg, assistant.py, telegram_bot.py
