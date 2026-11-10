@@ -124,6 +124,8 @@ def route_get(handler) -> None:
             _handle_overview(handler, qs)
         elif path == '/api/transactions/list':
             _handle_list(handler, qs)
+        elif path.startswith('/api/transactions/splits/'):
+            _handle_splits_get(handler, int(path.rsplit('/', 1)[-1]))
         elif path.startswith('/api/transactions/'):
             _id = path.split('/')[-1]
             if _id.isdigit():
@@ -146,9 +148,6 @@ def route_get(handler) -> None:
                 _handle_rules_list(handler)
             elif _id == 'audit':
                 _handle_audit_list(handler, qs)
-            elif path.startswith('/api/transactions/splits/'):
-                ledger_id = int(path.rsplit('/', 1)[-1])
-                _handle_splits_get(handler, ledger_id)
             else:
                 _err(handler, 404, 'Not found')
         else:

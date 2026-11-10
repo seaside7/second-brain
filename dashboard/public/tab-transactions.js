@@ -1508,14 +1508,12 @@ const rpSigned = n => {
       b.addEventListener('click', () => _reviewSkip(b.dataset.id)));
     el.querySelectorAll('.tx-btn-ok').forEach(b =>
       b.addEventListener('click', () => _reviewConfirm(b.dataset.id, Number(b.dataset.cat))));
-    el.querySelectorAll('.tx-btn-split').forEach(b =>
-      b.addEventListener('click', () => _openSplitModal(
-        Number(b.dataset.splitId),
-        Number(b.dataset.splitAmount),
-        b.dataset.splitDesc)));
+    /* Category-change saving and the split modal are wired once by
+       refreshView() for every view; binding them here as well opened two
+       modals per click and posted the category twice. This handler only
+       keeps the Confirm button pointed at the newly picked category. */
     el.querySelectorAll('.tx-cat').forEach(sel =>
       sel.addEventListener('change', () => {
-        _changeCategory(sel);
         const row = sel.closest('.tx-tr');
         if (row) {
           const btn = row.querySelector('.tx-btn-ok');

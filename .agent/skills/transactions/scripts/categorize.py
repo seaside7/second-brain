@@ -109,7 +109,9 @@ _CAT = {
     # files them by hand. Kept out of the auto-fire path on purpose - a name
     # match would sweep in unrelated merchants.
     'adeeva':         ('Family', 'Adeeva'),
+    'aryan':          ('Family', 'Aryan'),
     'dinda':          ('Family', 'Dinda'),
+    'wushu':          ('Family', 'Wushu'),
     'savings':        ('Transfers', 'Savings'),
     'maid_salary':    ('Home', 'Maid Salary'),
     'uncategorized':  ('Uncategorized', 'Uncategorized'),
