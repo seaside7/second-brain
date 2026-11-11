@@ -6,6 +6,7 @@ fees, transfers, and pending review counts.
 from __future__ import annotations
 
 import calendar
+import json
 import sqlite3
 from datetime import date, datetime, timedelta
 from typing import Any, Optional
@@ -26,11 +27,15 @@ TRIP_EXCLUDED_NATURES = store.TRIP_EXCLUDED_NATURES
 TRIP_INCOME_NATURES = store.TRIP_INCOME_NATURES
 
 
-def period_bounds(period: str) -> tuple[Optional[str], Optional[str]]:
+def period_bounds(period: str,
+                  conn: sqlite3.Connection | None = None
+                  ) -> tuple[Optional[str], Optional[str]]:
     """Public wrapper for named ranges ('current_month' | 'last_month' |
     'current_year' | 'all'). Returns (from_date, to_date) ISO strings; a
-    None means unbounded. Unknown periods fall back to unbounded."""
-    return _period_bounds(period)
+    None means unbounded. Unknown periods fall back to unbounded.
+
+    Pass ``conn`` to honour per-month salary-cycle start overrides."""
+    return _period_bounds(period, conn=conn)
 
 
 def overview(conn: sqlite3.Connection, *,
@@ -493,32 +498,163 @@ def pending_transfers_list(conn: sqlite3.Connection) -> list[dict]:
     return store.list_transfers(conn, status='suggested', limit=50)
 
 
-def _period_bounds(period: str) -> tuple[Optional[str], Optional[str]]:
+# Salary-cycle months run payday -> day before the next payday. The payday is
+# normally the 25th, but it can land earlier (e.g. 23rd), so the owner can pin
+# the real start date for any cycle. Overrides are stored per start-month in
+# the _meta key/value table as {"YYYY-MM": "YYYY-MM-DD"}.
+SALARY_CYCLE_START_DAY = 25
+_CYCLE_OVERRIDES_KEY = 'salary_cycle_overrides'
+
+
+def _load_cycle_overrides(conn: sqlite3.Connection | None) -> dict[str, str]:
+    """Read the per-month payday overrides. Never raises on a bare DB."""
+    if conn is None:
+        return {}
+    try:
+        row = conn.execute(
+            "SELECT value FROM _meta WHERE key=?", (_CYCLE_OVERRIDES_KEY,)
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return {}
+    if not row or not row['value']:
+        return {}
+    try:
+        data = json.loads(row['value'])
+    except (TypeError, ValueError):
+        return {}
+    out: dict[str, str] = {}
+    if isinstance(data, dict):
+        for key, value in data.items():
+            if not (isinstance(key, str) and isinstance(value, str)):
+                continue
+            try:
+                parsed = date.fromisoformat(value[:10])
+            except ValueError:
+                continue
+            out[key] = parsed.isoformat()
+    return out
+
+
+def _save_cycle_overrides(conn: sqlite3.Connection,
+                          overrides: dict[str, str]) -> None:
+    conn.execute(
+        "INSERT OR REPLACE INTO _meta(key, value) VALUES (?, ?)",
+        (_CYCLE_OVERRIDES_KEY, json.dumps(overrides, sort_keys=True)),
+    )
+    conn.commit()
+
+
+def set_cycle_start(conn: sqlite3.Connection, *, start_date: str) -> dict:
+    """Pin the payday for the cycle that starts in start_date's month."""
+    parsed = date.fromisoformat(start_date[:10])
+    overrides = _load_cycle_overrides(conn)
+    month = f'{parsed.year:04d}-{parsed.month:02d}'
+    overrides[month] = parsed.isoformat()
+    _save_cycle_overrides(conn, overrides)
+    return {'ok': True, 'month': month, 'start_date': parsed.isoformat()}
+
+
+def clear_cycle_start(conn: sqlite3.Connection, *, month: str) -> dict:
+    """Drop the override for a start-month, back to the default 25th."""
+    overrides = _load_cycle_overrides(conn)
+    overrides.pop(month, None)
+    _save_cycle_overrides(conn, overrides)
+    return {'ok': True, 'month': month}
+
+
+def _add_month(year: int, month: int, delta: int) -> tuple[int, int]:
+    idx = year * 12 + (month - 1) + delta
+    return idx // 12, idx % 12 + 1
+
+
+def _default_cycle_start(year: int, month: int) -> date:
+    last = calendar.monthrange(year, month)[1]
+    return date(year, month, min(SALARY_CYCLE_START_DAY, last))
+
+
+def _cycle_starts(today: date,
+                  overrides: dict[str, str]) -> list[date]:
+    """Ordered cycle starts around today (overrides win per start-month)."""
+    starts: set[date] = set()
+    for delta in range(-16, 4):
+        year, month = _add_month(today.year, today.month, delta)
+        key = f'{year:04d}-{month:02d}'
+        override = overrides.get(key)
+        starts.add(date.fromisoformat(override) if override
+                   else _default_cycle_start(year, month))
+    for override in overrides.values():
+        starts.add(date.fromisoformat(override))
+    return sorted(starts)
+
+
+def _cycle_bounds(conn: sqlite3.Connection | None, *, period: str,
+                  now: datetime | None = None, offset: int = 0
+                  ) -> tuple[Optional[str], Optional[str], dict]:
+    """Bounds + metadata for the cycle behind current/last month."""
+    today = (now or datetime.now()).date()
+    starts = _cycle_starts(today, _load_cycle_overrides(conn))
+    idx = max(i for i, s in enumerate(starts) if s <= today)
+    if period == 'last_month':
+        idx -= 1
+    idx += offset
+    if idx < 0 or idx + 1 >= len(starts):
+        return None, None, {}
+    start = starts[idx]
+    end = starts[idx + 1] - timedelta(days=1)
+    month = f'{start.year:04d}-{start.month:02d}'
+    return (
+        f'{start.isoformat()}T00:00:00',
+        f'{end.isoformat()}T23:59:59',
+        {'start': start.isoformat(), 'end': end.isoformat(),
+         'month': month, 'default_start_day': SALARY_CYCLE_START_DAY,
+         'override': _load_cycle_overrides(conn).get(month)},
+    )
+
+
+def cycle_info(conn: sqlite3.Connection | None,
+               period: str = 'current_month', *, offset: int = 0) -> dict:
+    """Resolved cycle for a named period (start/end + override metadata)."""
+    if period in ('current_month', 'last_month'):
+        from_date, to_date, meta = _cycle_bounds(
+            conn, period=period, offset=offset)
+        if from_date and to_date:
+            return {'period': period, 'from_date': from_date,
+                    'to_date': to_date, **meta}
+    from_date, to_date = _period_bounds(period, conn=conn)
+    return {'period': period, 'from_date': from_date, 'to_date': to_date}
+
+
+def _period_bounds(period: str,
+                   conn: sqlite3.Connection | None = None
+                   ) -> tuple[Optional[str], Optional[str]]:
     """Return (from_date, to_date) ISO strings for a period.
 
-    Salary-cycle months: from 25th of the previous month to 24th of the
-    current month (salary received on the 25th).
+    Salary-cycle months start on the payday (25th by default, overridable
+    per month) and end the day before the next payday.
     """
     now = datetime.now()
-    if period == 'current_month':
-        from_day = 25
-        to_day = 24
-        if now.day >= 25:
-            from_month = now
-            to_month = now.replace(day=1) + timedelta(days=32)
-            to_month = to_month.replace(day=24)
-        else:
+    if period in ('current_month', 'last_month'):
+        override_from, override_to, _ = _cycle_bounds(conn, period=period,
+                                                      now=now)
+        if override_from and override_to:
+            return override_from, override_to
+        if period == 'last_month':
             prev_month = now.replace(day=1) - timedelta(days=1)
             from_month = prev_month.replace(day=25)
-            to_month = now.replace(day=24)
-        from_date = f'{from_month.year}-{from_month.month:02d}-25T00:00:00'
-        to_date = f'{to_month.year}-{to_month.month:02d}-24T23:59:59'
-    elif period == 'last_month':
-        prev_month = now.replace(day=1) - timedelta(days=1)
-        from_month = prev_month.replace(day=25)
-        to_month = prev_month.replace(day=24)
-        from_date = f'{from_month.year}-{from_month.month:02d}-25T00:00:00'
-        to_date = f'{to_month.year}-{to_month.month:02d}-24T23:59:59'
+            to_month = prev_month.replace(day=24)
+            from_date = f'{from_month.year}-{from_month.month:02d}-25T00:00:00'
+            to_date = f'{to_month.year}-{to_month.month:02d}-24T23:59:59'
+        else:
+            if now.day >= 25:
+                from_month = now
+                to_month = now.replace(day=1) + timedelta(days=32)
+                to_month = to_month.replace(day=24)
+            else:
+                prev_month = now.replace(day=1) - timedelta(days=1)
+                from_month = prev_month.replace(day=25)
+                to_month = now.replace(day=24)
+            from_date = f'{from_month.year}-{from_month.month:02d}-25T00:00:00'
+            to_date = f'{to_month.year}-{to_month.month:02d}-24T23:59:59'
     elif period == 'current_year':
         from_date = f'{now.year}-01-01T00:00:00'
         to_date = f'{now.year}-12-31T23:59:59'

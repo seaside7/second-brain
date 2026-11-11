@@ -123,13 +123,65 @@ class PeriodBoundsTestCase(unittest.TestCase):
         expected_to = now.replace(day=24)
         self.assertTrue(t.startswith(f'{expected_to.year}-{expected_to.month:02d}-24'))
 
-    def test_last_month_is_salary_cycle(self):
+    def test_last_month_is_previous_salary_cycle(self):
         now = datetime.now()
+        if now.day >= 25:
+            cur_start = now.replace(day=25)
+        else:
+            cur_start = (now.replace(day=1) - timedelta(days=1)).replace(day=25)
+        last_start = (cur_start.replace(day=1) - timedelta(days=1)).replace(day=25)
+        last_end = cur_start - timedelta(days=1)
         f, t = reports.period_bounds('last_month')
-        prev = now.replace(day=1) - timedelta(days=1)
-        self.assertTrue(f.startswith(f'{prev.year}-{prev.month:02d}-25'))
-        expected_to = prev.replace(day=24)
-        self.assertTrue(t.startswith(f'{expected_to.year}-{expected_to.month:02d}-24'))
+        self.assertTrue(f.startswith(last_start.strftime('%Y-%m-%d')),
+                        (f, last_start))
+        self.assertTrue(t.startswith(last_end.strftime('%Y-%m-%d')),
+                        (t, last_end))
+
+    def _conn(self):
+        path = Path(tempfile.mkdtemp()) / 't.db'
+        conn = schema.connect(str(path))
+        schema.ensure_tables(conn)
+        self.addCleanup(shutil.rmtree, path.parent, True)
+        self.addCleanup(conn.close)
+        return conn
+
+    def test_cycle_bounds_default(self):
+        conn = self._conn()
+        f, t, meta = reports._cycle_bounds(
+            conn, period='current_month', now=datetime(2026, 11, 10))
+        self.assertEqual(f, '2026-10-25T00:00:00')
+        self.assertEqual(t, '2026-11-24T23:59:59')
+        self.assertEqual(meta['month'], '2026-10')
+        self.assertIsNone(meta['override'])
+        f, t, _ = reports._cycle_bounds(
+            conn, period='last_month', now=datetime(2026, 11, 10))
+        self.assertEqual(f, '2026-09-25T00:00:00')
+        self.assertEqual(t, '2026-10-24T23:59:59')
+
+    def test_cycle_start_override_shifts_bounds(self):
+        conn = self._conn()
+        reports.set_cycle_start(conn, start_date='2026-10-23')
+        f, t, meta = reports._cycle_bounds(
+            conn, period='current_month', now=datetime(2026, 11, 10))
+        self.assertEqual(f, '2026-10-23T00:00:00')
+        self.assertEqual(t, '2026-11-24T23:59:59')
+        self.assertEqual(meta['override'], '2026-10-23')
+        f, t, _ = reports._cycle_bounds(
+            conn, period='last_month', now=datetime(2026, 11, 10))
+        self.assertEqual(f, '2026-09-25T00:00:00')
+        self.assertEqual(t, '2026-10-22T23:59:59')
+        prev = reports.cycle_info(conn, 'current_month', offset=-1)
+        self.assertEqual(prev['from_date'], '2026-09-25T00:00:00')
+        self.assertEqual(prev['to_date'], '2026-10-22T23:59:59')
+
+    def test_cycle_start_override_clears(self):
+        conn = self._conn()
+        reports.set_cycle_start(conn, start_date='2026-10-23')
+        reports.clear_cycle_start(conn, month='2026-10')
+        f, _, meta = reports._cycle_bounds(
+            conn, period='current_month', now=datetime(2026, 11, 10))
+        self.assertEqual(f, '2026-10-25T00:00:00')
+        self.assertIsNone(meta['override'])
 
 
 class NatureForCategoryTestCase(unittest.TestCase):

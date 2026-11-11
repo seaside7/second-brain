@@ -701,6 +701,11 @@ const rpSigned = n => {
               <input id="tx-to" class="tx-select tx-date" type="date" value="${_to}" title="To">
               <button id="tx-dates-clear" class="btn tx-btn-outline" title="Reset to This Month" aria-label="Reset date filter to this month">${Comp.ic('close')}</button>
             </span>
+            <span class="tx-cycle" id="tx-cycle" hidden>
+              <span class="tx-cycle-label">Cycle start</span>
+              <input id="tx-cycle-start" class="tx-select tx-date" type="date" title="Set the real payday that starts this salary cycle">
+              <button id="tx-cycle-reset" class="btn tx-btn-outline" hidden title="Reset to the default 25th" aria-label="Reset cycle start to the 25th">${Comp.ic('close')}</button>
+            </span>
             <button id="tx-sync-btn" class="btn tx-btn-outline">${Comp.ic('refresh')} Sync Gmail</button>
             <button id="tx-reprocess-btn" class="btn tx-btn-outline" title="Re-fetch imported emails and re-run the v3 parser + deterministic categorizer in place">${Comp.ic('refresh')} Reprocess</button>
             <button id="tx-add-btn" class="btn tx-btn-primary" title="Record income/expense by hand (emails can be missed)">${Comp.ic('plus')} Add</button>
@@ -735,6 +740,7 @@ const rpSigned = n => {
         dates.hidden = true;
       }
       refreshView();
+      _syncCycleControl(panel);
     });
     panel.querySelector('#tx-from').addEventListener('change', e => { _from = e.target.value; refreshView(); });
     panel.querySelector('#tx-to').addEventListener('change', e => { _to = e.target.value; refreshView(); });
@@ -743,11 +749,56 @@ const rpSigned = n => {
       panel.querySelector('#tx-period').value = 'current_month';
       panel.querySelector('#tx-dates').hidden = true;
       refreshView();
+      _syncCycleControl(panel);
     });
     panel.querySelector('#tx-sync-btn').addEventListener('click', _syncGmail);
     panel.querySelector('#tx-reprocess-btn').addEventListener('click', _reprocess);
     panel.querySelector('#tx-add-btn').addEventListener('click', _openManual);
     panel.querySelector('#tx-upload-btn').addEventListener('click', _openUpload);
+    panel.querySelector('#tx-cycle-start').addEventListener('change', async e => {
+      const start_date = e.target.value;
+      if (!start_date) return;
+      try {
+        await _post('/api/transactions/cycle',
+                    { start_date, period: _period }, 15000);
+        toast('Cycle start updated');
+      } catch (err) { toast(err.message, false); }
+      refreshView();
+      _syncCycleControl(panel);
+    });
+    panel.querySelector('#tx-cycle-reset').addEventListener('click', async () => {
+      const month = panel.querySelector('#tx-cycle-start').dataset.month;
+      if (!month) return;
+      try {
+        await _post('/api/transactions/cycle',
+                    { clear: month, period: _period }, 15000);
+        toast('Cycle start reset to the 25th');
+      } catch (err) { toast(err.message, false); }
+      refreshView();
+      _syncCycleControl(panel);
+    });
+    _syncCycleControl(panel);
+  }
+
+  /* Show the payday control for cycle-based periods and reflect the resolved
+     start of the cycle currently in view. Payday is not always the 25th. */
+  async function _syncCycleControl(panel) {
+    const wrap = panel.querySelector('#tx-cycle');
+    const input = panel.querySelector('#tx-cycle-start');
+    const reset = panel.querySelector('#tx-cycle-reset');
+    if (!wrap || !input || !reset) return;
+    const show = _period === 'current_month' || _period === 'last_month';
+    wrap.hidden = !show;
+    if (!show) return;
+    try {
+      const c = await U.fetchJSON(`/api/transactions/cycle?period=${_period}`);
+      input.value = c.start || '';
+      input.dataset.month = c.month || '';
+      reset.hidden = !c.override;
+      input.title = c.override
+        ? `Payday pinned to ${c.start} (default is the ${c.default_start_day}th)`
+        : `Default payday: the ${c.default_start_day}th`;
+    } catch (_) { /* keep the control hidden/inert if lookup fails */ }
   }
 
   /* ── refresh ────────────────────────────────────────────────────── */

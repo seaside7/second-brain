@@ -12,6 +12,7 @@ import json
 import os
 import sys
 import traceback
+from datetime import date
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlsplit
@@ -124,6 +125,8 @@ def route_get(handler) -> None:
             _handle_overview(handler, qs)
         elif path == '/api/transactions/list':
             _handle_list(handler, qs)
+        elif path == '/api/transactions/cycle':
+            _handle_cycle_get(handler, qs)
         elif path.startswith('/api/transactions/splits/'):
             _handle_splits_get(handler, int(path.rsplit('/', 1)[-1]))
         elif path.startswith('/api/transactions/'):
@@ -224,17 +227,19 @@ def _handle_trip_candidates(handler, trip_id: int, qs: dict) -> None:
         conn.close()
 
 
-def _range_from_qs(qs: dict) -> tuple[Optional[str], Optional[str]]:
+def _range_from_qs(qs: dict,
+                   conn=None) -> tuple[Optional[str], Optional[str]]:
     """Resolve an effective (from_date, to_date) from query params.
 
     Explicit ?from= / ?to= win. Otherwise a named ?period= is expanded to
-    its bounds ('all' / unknown -> unbounded)."""
+    its bounds ('all' / unknown -> unbounded). ``conn`` lets the salary
+    cycle honour per-month payday overrides."""
     f = qs.get('from', [None])[0]
     t = qs.get('to', [None])[0]
     if not f and not t:
         period = qs.get('period', [None])[0]
         if period and period != 'all':
-            f, t = reports.period_bounds(period)
+            f, t = reports.period_bounds(period, conn=conn)
     return f or None, t or None
 
 
@@ -244,7 +249,7 @@ def _handle_overview(handler, qs: dict) -> None:
         _err(handler, 403, 'Not available in samudera mode')
         return
     period = qs.get('period', ['current_month'])[0]
-    from_date, to_date = _range_from_qs(qs)
+    from_date, to_date = _range_from_qs(qs, conn)
     try:
         data = overview(conn, period=period, from_date=from_date, to_date=to_date)
         _ok(handler, data)
@@ -260,7 +265,7 @@ def _handle_list(handler, qs: dict) -> None:
     try:
         limit = int(qs.get('limit', ['200'])[0])
         offset = int(qs.get('offset', ['0'])[0])
-        from_date, to_date = _range_from_qs(qs)
+        from_date, to_date = _range_from_qs(qs, conn)
         cat_param = qs.get('category', [None])[0]
         cat_ids = [int(x) for x in cat_param.split(',') if x.strip()] if cat_param else None
         trip = qs.get('trip', [None])[0]
@@ -307,7 +312,7 @@ def _handle_spending(handler, qs: dict) -> None:
         _err(handler, 403, 'Not available in samudera mode')
         return
     try:
-        from_date, to_date = _range_from_qs(qs)
+        from_date, to_date = _range_from_qs(qs, conn)
         data = spending_breakdown(conn, from_date=from_date, to_date=to_date)
         _ok(handler, data)
     finally:
@@ -332,12 +337,20 @@ def _handle_analytics(handler, qs: dict) -> None:
         _err(handler, 403, 'Not available in samudera mode')
         return
     try:
-        from_date, to_date = _range_from_qs(qs)
+        from_date, to_date = _range_from_qs(qs, conn)
         cmp_from = qs.get('cmp_from', [None])[0] or None
         cmp_to = qs.get('cmp_to', [None])[0] or None
         if not cmp_from and not cmp_to and from_date and to_date:
-            # Default compare: the same day-span, one month earlier (MTD-safe).
-            cmp_from, cmp_to = _shift_month(from_date, -1), _shift_month(to_date, -1)
+            period = qs.get('period', [None])[0]
+            if period in ('current_month', 'last_month'):
+                # Compare against the real previous payday cycle, not a
+                # naive one-month shift (paydays move between 23rd and 25th).
+                prev = reports.cycle_info(conn, period, offset=-1)
+                cmp_from, cmp_to = prev.get('from_date'), prev.get('to_date')
+            if not cmp_from or not cmp_to:
+                # Default compare: same day-span, one month earlier.
+                cmp_from, cmp_to = (_shift_month(from_date, -1),
+                                    _shift_month(to_date, -1))
 
         def _ids(key: str) -> list[int] | None:
             raw = qs.get(key, [None])[0]
@@ -372,7 +385,7 @@ def _handle_transfers_list(handler, qs: dict) -> None:
         _err(handler, 403, 'Not available in samudera mode')
         return
     try:
-        from_date, to_date = _range_from_qs(qs)
+        from_date, to_date = _range_from_qs(qs, conn)
         nature = qs.get('nature', ['all'])[0]
         natures = [nature] if nature in _TRANSFER_NATURES else list(_TRANSFER_NATURES)
         limit = min(int(qs.get('limit', ['200'])[0]), 500)
@@ -509,6 +522,8 @@ def route_post(handler) -> None:
         elif path.startswith('/api/transactions/trips/') and path.endswith('/update'):
             tid = int(path.split('/')[-2])
             _handle_trip_update(handler, tid, body)
+        elif path == '/api/transactions/cycle':
+            _handle_cycle_set(handler, body)
         elif path == '/api/transactions/splits/set':
             _handle_splits_set(handler, body)
         elif path.startswith('/api/transactions/splits/') and path.endswith('/unsplit'):
@@ -635,6 +650,41 @@ def _handle_trip_unassign(handler, body: dict) -> None:
             _ok(handler, result)
         else:
             _err(handler, 400, result.get('error', 'Unassign failed'))
+    finally:
+        conn.close()
+
+
+def _handle_cycle_get(handler, qs: dict) -> None:
+    conn = _get_db(handler)
+    if not conn:
+        _err(handler, 403, 'Not available in samudera mode')
+        return
+    try:
+        period = qs.get('period', ['current_month'])[0]
+        _ok(handler, reports.cycle_info(conn, period))
+    finally:
+        conn.close()
+
+
+def _handle_cycle_set(handler, body: dict) -> None:
+    conn = _get_db(handler)
+    if not conn:
+        _err(handler, 403, 'Not available in samudera mode')
+        return
+    try:
+        month = str(body.get('clear') or '').strip()
+        if month:
+            reports.clear_cycle_start(conn, month=month)
+        else:
+            start = str(body.get('start_date') or '').strip()
+            try:
+                date.fromisoformat(start[:10])
+            except ValueError:
+                _err(handler, 400, 'start_date must be YYYY-MM-DD')
+                return
+            reports.set_cycle_start(conn, start_date=start)
+        period = body.get('period') or 'current_month'
+        _ok(handler, reports.cycle_info(conn, period))
     finally:
         conn.close()
 
