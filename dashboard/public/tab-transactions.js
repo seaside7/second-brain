@@ -661,10 +661,15 @@ const rpSigned = n => {
     const status  = r.review_status === 'review' ? '<span class="tx-badge tx-badge-warn">review</span>' :
                     r.review_status === 'uncategorized' ? '<span class="tx-badge tx-badge-muted">uncategorized</span>' :
                     nature === 'needs_review' ? '<span class="tx-badge tx-badge-muted">review</span>' : '';
-    const splitBtn = r.kind !== 'split' && !_restricted()
+    const isSplit = r.row_kind === 'split';
+    const editable = !_restricted();
+    const splitBtn = !isSplit && !_restricted()
       ? `<button class="btn tx-btn-sm tx-btn-split" data-split-id="${r.id}" data-split-amount="${amount}" data-split-desc="${U.esc((r.description || r.merchant || '').slice(0, 60))}" title="Split this amount across categories">Split</button>`
       : '';
-    return `<tr class="tx-tr" data-id="${r.id}">
+    const saveBtn = editable
+      ? `<button type="button" class="tx-save" hidden title="Save changes" aria-label="Save changes">${Comp.ic('check')}</button>`
+      : '';
+    return `<tr class="tx-tr${editable ? ' tx-row-editable' : ''}" data-id="${r.id}"${isSplit ? ` data-split="${r.split_id}"` : ''} data-cat0="${r.category_id || ''}" data-note0="${U.esc(r.notes || '')}">
       <td class="tx-td-date" data-label="Date">${_fmtDate(r.occurred_at || r.created_at)}</td>
       <td class="tx-td-desc" data-label="Description">${_descHtml(r)}</td>
       <td class="tx-td-wallet" data-label="Account">${_walletHtml(r.provider)}</td>
@@ -673,7 +678,7 @@ const rpSigned = n => {
       <td class="tx-td-notes" data-label="Notes">${_restricted()
         ? U.esc(r.notes || '')
         : `<input type="text" class="tx-notes-input" data-id="${r.id}" value="${U.esc(r.notes || '')}" placeholder="Add note...">`}</td>
-      <td class="tx-td-status" data-label="Status">${status}${splitBtn}</td>
+      <td class="tx-td-status" data-label="Status">${status}${saveBtn}${splitBtn}</td>
     </tr>`;
   }
 
@@ -855,17 +860,84 @@ const rpSigned = n => {
     const cats = body.querySelectorAll('.tx-cat');
     cats.forEach(sel => {
       sel.addEventListener('focus', () => { sel.dataset.was = sel.value; });
-      sel.addEventListener('change', () => _changeCategory(sel));
+      const row = sel.closest('tr.tx-row-editable');
+      if (!row) { sel.addEventListener('change', () => _changeCategory(sel)); return; }
+      /* editable rows save on the check button, not on every change */
+      sel.addEventListener('change', () => {
+        if (sel.value === '__new') { _inlineNewCategory(sel, Number(row.dataset.id), row); return; }
+        _rowDirty(row);
+      });
     });
+    body.querySelectorAll('.tx-save').forEach(b =>
+      b.addEventListener('click', () => _saveRow(b.closest('tr'))));
     body.querySelectorAll('.tx-btn-split').forEach(b =>
       b.addEventListener('click', () => _openSplitModal(
         Number(b.dataset.splitId),
         Number(b.dataset.splitAmount),
         b.dataset.splitDesc)));
     body.querySelectorAll('.tx-notes-input').forEach(inp => {
+      const row = inp.closest('tr.tx-row-editable');
+      if (row) {
+        inp.addEventListener('input', () => _rowDirty(row));
+        inp.addEventListener('keydown', e => {
+          if (e.key === 'Enter') { e.preventDefault(); if (_rowChanged(row)) _saveRow(row); }
+        });
+        return;
+      }
       inp.addEventListener('blur', () => _saveNotes(inp));
       inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } });
     });
+  }
+
+  /* ── editable rows: a check button appears once the category or note
+     differs from what is stored, and one click saves both ─────────────── */
+  function _rowChanged(tr) {
+    const sel = tr.querySelector('.tx-cat');
+    const inp = tr.querySelector('.tx-notes-input');
+    const catNow = sel && sel.value !== '__new' ? sel.value : (tr.dataset.cat0 || '');
+    return catNow !== (tr.dataset.cat0 || '') || (inp ? inp.value : '') !== (tr.dataset.note0 || '');
+  }
+
+  function _rowDirty(tr) {
+    const dirty = _rowChanged(tr);
+    const btn = tr.querySelector('.tx-save');
+    if (btn) btn.hidden = !dirty;
+    tr.classList.toggle('is-dirty', dirty);
+  }
+
+  /* One edit call per row: a split row stands for one allocation, so it is
+     edited through the split endpoint (the parent row is never shown). */
+  function _editUrl(tr) {
+    return tr.dataset.split
+      ? `/api/transactions/splits/${tr.dataset.split}/edit`
+      : `/api/transactions/${tr.dataset.id}/edit`;
+  }
+
+  async function _saveRow(tr) {
+    const btn = tr.querySelector('.tx-save');
+    const sel = tr.querySelector('.tx-cat');
+    const inp = tr.querySelector('.tx-notes-input');
+    if (!btn || btn.disabled || !_rowChanged(tr)) return;
+    const payload = {};
+    if (sel && sel.value !== '__new' && sel.value !== (tr.dataset.cat0 || '')) {
+      payload.category_id = sel.value ? Number(sel.value) : null;
+    }
+    if (inp && inp.value !== (tr.dataset.note0 || '')) payload.notes = inp.value;
+    btn.disabled = true;
+    try {
+      await _post(_editUrl(tr), payload, 15000);
+      if ('category_id' in payload) {
+        tr.dataset.cat0 = payload.category_id ? String(payload.category_id) : '';
+        tr.querySelectorAll('.tx-conf').forEach(d => d.className = 'tx-conf tx-conf-high');
+      }
+      if ('notes' in payload) tr.dataset.note0 = payload.notes;
+      _rowDirty(tr);
+      toast('Saved', true);
+    } catch (e) {
+      toast(e.message || 'Could not save', false);   // the row stays marked so it can be retried
+    } finally {
+      btn.disabled = false;
+    }
   }
 
   async function _saveNotes(inp) {
@@ -898,7 +970,7 @@ const rpSigned = n => {
     }
   }
 
-  function _inlineNewCategory(sel, id) {
+  function _inlineNewCategory(sel, id, row) {
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'tx-cat tx-cat-new';
@@ -933,7 +1005,8 @@ const rpSigned = n => {
           _categories.push({ id: cat.category_id, name, group });
           _categories.sort((a, b) => (a.group || a.name).localeCompare(b.group || b.name));
         }
-        await _post(`/api/transactions/${id}/edit`, { category_id: cat.category_id }, 15000);
+        await _post(row ? _editUrl(row) : `/api/transactions/${id}/edit`,
+                    { category_id: cat.category_id }, 15000);
         toast(`Category updated: ${name}`, true);
         finished = true;
         await refreshView();

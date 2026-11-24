@@ -14,6 +14,7 @@ Rules honoured here:
 """
 from __future__ import annotations
 
+import json
 from typing import Optional
 
 import store
@@ -131,6 +132,51 @@ def set_splits(conn=None, *, ledger_id: int,
     return {'ok': True, 'splits': list_splits(conn, ledger_id=ledger_id)['splits'],
             'allocated_total': allocated, 'parent_amount': parent_amount,
             'mismatch': mismatch}
+
+
+def update_split(conn=None, *, split_id: int, category_id: int | None = ...,
+                 notes: str | None = None, actor: str = 'user') -> dict:
+    """Edit ONE allocation (its category and/or note) in place.
+
+    The All Txns list shows each allocation as its own row, so editing a row
+    must change that allocation, not the parent ledger row (which a split
+    parent never displays). `category_id=None` clears nothing: a split always
+    keeps a category, so pass an id to change it. The allocation key is
+    (category_id, trip_id): moving to a category a sibling allocation already
+    uses would break it, so that is refused with a clear message instead of
+    silently merging amounts."""
+    conn = _conn(conn)
+    row = conn.execute("SELECT * FROM txn_splits WHERE id=?", (split_id,)).fetchone()
+    if not row:
+        return {'ok': False, 'error': f'Split {split_id} not found'}
+    sets, params = [], []
+    if category_id is not ...:
+        if not category_id:
+            return {'ok': False, 'error': 'A split needs a category'}
+        if not conn.execute("SELECT 1 FROM categories WHERE id=?", (category_id,)).fetchone():
+            return {'ok': False, 'error': f'Category {category_id} not found'}
+        clash = conn.execute(
+            "SELECT id FROM txn_splits WHERE parent_ledger_id=? AND category_id=? "
+            "AND trip_id IS ? AND id<>?",
+            (row['parent_ledger_id'], category_id, row['trip_id'], split_id)).fetchone()
+        if clash:
+            return {'ok': False, 'error': 'Another part of this transaction already uses '
+                                          'that category. Use Split to merge them.'}
+        sets.append('category_id=?'); params.append(int(category_id))
+    if notes is not None:
+        sets.append('notes=?'); params.append(str(notes))
+    if not sets:
+        return {'ok': True, 'split_id': split_id}
+    sets.append("updated_at=strftime('%Y-%m-%dT%H:%M:%S','now','localtime')")
+    before = dict(row)
+    conn.execute(f"UPDATE txn_splits SET {', '.join(sets)} WHERE id=?", params + [split_id])
+    store.add_audit(conn, action='split_edited', entity='txn_splits', entity_id=split_id,
+                    before_json=json.dumps({k: before[k] for k in ('category_id', 'notes')}),
+                    after_json=json.dumps({'category_id': category_id if category_id is not ... else before['category_id'],
+                                           'notes': notes if notes is not None else before['notes']}),
+                    actor=actor)
+    conn.commit()
+    return {'ok': True, 'split_id': split_id, 'ledger_id': row['parent_ledger_id']}
 
 
 def unsplit(conn=None, *, ledger_id: int, actor: str = 'user') -> dict:

@@ -43,7 +43,7 @@ try:
     from trips import (create_trip, update_trip, list_trips, get_trip,
                        find_trip_candidates, assign as trip_assign,
                        unassign as trip_unassign)
-    from splits import set_splits, unsplit, list_splits
+    from splits import set_splits, unsplit, list_splits, update_split
     from gmail_sync import sync_gmail
     from scheduler import TransactionScheduler
     from reprocess import reprocess as reprocess_engine
@@ -566,6 +566,8 @@ def route_post(handler) -> None:
             _handle_splits_set(handler, body)
         elif path.startswith('/api/transactions/splits/') and path.endswith('/unsplit'):
             _handle_splits_unsplit(handler, int(path.split('/')[-2]))
+        elif path.startswith('/api/transactions/splits/') and path.endswith('/edit'):
+            _handle_split_edit(handler, int(path.split('/')[-2]), body)
         elif path == '/api/transactions/upload':
             _handle_upload(handler, body)
         elif path == '/api/transactions/upload/screenshot':
@@ -752,6 +754,30 @@ def _handle_splits_unsplit(handler, ledger_id: int) -> None:
         return
     try:
         result = unsplit(conn, ledger_id=ledger_id, actor='user')
+        _ok(handler, result)
+    finally:
+        conn.close()
+
+
+def _handle_split_edit(handler, split_id: int, body: dict) -> None:
+    """Edit one allocation (category and/or note) - what a split row in the
+    All Txns list stands for. Editing the parent ledger row would not change
+    what the list shows for it."""
+    conn = _get_db(handler)
+    if not conn:
+        _err(handler, 403, 'Not available in samudera mode')
+        return
+    try:
+        kwargs = {}
+        if 'category_id' in body:
+            kwargs['category_id'] = int(body['category_id']) if body['category_id'] else None
+        if 'notes' in body:
+            kwargs['notes'] = body['notes']
+        result = update_split(conn, split_id=split_id, actor='user', **kwargs)
+        if not result.get('ok'):
+            _err(handler, 409 if 'already uses' in str(result.get('error')) else 400,
+                 result.get('error') or 'Could not update the split')
+            return
         _ok(handler, result)
     finally:
         conn.close()

@@ -3654,6 +3654,15 @@ a.home-row-text:hover { color: hsl(var(--h-indigo), 80%, 75%); }
 .tx-btn-ok:hover { background: rgba(46,125,50,.12); }
 .tx-btn-cat:hover { border-color: var(--accent); background: rgba(255,170,0,.1); }
 .tx-btn-split { border-color: var(--border-active); color: var(--text-secondary); }
+/* explicit save for a row whose category or note was edited */
+.tx-save { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
+  margin-right: 6px; padding: 0; border: 1px solid var(--accent); border-radius: 8px;
+  background: var(--accent); color: #fff; cursor: pointer; vertical-align: middle; }
+.tx-save[hidden] { display: none; }
+.tx-save:hover { filter: brightness(1.1); }
+.tx-save:disabled { opacity: .6; cursor: progress; }
+.tx-save .ico { width: 16px; height: 16px; }
+.tx-row-editable.is-dirty { background: rgba(255,170,0,.07); }
 .tx-btn-split:hover { border-color: var(--accent); color: var(--accent); background: rgba(255,170,0,.08); }
 
 .tx-account-alias { font-weight: 600; }
