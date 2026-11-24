@@ -92,13 +92,28 @@ function canRender(container) {
 /* ── Router: #today (default) | #chat | #reminders | #news | #finance | #memory | #invoices ── */
 const TAB_NAMES = ['today', 'chat', 'reminders', 'news', 'finance', 'transactions', 'trading', 'memory', 'invoices', 'coding', 'tasks', 'settings'];
 
+/* Restricted accounts (e.g. a family viewer) only get the tabs the server
+   lists in /api/session. The server enforces it; this only hides what is closed. */
+const PSB_ROLE = { restricted: false, tabs: [], tx_views: [] };
+window.PSB_ROLE = PSB_ROLE;
+
+async function loadSession() {
+  try {
+    const r = await fetch('/api/session', { credentials: 'same-origin' });
+    if (r.ok) Object.assign(PSB_ROLE, await r.json());
+  } catch (_) { /* owner defaults stay */ }
+}
+
 function parseHash() {
   const h = (location.hash || '#today').replace(/^#/, '');
   const [tab, ...rest] = h.split('/');
-  return {
-    tab: TAB_NAMES.includes(tab) ? tab : 'today',
-    filter: rest.join('/') || null,
-  };
+  let name = TAB_NAMES.includes(tab) ? tab : 'today';
+  let filter = rest.join('/') || null;
+  if (PSB_ROLE.restricted && !PSB_ROLE.tabs.includes(name)) {
+    name = PSB_ROLE.tabs[0] || 'today';
+    filter = null;
+  }
+  return { tab: name, filter };
 }
 
 function applyRoute() {
@@ -323,8 +338,29 @@ function applyCombinedMode() {
   /* combined view ships everything — no tabs to hide */
 }
 
-function boot() {
-  if (PSB_SAMUDERA) applySamuderaMode();
+/* Restricted account: show only its tabs, drop owner-only chrome. */
+function applyRestrictedMode() {
+  const allowed = new Set(PSB_ROLE.tabs);
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    if (!allowed.has(b.dataset.tab)) b.style.display = 'none';
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => {
+    if (!allowed.has(p.id.replace('tab-', ''))) p.style.display = 'none';
+  });
+  ['quickfind', 'btn-chat', 'btn-notes', 'btn-refresh', 'app-updated'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  document.body.classList.add('is-restricted');
+  const first = PSB_ROLE.tabs[0];
+  const { tab } = parseHash();
+  if (first && location.hash.replace(/^#/, '').split('/')[0] !== tab) location.hash = `#${tab}`;
+}
+
+async function boot() {
+  await loadSession();
+  if (PSB_ROLE.restricted) applyRestrictedMode();
+  else if (PSB_SAMUDERA) applySamuderaMode();
   else applyCombinedMode();
   UI.load();
   Drawer.init();
@@ -365,6 +401,7 @@ function boot() {
 
   window.addEventListener('hashchange', applyRoute);
   applyRoute();
+  if (PSB_ROLE.restricted) return;   // the owner overview feeds are closed to this account
   refreshOverview(true);
   setInterval(() => refreshOverview(false), 60000);
   document.addEventListener('visibilitychange', () => {

@@ -55,6 +55,18 @@ except ImportError as exc:
     _IMPORT_ERR = str(exc)
 
 
+import access  # noqa: E402  (role policies + row-level scoping)
+
+
+def _role(handler) -> str:
+    """Role of the signed-in user ('owner' when auth is off or unknown)."""
+    try:
+        sess = handler._session() or {}
+    except Exception:
+        sess = {}
+    return sess.get('role') or access.OWNER
+
+
 def _get_handler_attr(handler, name, default=None):
     """Safe attribute access on the handler."""
     return getattr(handler, name, default)
@@ -102,6 +114,15 @@ def _get_db(handler):
         return None
     conn = connect()
     ensure_tables(conn)
+    role = _role(handler)
+    if access.is_restricted(role):
+        # Row-level scope for restricted viewers: TEMP VIEWs shadow the real
+        # tables, so every report/list query below only ever sees permitted rows.
+        try:
+            access.scoped_connection(conn, role, handler.path.split('?')[0])
+        except Exception:
+            conn.close()
+            raise
     return conn
 
 
@@ -115,6 +136,11 @@ def route_get(handler) -> None:
 
     path = handler.path.split('?')[0]
     qs = _parse_qs(handler)
+
+    role = _role(handler)
+    if not access.allows(role, 'GET', path):
+        _err(handler, 403, 'Not available for this account')
+        return
 
     try:
         if path == '/api/transactions/trips':
@@ -285,6 +311,9 @@ def _handle_list(handler, qs: dict) -> None:
         total = count_ledger(conn, category_ids=cat_ids,
                              trip_id=trip_id,
                              from_date=from_date, to_date=to_date)
+        role = _role(handler)
+        if access.is_restricted(role):
+            rows = [access.strip_row(role, r) for r in rows]
         _ok(handler, {'rows': rows, 'total': total, 'limit': limit, 'offset': offset})
     finally:
         conn.close()
@@ -371,6 +400,11 @@ def _handle_analytics(handler, qs: dict) -> None:
             include_fees=qs.get('include_fees', ['1'])[0] != '0',
             include_transfers=qs.get('include_transfers', ['0'])[0] == '1',
             granularity=qs.get('granularity', ['auto'])[0] or 'auto')
+        if access.is_restricted(_role(handler)):
+            # Owner-workflow counters (review queue, transfer matching) mean
+            # nothing to a viewer and would describe rows outside her scope.
+            for k in ('suggested_transfers', 'pending_review', 'uncategorized'):
+                data['totals'][k] = 0
         _ok(handler, data)
     finally:
         conn.close()
@@ -510,6 +544,10 @@ def route_post(handler) -> None:
         return
 
     path = handler.path.split('?')[0]
+    role = _role(handler)
+    if not access.allows(role, 'POST', path):
+        _err(handler, 403, 'Not available for this account')
+        return
     body = _read_body(handler)
 
     try:

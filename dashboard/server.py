@@ -79,6 +79,7 @@ import model_router as model_router  # noqa: E402
 
 # Auth: password (scrypt) + server-side sessions. See dashboard/auth.py.
 import auth as auth_mod  # noqa: E402
+import access as access_mod  # noqa: E402  (role policies, see dashboard/access.py)
 
 DASHBOARD_PATH = BASE_DIR / 'Dashboard.md'
 PUBLIC_DIR = Path(__file__).resolve().parent / 'public'
@@ -3210,7 +3211,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def _session(self):
         """Resolve the session for this request, or None."""
         if AUTH_DISABLED:
-            return {'username': AUTH_USER, 'must_change': False, 'expires_in': 0}
+            return {'username': AUTH_USER, 'must_change': False, 'expires_in': 0,
+                    'role': access_mod.OWNER}
         return auth_mod.validate_session(self._cookie(auth_mod.SESSION_COOKIE))
 
     def _is_secure(self):
@@ -3278,6 +3280,18 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 # page of raw JSON.
                 self.send_response(302)
                 self.send_header('Location', '/change-password')
+                self.send_header('Content-Length', '0')
+                self.end_headers()
+            return False
+        # Restricted roles (e.g. 'dinda') get an explicit allowlist; owners pass.
+        role = sess.get('role') or access_mod.OWNER
+        if not access_mod.allows(role, self.command, route):
+            if route.startswith('/api/'):
+                self._send_json(403, json.dumps({
+                    'error': 'not available for this account'}))
+            else:
+                self.send_response(302)
+                self.send_header('Location', '/')
                 self.send_header('Content-Length', '0')
                 self.end_headers()
             return False
@@ -3464,6 +3478,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             'must_change': sess.get('must_change', False),
             'expires_in': sess.get('expires_in', 0),
             'auth_disabled': AUTH_DISABLED,
+            **access_mod.ui_profile(sess.get('role')),
         }))
 
     def _handle_change_password(self):

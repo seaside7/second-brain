@@ -54,6 +54,11 @@ _SCRYPT_DKLEN = 32
 
 MIN_PASSWORD = 8
 
+# Roles. 'owner' is unrestricted; every other role is a restricted viewer whose
+# permissions live in dashboard/access.py. Unknown roles are rejected.
+OWNER_ROLE = 'owner'
+ROLES = ('owner', 'dinda')
+
 # Brute-force limiter: (key -> [failures, window_start])
 _FAILURES: dict[str, list] = {}
 MAX_ATTEMPTS = 8
@@ -66,7 +71,8 @@ CREATE TABLE IF NOT EXISTS users (
     pw_salt       BLOB NOT NULL,
     created_at    INTEGER NOT NULL,
     changed_at    INTEGER NOT NULL,
-    must_change   INTEGER NOT NULL DEFAULT 0
+    must_change   INTEGER NOT NULL DEFAULT 0,
+    role          TEXT NOT NULL DEFAULT 'owner'
 );
 CREATE TABLE IF NOT EXISTS sessions (
     token_hash    TEXT PRIMARY KEY,
@@ -102,6 +108,11 @@ def _conn() -> sqlite3.Connection:
 def init_db() -> None:
     with _conn() as c:
         c.executescript(SCHEMA)
+        # Databases created before roles existed: add the column, every
+        # existing account stays an owner.
+        cols = {r['name'] for r in c.execute('PRAGMA table_info(users)')}
+        if 'role' not in cols:
+            c.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'owner'")
     # The DB holds password hashes; keep it off other local accounts.
     try:
         os.chmod(AUTH_DB, 0o600)
@@ -150,9 +161,12 @@ def password_problem(password: str) -> str | None:
 
 
 # ── users ────────────────────────────────────────────────────────────────
-def create_user(username: str, password: str, must_change: int = 1) -> None:
+def create_user(username: str, password: str, must_change: int = 1,
+                role: str = OWNER_ROLE) -> None:
     if not username or not username.strip():
         raise ValueError('username required')
+    if role not in ROLES:
+        raise ValueError(f'unknown role {role!r} (expected one of {", ".join(ROLES)})')
     problem = password_problem(password)
     if problem:
         raise ValueError(problem)
@@ -161,12 +175,12 @@ def create_user(username: str, password: str, must_change: int = 1) -> None:
     with _conn() as c:
         c.execute(
             'INSERT OR REPLACE INTO users '
-            '(username, pw_hash, pw_salt, created_at, changed_at, must_change) '
-            'VALUES (?,?,?,?,?,?)',
-            (username.strip(), pw_hash, pw_salt, now, now, int(must_change)))
+            '(username, pw_hash, pw_salt, created_at, changed_at, must_change, role) '
+            'VALUES (?,?,?,?,?,?,?)',
+            (username.strip(), pw_hash, pw_salt, now, now, int(must_change), role))
         c.execute('DELETE FROM sessions WHERE username = ?', (username.strip(),))
         _audit(c, 'user_created', username.strip(),
-               f'must_change={must_change}')
+               f'must_change={must_change} role={role}')
 
 
 def user_exists(username: str) -> bool:
@@ -283,7 +297,7 @@ def login(username: str, password: str, ip: str | None = None,
 
 
 def validate_session(token: str | None) -> dict | None:
-    """Resolve a cookie to {'username', 'must_change', 'expires_in'}, or None.
+    """Resolve a cookie to {'username', 'must_change', 'role', 'expires_in'}, or None.
 
     Slides the expiry forward on use (capped at MAX_TTL from creation) so an
     active owner is never logged out mid-session."""
@@ -299,7 +313,7 @@ def validate_session(token: str | None) -> dict | None:
             c.execute('DELETE FROM sessions WHERE token_hash = ?', (th,))
             return None
         # Password changed since this session was minted → token is stale.
-        u = c.execute('SELECT must_change, changed_at FROM users WHERE username = ?',
+        u = c.execute('SELECT must_change, changed_at, role FROM users WHERE username = ?',
                       (row['username'],)).fetchone()
         if u is None or u['changed_at'] > row['created_at']:
             c.execute('DELETE FROM sessions WHERE token_hash = ?', (th,))
@@ -310,6 +324,7 @@ def validate_session(token: str | None) -> dict | None:
         return {
             'username': row['username'],
             'must_change': bool(u['must_change']),
+            'role': u['role'] or OWNER_ROLE,
             'expires_in': expires - now,
         }
 
@@ -337,3 +352,45 @@ def list_sessions(username: str) -> list[dict]:
         return [dict(r) for r in c.execute(
             'SELECT created_at, last_seen, expires_at, user_agent FROM sessions '
             'WHERE username = ? ORDER BY last_seen DESC', (username,))]
+
+
+# ── command line ─────────────────────────────────────────────────────────
+def _main(argv: list[str]) -> int:
+    """python dashboard/auth.py create-user <username> [--role dinda] [--password X]
+
+    Without --password a strong random one is generated and printed once. The
+    account starts with must_change set, so the first sign-in forces a new
+    password."""
+    import argparse
+    ap = argparse.ArgumentParser(prog='auth.py')
+    sub = ap.add_subparsers(dest='cmd', required=True)
+    cu = sub.add_parser('create-user', help='create or reset a user')
+    cu.add_argument('username')
+    cu.add_argument('--role', default=OWNER_ROLE, choices=ROLES)
+    cu.add_argument('--password', default=None)
+    sub.add_parser('list-users', help='list users and roles')
+    a = ap.parse_args(argv)
+    init_db()
+    if a.cmd == 'list-users':
+        with _conn() as c:
+            for r in c.execute('SELECT username, role, must_change FROM users ORDER BY username'):
+                print(f"{r['username']}\t{r['role']}\tmust_change={r['must_change']}")
+        return 0
+    password = a.password
+    generated = password is None
+    if generated:
+        alphabet = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+        while True:
+            password = ''.join(secrets.choice(alphabet) for _ in range(14))
+            if password_problem(password) is None:
+                break
+    create_user(a.username, password, must_change=1, role=a.role)
+    print(f'user {a.username!r} created with role {a.role!r} (must change password at first sign-in)')
+    if generated:
+        print(f'password: {password}')
+    return 0
+
+
+if __name__ == '__main__':
+    import sys
+    raise SystemExit(_main(sys.argv[1:]))

@@ -145,8 +145,11 @@ const TransactionsTab = (() => {
   }
   const _ovColor = k => `var(--cat-${k})`;
 
+  /* Restricted account (family viewer): read-only, only the views the server lists. */
+  const _restricted = () => !!(window.PSB_ROLE && window.PSB_ROLE.restricted);
+
   /* ── nav chips ──────────────────────────────────────────────────── */
-  const VIEWS = [
+  const ALL_VIEWS = [
     { id: 'overview',  label: 'Overview',  icon: 'chart' },
     { id: 'all',       label: 'All Txns',  icon: 'list' },
     { id: 'transfers', label: 'Transfers', icon: 'refresh' },
@@ -155,6 +158,9 @@ const TransactionsTab = (() => {
     { id: 'imports',   label: 'Imports',   icon: 'download' },
     { id: 'rules',     label: 'Rules',     icon: 'cog' },
   ];
+  const _views = () => _restricted()
+    ? ALL_VIEWS.filter(v => (window.PSB_ROLE.tx_views || []).includes(v.id))
+    : ALL_VIEWS;
 
   /* ── helpers ────────────────────────────────────────────────────── */
   const rp = n => n == null ? '-' : `Rp${Number(n).toLocaleString('id-ID')}`;
@@ -630,6 +636,7 @@ const rpSigned = n => {
   }
 
   function _catSelect(r) {
+    if (_restricted()) return `<span class="tx-cat-ro">${U.esc(r.category_name || 'Uncategorized')}</span>`;
     const wantedCatId = r.category_id ? Number(r.category_id) : null;
     const groups = _catGroups(r.direction, wantedCatId);
     const opts = ['<option value="">Uncategorized</option>'];
@@ -654,7 +661,7 @@ const rpSigned = n => {
     const status  = r.review_status === 'review' ? '<span class="tx-badge tx-badge-warn">review</span>' :
                     r.review_status === 'uncategorized' ? '<span class="tx-badge tx-badge-muted">uncategorized</span>' :
                     nature === 'needs_review' ? '<span class="tx-badge tx-badge-muted">review</span>' : '';
-    const splitBtn = r.kind !== 'split'
+    const splitBtn = r.kind !== 'split' && !_restricted()
       ? `<button class="btn tx-btn-sm tx-btn-split" data-split-id="${r.id}" data-split-amount="${amount}" data-split-desc="${U.esc((r.description || r.merchant || '').slice(0, 60))}" title="Split this amount across categories">Split</button>`
       : '';
     return `<tr class="tx-tr" data-id="${r.id}">
@@ -663,7 +670,9 @@ const rpSigned = n => {
       <td class="tx-td-wallet" data-label="Account">${_walletHtml(r.provider)}</td>
       <td class="tx-td-cat" data-label="Category"><div class="tx-cat-wrap">${_confDot(r)}${_catSelect(r)}</div></td>
       <td class="tx-td-amount ${dir}" data-label="Amount">${sign}${rp(amount)}</td>
-      <td class="tx-td-notes" data-label="Notes"><input type="text" class="tx-notes-input" data-id="${r.id}" value="${U.esc(r.notes || '')}" placeholder="Add note..."></td>
+      <td class="tx-td-notes" data-label="Notes">${_restricted()
+        ? U.esc(r.notes || '')
+        : `<input type="text" class="tx-notes-input" data-id="${r.id}" value="${U.esc(r.notes || '')}" placeholder="Add note...">`}</td>
       <td class="tx-td-status" data-label="Status">${status}${splitBtn}</td>
     </tr>`;
   }
@@ -672,7 +681,7 @@ const rpSigned = n => {
   async function load(filter) {
     const panel = document.getElementById('tab-transactions');
     if (!panel) return;
-    _activeView = (filter && VIEWS.find(v => v.id === filter)) ? filter : 'overview';
+    _activeView = (filter && _views().find(v => v.id === filter)) ? filter : (_views()[0] || { id: 'overview' }).id;
     if (_activeView !== 'trips') _tripDetailId = null;
     render(panel);
     await refreshView();
@@ -680,7 +689,7 @@ const rpSigned = n => {
 
   /* ── render shell ───────────────────────────────────────────────── */
   function render(panel) {
-    const chips = VIEWS.map(v =>
+    const chips = _views().map(v =>
       `<button class="tx-chip ${v.id === _activeView ? 'is-active' : ''}" data-view="${v.id}">${Comp.ic(v.icon)} ${v.label}</button>`
     ).join('');
 
@@ -751,6 +760,10 @@ const rpSigned = n => {
       refreshView();
       _syncCycleControl(panel);
     });
+    if (_restricted()) {
+      ['#tx-sync-btn', '#tx-reprocess-btn', '#tx-add-btn', '#tx-upload-btn', '#tx-cycle']
+        .forEach(sel => { const el = panel.querySelector(sel); if (el) el.style.display = 'none'; });
+    }
     panel.querySelector('#tx-sync-btn').addEventListener('click', _syncGmail);
     panel.querySelector('#tx-reprocess-btn').addEventListener('click', _reprocess);
     panel.querySelector('#tx-add-btn').addEventListener('click', _openManual);
@@ -783,6 +796,7 @@ const rpSigned = n => {
   /* Show the payday control for cycle-based periods and reflect the resolved
      start of the cycle currently in view. Payday is not always the 25th. */
   async function _syncCycleControl(panel) {
+    if (_restricted()) return;          // payday editing is owner-only
     const wrap = panel.querySelector('#tx-cycle');
     const input = panel.querySelector('#tx-cycle-start');
     const reset = panel.querySelector('#tx-cycle-reset');
@@ -816,7 +830,7 @@ const rpSigned = n => {
             (a.group || a.name).localeCompare(b.group || b.name));
         } catch (_) { /* categories stay cacheable-clean on failure */ }
       }
-      if (!_accounts.length) {
+      if (!_accounts.length && !_restricted()) {
         try {
           const a = await U.fetchJSON('/api/transactions/accounts');
           _accounts = a.accounts || [];
@@ -1189,7 +1203,7 @@ const rpSigned = n => {
       _allPage = Math.max(0, pages - 1);
       return _renderAll(el);
     }
-    if (!_allTrips.length) {
+    if (!_allTrips.length && !_restricted()) {
       try {
         const td = await U.fetchJSON('/api/transactions/trips');
         _allTrips = td.trips || [];
@@ -1210,7 +1224,7 @@ const rpSigned = n => {
         <div class="tx-card-header">
           <h3 class="tx-card-title">All Transactions (${total})</h3>
           <span class="ov-allfilters">
-            <select id="tx-all-trip" class="tx-select" title="Filter by trip">
+            <select id="tx-all-trip" class="tx-select" title="Filter by trip" ${_restricted() ? 'hidden' : ''}>
               <option value="">All trips</option>
               ${_allTrips.map(t =>
                 `<option value="${t.id}" ${String(t.id) === String(_allTrip) ? 'selected' : ''}>${U.esc(t.name)}</option>`).join('')}
