@@ -115,9 +115,11 @@ def _get_db(handler):
     conn = connect()
     ensure_tables(conn)
     role = _role(handler)
-    if access.is_restricted(role):
-        # Row-level scope for restricted viewers: TEMP VIEWs shadow the real
+    if access.is_restricted(role) and getattr(handler, 'command', 'GET') != 'POST':
+        # Row-level scope for restricted accounts: TEMP VIEWs shadow the real
         # tables, so every report/list query below only ever sees permitted rows.
+        # (A POST was already authorised row by row by access.check_write and
+        # then writes through the normal connection.)
         try:
             access.scoped_connection(conn, role, handler.path.split('?')[0])
         except Exception:
@@ -458,6 +460,9 @@ def _handle_review_list(handler, qs: dict) -> None:
     try:
         days = int(qs.get('days', ['7'])[0])
         rows = list_ledger(conn, review_status='uncategorized', limit=100)
+        role = _role(handler)
+        if access.is_restricted(role):
+            rows = [access.strip_row(role, r) for r in rows]
         _ok(handler, {'rows': rows, 'count': len(rows)})
     finally:
         conn.close()
@@ -549,6 +554,15 @@ def route_post(handler) -> None:
         _err(handler, 403, 'Not available for this account')
         return
     body = _read_body(handler)
+    if access.is_restricted(role):
+        guard = connect()
+        try:
+            access.check_write(guard, role, path, body)
+        except access.WriteDenied as e:
+            _err(handler, e.status, e.message)
+            return
+        finally:
+            guard.close()
 
     try:
         if path == '/api/transactions/trips/create':

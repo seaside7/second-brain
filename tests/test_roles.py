@@ -98,24 +98,31 @@ class TestAccessPolicy(unittest.TestCase):
                               ('GET', '/samudera')):
             self.assertTrue(access.allows('owner', method, route))
 
-    def test_dinda_gets_only_the_two_transaction_views(self):
+    def test_dinda_gets_only_her_three_transaction_views(self):
         for route in ('/api/transactions/list', '/api/transactions/analytics',
-                      '/api/transactions/categories', '/api/transactions/cycle'):
+                      '/api/transactions/categories', '/api/transactions/cycle',
+                      '/api/transactions/review', '/api/transactions/splits/12'):
             self.assertTrue(access.allows('dinda', 'GET', route), route)
 
     def test_dinda_is_denied_everything_else(self):
         for route in ('/api/finance', '/api/dashboard', '/api/trading/status',
-                      '/api/transactions/accounts', '/api/transactions/review',
+                      '/api/transactions/accounts',
                       '/api/transactions/transfers', '/api/transactions/trips',
                       '/api/transactions/rules', '/api/transactions/audit',
                       '/api/transactions/imports', '/api/transactions/12',
                       '/api/chat', '/api/memory-notes', '/api/invoices', '/api/file/x'):
             self.assertFalse(access.allows('dinda', 'GET', route), route)
 
-    def test_dinda_cannot_write(self):
-        for route in ('/api/transactions/manual', '/api/transactions/12/edit',
-                      '/api/transactions/upload', '/api/transactions/cycle',
-                      '/api/transactions/splits/set', '/api/chat'):
+    def test_dinda_can_only_post_the_row_edits_she_is_given(self):
+        for route in ('/api/transactions/12/edit', '/api/transactions/splits/3/edit',
+                      '/api/transactions/splits/set', '/api/transactions/splits/12/unsplit',
+                      '/api/transactions/review/respond'):
+            self.assertTrue(access.allows('dinda', 'POST', route), route)
+        for route in ('/api/transactions/manual', '/api/transactions/upload',
+                      '/api/transactions/cycle', '/api/transactions/categories/create',
+                      '/api/transactions/rules/create', '/api/transactions/sync/gmail',
+                      '/api/transactions/reprocess', '/api/transactions/trips/create',
+                      '/api/transactions/transfers/match', '/api/chat'):
             self.assertFalse(access.allows('dinda', 'POST', route), route)
         self.assertFalse(access.allows('dinda', 'DELETE', '/api/transactions/list'))
 
@@ -140,7 +147,7 @@ class TestAccessPolicy(unittest.TestCase):
         p = access.ui_profile('dinda')
         self.assertTrue(p['restricted'])
         self.assertEqual(p['tabs'], ['transactions'])
-        self.assertEqual(p['tx_views'], ['overview', 'all'])
+        self.assertEqual(p['tx_views'], ['overview', 'all', 'review'])
 
 
 # ── row-level scoping ────────────────────────────────────────────────────
@@ -270,6 +277,88 @@ class TestScopedData(unittest.TestCase):
         self.scoped('/api/transactions/list')
         total = self.conn.execute('SELECT COUNT(*) FROM ledger_txns').fetchone()[0]
         self.assertEqual(total, 1)                                  # owner connection still sees it
+
+    # --- write guard: what she may change ---------------------------------
+    def guard(self, path, body):
+        access.check_write(self.conn, 'dinda', path, body)
+
+    def denied(self, path, body, status):
+        with self.assertRaises(access.WriteDenied) as cm:
+            self.guard(path, body)
+        self.assertEqual(cm.exception.status, status, cm.exception.message)
+
+    def test_she_may_categorise_and_note_her_own_row(self):
+        mine = self.add('Transfer ke Dinda', 500)
+        self.guard(f'/api/transactions/{mine}/edit',
+                   {'category_id': self.cat['Groceries'], 'notes': 'Bu Yayah'})
+        self.guard(f'/api/transactions/{mine}/edit', {'notes': 'x'})
+
+    def test_she_cannot_touch_a_row_that_is_not_hers(self):
+        other = self.add('Cicilan KPR', 9000, 'Mortgage')
+        self.denied(f'/api/transactions/{other}/edit', {'notes': 'x'}, 404)
+        self.denied(f'/api/transactions/{other}/edit',
+                    {'category_id': self.cat['Groceries']}, 404)
+        self.denied(f'/api/transactions/splits/{other}/unsplit', {}, 404)
+        self.denied('/api/transactions/review/respond', {'id': other, 'action': 'skip'}, 404)
+
+    def test_she_cannot_use_a_hidden_category(self):
+        mine = self.add('Transfer ke Dinda', 500)
+        for name in HIDDEN:
+            self.denied(f'/api/transactions/{mine}/edit', {'category_id': self.cat[name]}, 403)
+        self.denied(f'/api/transactions/{mine}/edit', {'category_id': 99999}, 400)
+
+    def test_she_cannot_change_anything_but_category_and_note(self):
+        mine = self.add('Transfer ke Dinda', 500)
+        for field in ('nature', 'account_id', 'review_status', 'amount', 'txn_status'):
+            self.denied(f'/api/transactions/{mine}/edit', {field: 'x'}, 403)
+
+    def test_she_may_split_her_own_row_but_not_into_hidden_categories_or_trips(self):
+        mine = self.add('Transfer ke Dinda', 500)
+        ok = {'ledger_id': mine, 'allocations': [
+            {'category_id': self.cat['Groceries'], 'amount': 300, 'notes': 'ayam'},
+            {'category_id': self.cat['Dinda Allowance'], 'amount': 200}]}
+        self.guard('/api/transactions/splits/set', ok)
+        self.denied('/api/transactions/splits/set', {'ledger_id': mine, 'allocations': [
+            {'category_id': self.cat['Project Cost'], 'amount': 500}]}, 403)
+        self.denied('/api/transactions/splits/set', {'ledger_id': mine, 'allocations': [
+            {'category_id': self.cat['Groceries'], 'amount': 500, 'trip_id': 1}]}, 403)
+        other = self.add('Cicilan KPR', 9000, 'Mortgage')
+        self.denied('/api/transactions/splits/set', dict(ok, ledger_id=other), 404)
+
+    def test_she_may_edit_and_unsplit_her_own_splits_only(self):
+        mine = self.add('Transfer ke Dinda', 500)
+        sid = store.add_split(self.conn, parent_ledger_id=mine,
+                              category_id=self.cat['Groceries'], amount=500)
+        other = self.add('Cicilan KPR', 9000, 'Mortgage')
+        osid = store.add_split(self.conn, parent_ledger_id=other,
+                               category_id=self.cat['Mortgage'], amount=9000)
+        self.guard(f'/api/transactions/splits/{sid}/edit', {'notes': 'x'})
+        self.guard(f'/api/transactions/splits/{mine}/unsplit', {})
+        self.denied(f'/api/transactions/splits/{osid}/edit', {'notes': 'x'}, 404)
+        self.denied(f'/api/transactions/splits/{sid}/edit',
+                    {'category_id': self.cat['Friend Loan']}, 403)
+
+    def test_review_answers_are_limited_to_skip_and_set_category(self):
+        mine = self.add('Transfer ke Dinda', 500, review='uncategorized')
+        self.guard('/api/transactions/review/respond', {'id': mine, 'action': 'skip'})
+        self.guard('/api/transactions/review/respond',
+                   {'id': mine, 'action': 'set-category', 'category_id': self.cat['Groceries']})
+        self.denied('/api/transactions/review/respond',
+                    {'id': mine, 'action': 'remember', 'category_id': self.cat['Groceries']}, 403)
+        self.denied('/api/transactions/review/respond',
+                    {'id': mine, 'action': 'set-category', 'category_id': self.cat['Friend Loan']}, 403)
+
+    def test_everything_else_stays_closed(self):
+        self.denied('/api/transactions/manual', {}, 403)
+        self.denied('/api/transactions/categories/create', {'name': 'x'}, 403)
+
+    def test_review_list_is_limited_to_her_uncategorized_rows(self):
+        mine = self.add('Transfer ke Dinda', 500, review='uncategorized')
+        self.add('Transfer ke Dinda', 100, review='ok')
+        self.add('Warung', 50, review='uncategorized')
+        conn = self.scoped('/api/transactions/review')
+        rows = store.list_ledger(conn, review_status='uncategorized', limit=100)
+        self.assertEqual([r['id'] for r in rows], [mine])
 
     def test_strip_row_blanks_account_identifiers(self):
         row = {'description': 'Transfer Dinda', 'account_masked': '****1234', 'bank_ref': 'R1',

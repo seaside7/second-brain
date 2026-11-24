@@ -636,7 +636,6 @@ const rpSigned = n => {
   }
 
   function _catSelect(r) {
-    if (_restricted()) return `<span class="tx-cat-ro">${U.esc(r.category_name || 'Uncategorized')}</span>`;
     const wantedCatId = r.category_id ? Number(r.category_id) : null;
     const groups = _catGroups(r.direction, wantedCatId);
     const opts = ['<option value="">Uncategorized</option>'];
@@ -649,7 +648,7 @@ const rpSigned = n => {
     if (wantedCatId != null && !_categories.some(c => c.id === wantedCatId)) {
       opts.push(`<option value="${wantedCatId}" selected>Category ${wantedCatId}</option>`);
     }
-    opts.push('<option value="__new">+ New category…</option>');
+    if (!_restricted()) opts.push('<option value="__new">+ New category…</option>');
     return `<select class="tx-cat" data-id="${r.id}" aria-label="Category">${opts.join('')}</select>`;
   }
 
@@ -662,8 +661,8 @@ const rpSigned = n => {
                     r.review_status === 'uncategorized' ? '<span class="tx-badge tx-badge-muted">uncategorized</span>' :
                     nature === 'needs_review' ? '<span class="tx-badge tx-badge-muted">review</span>' : '';
     const isSplit = r.row_kind === 'split';
-    const editable = !_restricted();
-    const splitBtn = !isSplit && !_restricted()
+    const editable = true;          // a restricted account edits her own rows; the server limits which
+    const splitBtn = !isSplit
       ? `<button class="btn tx-btn-sm tx-btn-split" data-split-id="${r.id}" data-split-amount="${amount}" data-split-desc="${U.esc((r.description || r.merchant || '').slice(0, 60))}" title="Split this amount across categories">Split</button>`
       : '';
     const saveBtn = editable
@@ -675,9 +674,7 @@ const rpSigned = n => {
       <td class="tx-td-wallet" data-label="Account">${_walletHtml(r.provider)}</td>
       <td class="tx-td-cat" data-label="Category"><div class="tx-cat-wrap">${_confDot(r)}${_catSelect(r)}</div></td>
       <td class="tx-td-amount ${dir}" data-label="Amount">${sign}${rp(amount)}</td>
-      <td class="tx-td-notes" data-label="Notes">${_restricted()
-        ? U.esc(r.notes || '')
-        : `<input type="text" class="tx-notes-input" data-id="${r.id}" value="${U.esc(r.notes || '')}" placeholder="Add note...">`}</td>
+      <td class="tx-td-notes" data-label="Notes"><input type="text" class="tx-notes-input" data-id="${r.id}" value="${U.esc(r.notes || '')}" placeholder="Add note..."></td>
       <td class="tx-td-status" data-label="Status">${status}${saveBtn}${splitBtn}</td>
     </tr>`;
   }
