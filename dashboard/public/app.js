@@ -392,6 +392,13 @@ async function boot() {
 
   $id('btn-refresh').addEventListener('click', () => refreshOverview(true));
 
+  /* Sign out: the server destroys the session and clears the cookie, then we go to /login. */
+  $id('btn-logout').addEventListener('click', async () => {
+    try { await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }); }
+    catch (_) { /* fall through - /logout below clears it server-side too */ }
+    location.href = '/login';
+  });
+
   /* ActionBar saves (components.js emits this) → targeted refetch */
   window.addEventListener('psb:ticket-saved', () => refreshOverview(true));
 
