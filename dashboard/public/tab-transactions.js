@@ -2116,17 +2116,24 @@ const rpSigned = n => {
       const notes = U.esc(s.notes || '');
       return `<div class="tx-split-row" data-idx="${i}">
         ${buildCatSelect(s.category_id || '', i)}
-        <input class="tx-split-amt" type="text" inputmode="numeric" placeholder="Amount" value="${s.amount || ''}" data-idx="${i}">
+        <input class="tx-split-amt" type="text" inputmode="numeric" placeholder="Amount" value="${s.amount ? parseAmt(s.amount).toLocaleString('id-ID') : ''}" data-idx="${i}">
         <input class="tx-split-notes" type="text" maxlength="200" placeholder="Notes (optional)" value="${notes}" data-idx="${i}">
         <button class="btn tx-btn-sm tx-btn-split-remove" data-idx="${i}" title="Remove">${Comp.ic('close')}</button>
       </div>`;
     }
 
+    /* Rupiah amount typed by hand: accepts 630000, 630.000, 630,000,
+       Rp 630.000 and an Indonesian decimal tail (630.000,00). Anything that is
+       not a digit is ignored, so a stray comma or space never zeroes a row. */
+    function parseAmt(v) {
+      if (typeof v === 'number') return Math.round(v) || 0;
+      const t = String(v == null ? '' : v).trim().replace(/,\d{1,2}$/, '');
+      return Number(t.replace(/\D/g, '')) || 0;
+    }
+
     function allocatedTotal() {
       let total = 0;
-      card.querySelectorAll('.tx-split-amt').forEach(el => {
-        total += Number((el.value || '').replace(/\./g, '')) || 0;
-      });
+      card.querySelectorAll('.tx-split-amt').forEach(el => { total += parseAmt(el.value); });
       return total;
     }
 
@@ -2138,7 +2145,7 @@ const rpSigned = n => {
       rows.forEach((row, i) => {
         splits.push({
           category_id: Number(row.querySelector('.tx-split-cat').value) || 0,
-          amount: Number((row.querySelector('.tx-split-amt').value || '').replace(/\./g, '')) || 0,
+          amount: parseAmt(row.querySelector('.tx-split-amt').value),
           notes: row.querySelector('.tx-split-notes').value || ''
         });
       });
@@ -2158,12 +2165,8 @@ const rpSigned = n => {
 
     function attachRowListeners(row) {
       row.querySelector('.tx-split-amt').addEventListener('input', e => {
-        let raw = e.target.value.replace(/\./g, '');
-        if (!/^\d*$/.test(raw)) { e.target.value = raw; return; }
-        if (raw) {
-          const num = Number(raw);
-          e.target.value = num.toLocaleString('id-ID');
-        }
+        const num = parseAmt(e.target.value);
+        e.target.value = num ? num.toLocaleString('id-ID') : '';
         syncRows();
       });
       row.querySelector('.tx-split-cat').addEventListener('change', syncRows);
@@ -2211,7 +2214,11 @@ const rpSigned = n => {
       syncRows();
       const valid = splits.every(s => s.category_id && s.amount > 0);
       if (!valid) { toast('Each split needs a category and amount', false); return; }
-      if (remaining() !== 0) { toast('Allocated amount must equal total', false); return; }
+      const rem = remaining();
+      if (rem !== 0) {
+        toast(`Splits must add up to ${rp(parentAmount)} - ${rp(Math.abs(rem))} ${rem > 0 ? 'still unallocated' : 'over'}`, false);
+        return;
+      }
       try {
         await _post('/api/transactions/splits/set', { ledger_id: ledgerId, allocations: splits }, 15000);
         toast('Split saved', true);
