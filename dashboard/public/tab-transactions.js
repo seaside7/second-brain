@@ -2219,9 +2219,23 @@ const rpSigned = n => {
         toast(`Splits must add up to ${rp(parentAmount)} - ${rp(Math.abs(rem))} ${rem > 0 ? 'still unallocated' : 'over'}`, false);
         return;
       }
+      /* One part per category (the server keys a split on category): lines that
+         share a category are added together and their notes joined, so itemised
+         receipts such as several grocery lines still save. */
+      const byCat = new Map();
+      for (const s of splits) {
+        const key = `${s.category_id}|${s.trip_id || ''}`;
+        const m = byCat.get(key);
+        if (!m) { byCat.set(key, { ...s }); continue; }
+        m.amount += s.amount;
+        m.notes = [m.notes, s.notes].map(n => (n || '').trim()).filter(Boolean).join('; ');
+      }
+      const merged = [...byCat.values()];
       try {
-        await _post('/api/transactions/splits/set', { ledger_id: ledgerId, allocations: splits }, 15000);
-        toast('Split saved', true);
+        await _post('/api/transactions/splits/set', { ledger_id: ledgerId, allocations: merged }, 15000);
+        toast(merged.length < splits.length
+          ? `Split saved (${splits.length - merged.length} lines in the same category were combined)`
+          : 'Split saved', true);
         card.remove();
       } catch (e) {
         toast(e.message, false);
