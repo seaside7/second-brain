@@ -105,5 +105,60 @@ class TestUpdateSplit(unittest.TestCase):
         self.assertEqual(n, 1)
 
 
+class TestMergeSameCategory(unittest.TestCase):
+    """splits/set tolerates a receipt with several lines in one category."""
+
+    def setUp(self):
+        _dash = str(Path(__file__).resolve().parent.parent / 'dashboard')
+        if _dash not in sys.path:
+            sys.path.insert(0, _dash)
+        import transactions_api
+        self.merge = transactions_api._merge_same_category
+
+    def test_the_payload_from_the_owner_report_merges_and_keeps_the_total(self):
+        out = self.merge([
+            {'category_id': 4437, 'amount': 138500, 'notes': 'udang dan saus pasta'},
+            {'category_id': 266, 'amount': 32000, 'notes': 'warung gandaria'},
+            {'category_id': 4437, 'amount': 282000, 'notes': 'akumulasi bln lalu'}])
+        self.assertEqual(len(out), 2)
+        self.assertEqual(sum(a['amount'] for a in out), 452500)
+        food = next(a for a in out if a['category_id'] == 4437)
+        self.assertEqual(food['amount'], 420500)
+        self.assertEqual(food['notes'], 'udang dan saus pasta; akumulasi bln lalu')
+
+    def test_distinct_categories_and_trips_are_left_alone(self):
+        rows = [{'category_id': 1, 'amount': 5, 'notes': 'a'},
+                {'category_id': 2, 'amount': 6, 'notes': ''},
+                {'category_id': 1, 'trip_id': 9, 'amount': 7, 'notes': 'b'}]
+        self.assertEqual(len(self.merge(rows)), 3)
+
+    def test_malformed_lines_are_passed_through_for_set_splits_to_reject(self):
+        bad = [{'category_id': 1, 'amount': 'abc'}]
+        self.assertEqual(self.merge(bad), bad)
+        self.assertEqual(self.merge(['x']), ['x'])
+
+    def test_set_splits_itself_still_rejects_duplicates(self):
+        c = sqlite3.connect(':memory:')
+        c.row_factory = sqlite3.Row
+        schema.ensure_tables(c)
+        c.execute("INSERT INTO source_documents(kind, source_key, fingerprint) VALUES ('manual','k','f')")
+        c.execute("INSERT INTO import_batches(source_document_id, state) VALUES (1,'committed')")
+        cid = c.execute('INSERT INTO categories(name,"group") VALUES (?,?)', ('Zed', 'T')).lastrowid
+        ext = c.execute("INSERT INTO extracted_txns(doc_id,batch_id,ext_index,provider,src_txn_id,description,"
+                        "direction,principal_amount,total_amount,occurred_at) "
+                        "VALUES (1,1,0,'bca','S1','x','out',10,10,'2026-11-20T10:00:00')").lastrowid
+        lid = c.execute("INSERT INTO ledger_txns(ext_id,amount,direction,nature) VALUES (?,10,'out','expense')",
+                        (ext,)).lastrowid
+        c.commit()
+        res = splits.set_splits(c, ledger_id=lid, allocations=[
+            {'category_id': cid, 'amount': 4}, {'category_id': cid, 'amount': 6}])
+        self.assertFalse(res['ok'])
+        self.assertIn('Duplicate', res['error'])
+        ok = splits.set_splits(c, ledger_id=lid, allocations=self.merge([
+            {'category_id': cid, 'amount': 4}, {'category_id': cid, 'amount': 6}]))
+        self.assertTrue(ok['ok'], ok)
+        c.close()
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -743,6 +743,30 @@ def _handle_cycle_set(handler, body: dict) -> None:
         conn.close()
 
 
+def _merge_same_category(allocations: list) -> list:
+    """One allocation per (category, trip): lines that repeat a pair are added
+    together and their notes joined, so an itemised receipt with several lines
+    in one category saves instead of failing with 'Duplicate allocation'.
+    set_splits itself stays strict; this only tidies what a client sends."""
+    merged: dict[tuple, dict] = {}
+    for a in allocations:
+        if not isinstance(a, dict):
+            return allocations            # let set_splits report the malformed line
+        try:
+            amount = int(round(float(a.get('amount') or 0)))
+        except (TypeError, ValueError):
+            return allocations
+        key = (str(a.get('category_id') or ''), str(a.get('trip_id') or ''))
+        note = str(a.get('notes') or '').strip()
+        m = merged.get(key)
+        if m is None:
+            merged[key] = dict(a, amount=amount, notes=note)
+        else:
+            m['amount'] += amount
+            m['notes'] = '; '.join(n for n in (m['notes'], note) if n)
+    return list(merged.values())
+
+
 def _handle_splits_set(handler, body: dict) -> None:
     conn = _get_db(handler)
     if not conn:
@@ -751,7 +775,7 @@ def _handle_splits_set(handler, body: dict) -> None:
     try:
         result = set_splits(
             conn, ledger_id=body.get('ledger_id'),
-            allocations=body.get('allocations') or [],
+            allocations=_merge_same_category(body.get('allocations') or []),
             actor=body.get('actor', 'user'))
         if result.get('ok'):
             _ok(handler, result)
