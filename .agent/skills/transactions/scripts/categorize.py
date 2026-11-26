@@ -112,6 +112,8 @@ _CAT = {
     'aryan':          ('Family', 'Aryan'),
     'dinda':          ('Family', 'Dinda'),
     'wushu':          ('Family', 'Wushu'),
+    # Manual-only: food bought as groceries (owner/Dinda files by hand).
+    'groceries_food': ('Groceries', 'Groceries - Food'),
     'savings':        ('Transfers', 'Savings'),
     'maid_salary':    ('Home', 'Maid Salary'),
     'uncategorized':  ('Uncategorized', 'Uncategorized'),

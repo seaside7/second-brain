@@ -415,6 +415,7 @@ _MANUAL_ONLY_CATEGORIES = [
     ('Aryan', 'Family'),
     ('Dinda', 'Family'),
     ('Wushu', 'Family'),
+    ('Groceries - Food', 'Groceries'),
 ]
 
 
